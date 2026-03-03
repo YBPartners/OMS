@@ -250,15 +250,26 @@ stats.get('/policies/report', async (c) => {
 });
 
 stats.get('/policies/commission', async (c) => {
-  const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+  const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
   if (authErr) return authErr;
-  const result = await c.env.DB.prepare(`
+  const user = c.get('user')!;
+  const db = c.env.DB;
+
+  let query = `
     SELECT cp.*, o.name as org_name, u.name as team_leader_name
     FROM commission_policies cp
     JOIN organizations o ON cp.org_id = o.org_id
     LEFT JOIN users u ON cp.team_leader_id = u.user_id
-    ORDER BY cp.org_id, cp.team_leader_id
-  `).all();
+    WHERE 1=1
+  `;
+  const params: any[] = [];
+  if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
+    query += ' AND cp.org_id = ?';
+    params.push(user.org_id);
+  }
+  query += ' ORDER BY cp.org_id, cp.team_leader_id';
+
+  const result = await db.prepare(query).bind(...params).all();
   return c.json({ policies: result.results });
 });
 

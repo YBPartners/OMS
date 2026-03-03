@@ -235,7 +235,7 @@ orders.post('/distribute', async (c) => {
   await db.prepare(`UPDATE orders SET status = 'VALIDATED', updated_at = datetime('now') WHERE status = 'RECEIVED' AND address_text IS NOT NULL AND admin_dong_code IS NOT NULL`).run();
 
   const pendingOrders = await db.prepare(`
-    SELECT o.order_id, o.admin_dong_code, o.address_text
+    SELECT o.order_id, o.admin_dong_code, o.address_text, o.customer_name, o.base_amount
     FROM orders o
     LEFT JOIN order_distributions od ON o.order_id = od.order_id AND od.status = 'ACTIVE'
     WHERE o.status IN ('VALIDATED', 'DISTRIBUTION_PENDING') AND od.distribution_id IS NULL
@@ -254,9 +254,15 @@ orders.post('/distribute', async (c) => {
     dongToOrg[m.admin_dong_code] = m.org_id;
   }
 
+  // 지역법인 이름 매핑
+  const orgNames: Record<number, string> = {};
+  const orgsResult = await db.prepare("SELECT org_id, name FROM organizations WHERE org_type = 'REGION'").all();
+  for (const o of orgsResult.results as any[]) { orgNames[o.org_id] = o.name; }
+
   let distributed = 0;
   let pending = 0;
   const results: any[] = [];
+  const regionSummary: Record<number, { name: string, count: number, amount: number, orders: any[] }> = {};
 
   for (const order of pendingOrders.results as any[]) {
     const regionOrgId = dongToOrg[order.admin_dong_code];
@@ -268,16 +274,23 @@ orders.post('/distribute', async (c) => {
       `).bind(order.order_id, regionOrgId, user.user_id, policy.version).run();
       
       await db.prepare(`UPDATE orders SET status = 'DISTRIBUTED', updated_at = datetime('now') WHERE order_id = ?`).bind(order.order_id).run();
-      await writeStatusHistory(db, { order_id: order.order_id, from_status: 'VALIDATED', to_status: 'DISTRIBUTED', actor_id: user.user_id, note: `자동배분 → org_id:${regionOrgId}` });
+      await writeStatusHistory(db, { order_id: order.order_id, from_status: 'VALIDATED', to_status: 'DISTRIBUTED', actor_id: user.user_id, note: `자동배분 → ${orgNames[regionOrgId] || 'org_id:' + regionOrgId}` });
       
       distributed++;
-      results.push({ order_id: order.order_id, region_org_id: regionOrgId, result: 'DISTRIBUTED' });
+      const regionName = orgNames[regionOrgId] || `org_id:${regionOrgId}`;
+      results.push({ order_id: order.order_id, region_org_id: regionOrgId, region_name: regionName, result: 'DISTRIBUTED', customer_name: (order as any).customer_name, address_text: (order as any).address_text });
+      
+      // 지역별 집계
+      if (!regionSummary[regionOrgId]) regionSummary[regionOrgId] = { name: regionName, count: 0, amount: 0, orders: [] };
+      regionSummary[regionOrgId].count++;
+      regionSummary[regionOrgId].amount += Number((order as any).base_amount || 0);
+      regionSummary[regionOrgId].orders.push({ order_id: order.order_id, customer_name: (order as any).customer_name });
     } else {
       await db.prepare(`UPDATE orders SET status = 'DISTRIBUTION_PENDING', updated_at = datetime('now') WHERE order_id = ?`).bind(order.order_id).run();
       await writeStatusHistory(db, { order_id: order.order_id, from_status: 'VALIDATED', to_status: 'DISTRIBUTION_PENDING', actor_id: user.user_id, note: '행정동 매칭 실패' });
       
       pending++;
-      results.push({ order_id: order.order_id, result: 'DISTRIBUTION_PENDING', reason: '행정동 매칭 실패' });
+      results.push({ order_id: order.order_id, result: 'DISTRIBUTION_PENDING', reason: '행정동 매칭 실패', customer_name: (order as any).customer_name, address_text: (order as any).address_text });
     }
   }
 
@@ -291,7 +304,12 @@ orders.post('/distribute', async (c) => {
     `).bind(today, r.region_org_id).run();
   }
 
-  return c.json({ distributed, pending, total: pendingOrders.results.length, results });
+  return c.json({ 
+    distributed, pending, total: pendingOrders.results.length, results,
+    region_summary: Object.entries(regionSummary).map(([orgId, data]) => ({
+      org_id: Number(orgId), name: data.name, count: data.count, amount: data.amount, orders: data.orders,
+    }))
+  });
 });
 
 // ─── 수동 배분/재배분 ───

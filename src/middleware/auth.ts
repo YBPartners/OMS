@@ -13,7 +13,7 @@ export async function authMiddleware(c: Context<Env>, next: Next) {
   try {
     const db = c.env.DB;
     const session = await db.prepare(`
-      SELECT s.user_id, s.expires_at, u.org_id, u.login_id, u.name, o.org_type
+      SELECT s.user_id, s.expires_at, u.org_id, u.login_id, u.name, o.org_type, o.name as org_name
       FROM sessions s
       JOIN users u ON s.user_id = u.user_id
       JOIN organizations o ON u.org_id = o.org_id
@@ -36,6 +36,7 @@ export async function authMiddleware(c: Context<Env>, next: Next) {
       org_type: session.org_type as 'HQ' | 'REGION',
       login_id: session.login_id as string,
       name: session.name as string,
+      org_name: session.org_name as string,
       roles: roles.results.map((r: any) => r.code as RoleCode),
     };
 

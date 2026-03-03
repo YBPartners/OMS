@@ -24,6 +24,7 @@ export interface SessionUser {
   user_id: number;
   org_id: number;
   org_type: OrgType;
+  org_name?: string;
   login_id: string;
   name: string;
   roles: RoleCode[];

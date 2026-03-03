@@ -100,6 +100,14 @@ function getIndexHtml(): string {
 <body class="bg-gray-50 min-h-screen">
   <div id="app"></div>
   <script src="/static/js/app.js"></script>
+  <script src="/static/js/pages/dashboard.js"></script>
+  <script src="/static/js/pages/orders.js"></script>
+  <script src="/static/js/pages/kanban.js"></script>
+  <script src="/static/js/pages/review.js"></script>
+  <script src="/static/js/pages/settlement.js"></script>
+  <script src="/static/js/pages/statistics.js"></script>
+  <script src="/static/js/pages/hr.js"></script>
+  <script src="/static/js/pages/my-orders.js"></script>
 </body>
 </html>`;
 }
