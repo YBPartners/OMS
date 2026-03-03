@@ -4,18 +4,17 @@ import type { Env } from './types';
 import { authMiddleware } from './middleware/auth';
 import { cleanupRateLimit } from './middleware/security';
 import authRoutes from './routes/auth';
-import orderRoutes from './routes/orders';
-import settlementRoutes from './routes/settlements';
-import reconciliationRoutes from './routes/reconciliation';
-import statsRoutes from './routes/stats';
-import hrRoutes from './routes/hr';
+import orderRoutes from './routes/orders/index';
+import settlementRoutes from './routes/settlements/index';
+import reconciliationRoutes from './routes/reconciliation/index';
+import statsRoutes from './routes/stats/index';
+import hrRoutes from './routes/hr/index';
 
 const app = new Hono<Env>();
 
 // ─── 글로벌 에러 핸들러 ───
 app.onError((err, c) => {
   console.error(`[OMS ERROR] ${c.req.method} ${c.req.path}:`, err.message);
-  // SQL/DB 에러는 사용자에게 상세 내용을 노출하지 않음
   const isDbError = err.message?.includes('D1') || err.message?.includes('SQL');
   return c.json({
     error: isDbError ? '데이터 처리 중 오류가 발생했습니다.' : (err.message || '서버 오류가 발생했습니다.'),
@@ -27,7 +26,6 @@ app.onError((err, c) => {
 app.use('*', cors());
 app.use('/api/*', authMiddleware);
 
-// Rate limit 메모리 정리 (매 요청 시 확률적 실행)
 app.use('*', async (c, next) => {
   if (Math.random() < 0.01) cleanupRateLimit();
   await next();
@@ -42,11 +40,10 @@ app.route('/api/stats', statsRoutes);
 app.route('/api/hr', hrRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '2.0.0', system: '다하다 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '3.0.0', system: '다하다 OMS' }));
 
 // ─── SPA 라우팅: 모든 페이지 요청에 index.html 반환 ───
 app.get('*', async (c) => {
-  // API나 정적 파일이 아닌 경우 SPA index.html 반환
   const path = c.req.path;
   if (path.startsWith('/api/') || path.startsWith('/static/')) {
     return c.notFound();
@@ -95,11 +92,30 @@ function getIndexHtml(): string {
     ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #f1f5f9; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
     .tab-active { border-bottom: 3px solid #2563eb; color: #2563eb; font-weight: 600; }
     .modal-overlay { background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+    .num-input { -moz-appearance: textfield; }
+    .num-input::-webkit-outer-spin-button, .num-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .breadcrumb-separator::before { content: '/'; margin: 0 0.5rem; color: #9ca3af; }
+    .tooltip { position: relative; }
+    .tooltip::after { content: attr(data-tip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); padding: 4px 8px; background: #1f2937; color: white; font-size: 11px; border-radius: 4px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .tooltip:hover::after { opacity: 1; }
+    .link-item { cursor: pointer; color: #2563eb; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+    .link-item:hover { color: #1d4ed8; text-decoration-style: solid; }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
   <div id="app"></div>
-  <script src="/static/js/app.js"></script>
+  
+  <!-- Core modules (load order matters) -->
+  <script src="/static/js/core/constants.js"></script>
+  <script src="/static/js/core/api.js"></script>
+  <script src="/static/js/core/ui.js"></script>
+  <script src="/static/js/core/auth.js"></script>
+  
+  <!-- Shared components -->
+  <script src="/static/js/shared/table.js"></script>
+  <script src="/static/js/shared/form-helpers.js"></script>
+  
+  <!-- Page modules -->
   <script src="/static/js/pages/dashboard.js"></script>
   <script src="/static/js/pages/orders.js"></script>
   <script src="/static/js/pages/kanban.js"></script>
@@ -108,6 +124,9 @@ function getIndexHtml(): string {
   <script src="/static/js/pages/statistics.js"></script>
   <script src="/static/js/pages/hr.js"></script>
   <script src="/static/js/pages/my-orders.js"></script>
+  
+  <!-- App bootstrap (must be last) -->
+  <script src="/static/js/core/app.js"></script>
 </body>
 </html>`;
 }

@@ -1,6 +1,9 @@
 import { Context, Next } from 'hono';
 import type { Env, RoleCode, SessionUser } from '../types';
 
+// Re-export from lib for backward compatibility
+export { writeAuditLog, writeStatusHistory } from '../lib/audit';
+
 // 세션 기반 인증 미들웨어
 export async function authMiddleware(c: Context<Env>, next: Next) {
   const sessionId = c.req.header('X-Session-Id') || getCookie(c, 'session_id');
@@ -79,38 +82,4 @@ function getCookie(c: Context, name: string): string | undefined {
   if (!cookie) return undefined;
   const match = cookie.match(new RegExp(`(^| )${name}=([^;]+)`));
   return match ? match[2] : undefined;
-}
-
-// 감사 로그 기록
-export async function writeAuditLog(db: D1Database, params: {
-  entity_type: string;
-  entity_id?: number;
-  action: string;
-  actor_id?: number;
-  detail_json?: string;
-}) {
-  await db.prepare(`
-    INSERT INTO audit_logs (entity_type, entity_id, action, actor_id, detail_json)
-    VALUES (?, ?, ?, ?, ?)
-  `).bind(
-    params.entity_type,
-    params.entity_id || null,
-    params.action,
-    params.actor_id || null,
-    params.detail_json || '{}'
-  ).run();
-}
-
-// 주문 상태 이력 기록
-export async function writeStatusHistory(db: D1Database, params: {
-  order_id: number;
-  from_status: string | null;
-  to_status: string;
-  actor_id: number;
-  note?: string;
-}) {
-  await db.prepare(`
-    INSERT INTO order_status_history (order_id, from_status, to_status, actor_id, note)
-    VALUES (?, ?, ?, ?, ?)
-  `).bind(params.order_id, params.from_status, params.to_status, params.actor_id, params.note || null).run();
 }

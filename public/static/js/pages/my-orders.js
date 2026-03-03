@@ -101,7 +101,7 @@ async function submitReport(orderId) {
   const checks = Array.from(document.querySelectorAll('input[name="checklist"]:checked')).map(el => el.value);
   const note = document.getElementById('report-note')?.value || '';
   const photoStr = document.getElementById('report-photos')?.value || '';
-  const photos = photoStr.split(',').filter(s => s.trim()).map(url => ({ category: 'GENERAL', file_url: url.trim() }));
+  const photos = photoStr.split(',').filter(s => s.trim()).map(url => ({ category: 'ETC', file_url: url.trim() }));
 
   const checklist = {};
   checks.forEach(c => { checklist[c] = true; });
@@ -112,6 +112,56 @@ async function submitReport(orderId) {
     closeModal();
     renderContent();
   } else showToast(res?.error || '제출 실패', 'error');
+}
+
+// ════════ 내 프로필 (비밀번호 변경) ════════
+async function renderMyProfile(el) {
+  el.innerHTML = `
+    <div class="fade-in max-w-xl mx-auto">
+      <h2 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-user-cog mr-2 text-gray-600"></i>내 프로필</h2>
+      
+      <div class="bg-white rounded-xl p-6 border border-gray-100 mb-6">
+        <h3 class="font-semibold mb-4"><i class="fas fa-id-card mr-2 text-blue-500"></i>계정 정보</h3>
+        <div class="grid grid-cols-2 gap-4 text-sm">
+          <div><span class="text-gray-500">이름</span><div class="font-medium">${currentUser.name}</div></div>
+          <div><span class="text-gray-500">로그인 ID</span><div class="font-mono">${currentUser.login_id}</div></div>
+          <div><span class="text-gray-500">소속</span><div>${currentUser.org_name || currentUser.org_type}</div></div>
+          <div><span class="text-gray-500">역할</span><div>${currentUser.roles.map(r => `<span class="status-badge bg-gray-100 text-gray-700 text-xs">${r}</span>`).join(' ')}</div></div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl p-6 border border-gray-100">
+        <h3 class="font-semibold mb-4"><i class="fas fa-key mr-2 text-amber-500"></i>비밀번호 변경</h3>
+        <form id="pw-change-form" class="space-y-4">
+          <div><label class="block text-xs text-gray-500 mb-1">현재 비밀번호</label>
+            <input id="pw-current" type="password" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="현재 비밀번호"></div>
+          <div><label class="block text-xs text-gray-500 mb-1">새 비밀번호</label>
+            <input id="pw-new" type="password" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="새 비밀번호 (6자 이상)" minlength="6"></div>
+          <div><label class="block text-xs text-gray-500 mb-1">새 비밀번호 확인</label>
+            <input id="pw-confirm" type="password" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="새 비밀번호 재입력"></div>
+          <button type="button" onclick="submitPasswordChange()" class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+            <i class="fas fa-save mr-1"></i>비밀번호 변경
+          </button>
+        </form>
+      </div>
+    </div>`;
+}
+
+async function submitPasswordChange() {
+  const current = document.getElementById('pw-current').value;
+  const newPw = document.getElementById('pw-new').value;
+  const confirm = document.getElementById('pw-confirm').value;
+  if (!current || !newPw) return showToast('모든 필드를 입력하세요.', 'warning');
+  if (newPw !== confirm) return showToast('새 비밀번호가 일치하지 않습니다.', 'error');
+  if (newPw.length < 6) return showToast('비밀번호는 6자 이상이어야 합니다.', 'warning');
+
+  const res = await api('POST', '/hr/users/change-password', { current_password: current, new_password: newPw });
+  if (res?.ok) {
+    showToast('비밀번호가 변경되었습니다.', 'success');
+    document.getElementById('pw-current').value = '';
+    document.getElementById('pw-new').value = '';
+    document.getElementById('pw-confirm').value = '';
+  } else showToast(res?.error || '변경 실패', 'error');
 }
 
 // ════════ 내 현황 ════════

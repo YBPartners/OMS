@@ -1,0 +1,409 @@
+// ================================================================
+// 다하다 OMS — HR 사용자(인사) 관리 라우트
+// CRUD / 상태관리 / 비밀번호 / 자격증명 설정
+// ================================================================
+import { Hono } from 'hono';
+import type { Env } from '../../types';
+import { requireAuth } from '../../middleware/auth';
+import { writeAuditLog } from '../../lib/audit';
+import { hashPassword, verifyPassword, needsRehash, normalizePhone, isValidPhone, isValidLoginId, isValidEmail } from '../../middleware/security';
+import { normalizePagination, isValidRole } from '../../lib/validators';
+
+export function mountUsers(router: Hono<Env>) {
+
+  // ─── 사용자 목록 (조직별 필터 + 역할 포함 + 인증 상태) ───
+  router.get('/users', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const { org_id, role, status: filterStatus, search, page, limit } = c.req.query();
+    const pg = normalizePagination(page, limit, 100);
+
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
+      conditions.push('u.org_id = ?');
+      params.push(user.org_id);
+    } else if (org_id) {
+      conditions.push('u.org_id = ?');
+      params.push(Number(org_id));
+    }
+
+    if (filterStatus) { conditions.push('u.status = ?'); params.push(filterStatus); }
+    if (search) {
+      const safeSearch = `%${search.slice(0, 50)}%`;
+      conditions.push("(u.name LIKE ? OR u.login_id LIKE ? OR u.phone LIKE ? OR u.email LIKE ?)");
+      params.push(safeSearch, safeSearch, safeSearch, safeSearch);
+    }
+
+    const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    const countResult = await db.prepare(`SELECT COUNT(DISTINCT u.user_id) as total FROM users u ${where}`).bind(...params).first();
+
+    const result = await db.prepare(`
+      SELECT u.user_id, u.org_id, u.login_id, u.name, u.phone, u.email, u.status,
+             u.phone_verified, u.joined_at, u.memo, u.created_at, u.updated_at,
+             o.name as org_name, o.org_type, o.code as org_code,
+             GROUP_CONCAT(DISTINCT r.code) as role_codes,
+             GROUP_CONCAT(DISTINCT r.name) as role_names
+      FROM users u
+      JOIN organizations o ON u.org_id = o.org_id
+      LEFT JOIN user_roles ur ON u.user_id = ur.user_id
+      LEFT JOIN roles r ON ur.role_id = r.role_id
+      ${where}
+      GROUP BY u.user_id
+      ORDER BY u.org_id, u.name
+      LIMIT ? OFFSET ?
+    `).bind(...params, pg.limit, pg.offset).all();
+
+    let users = result.results.map((u: any) => ({
+      ...u,
+      roles: u.role_codes ? u.role_codes.split(',') : [],
+      role_names: u.role_names ? u.role_names.split(',') : [],
+    }));
+
+    if (role) {
+      users = users.filter((u: any) => u.roles.includes(role));
+    }
+
+    return c.json({ users, total: (countResult as any)?.total || 0, page: pg.page, limit: pg.limit });
+  });
+
+  // ─── 사용자 상세 ───
+  router.get('/users/:user_id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const currentUser = c.get('user')!;
+    const db = c.env.DB;
+    const userId = Number(c.req.param('user_id'));
+    if (isNaN(userId)) return c.json({ error: '유효하지 않은 사용자 ID입니다.' }, 400);
+
+    const targetUser = await db.prepare(`
+      SELECT u.*, o.name as org_name, o.org_type, o.code as org_code
+      FROM users u JOIN organizations o ON u.org_id = o.org_id
+      WHERE u.user_id = ?
+    `).bind(userId).first();
+
+    if (!targetUser) return c.json({ error: '사용자를 찾을 수 없습니다.' }, 404);
+
+    if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN') && targetUser.org_id !== currentUser.org_id) {
+      return c.json({ error: '권한이 없습니다.' }, 403);
+    }
+
+    const roles = await db.prepare(`
+      SELECT r.role_id, r.code, r.name FROM user_roles ur JOIN roles r ON ur.role_id = r.role_id WHERE ur.user_id = ?
+    `).bind(userId).all();
+
+    const recentActivity = await db.prepare(`
+      SELECT 
+        COUNT(CASE WHEN oa.status NOT IN ('REASSIGNED') THEN 1 END) as total_assigned,
+        COUNT(CASE WHEN oa.status = 'HQ_APPROVED' THEN 1 END) as total_approved,
+        COUNT(CASE WHEN oa.status = 'SETTLEMENT_CONFIRMED' THEN 1 END) as total_settled,
+        COUNT(CASE WHEN oa.status IN ('REGION_REJECTED','HQ_REJECTED') THEN 1 END) as total_rejected
+      FROM order_assignments oa WHERE oa.team_leader_id = ?
+    `).bind(userId).first();
+
+    const phoneVerifications = await db.prepare(`
+      SELECT * FROM phone_verifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 5
+    `).bind(userId).all();
+
+    return c.json({
+      user: { ...targetUser, password_hash: undefined },
+      roles: roles.results,
+      activity: recentActivity,
+      phone_verifications: phoneVerifications.results,
+    });
+  });
+
+  // ─── 사용자 신규 등록 ───
+  router.post('/users', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const currentUser = c.get('user')!;
+    const db = c.env.DB;
+    const body = await c.req.json();
+
+    if (!body.name) return c.json({ error: '이름은 필수입니다.' }, 400);
+    if (!body.phone) return c.json({ error: '핸드폰 번호는 필수입니다.' }, 400);
+    if (!body.org_id) return c.json({ error: '소속 조직은 필수입니다.' }, 400);
+    if (!body.role) return c.json({ error: '역할은 필수입니다.' }, 400);
+
+    if (body.name.length > 50) return c.json({ error: '이름은 50자 이하로 입력하세요.' }, 400);
+    if (!isValidPhone(body.phone)) return c.json({ error: '올바른 핸드폰 번호를 입력하세요 (01X로 시작하는 10~11자리).' }, 400);
+    if (body.email && !isValidEmail(body.email)) return c.json({ error: '올바른 이메일 형식을 입력하세요.' }, 400);
+
+    if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN')) {
+      if (Number(body.org_id) !== currentUser.org_id) {
+        return c.json({ error: '자기 법인에만 인원을 등록할 수 있습니다.' }, 403);
+      }
+      if (body.role !== 'TEAM_LEADER') {
+        return c.json({ error: '지역법인 관리자는 팀장만 등록할 수 있습니다.' }, 403);
+      }
+    }
+
+    if (!isValidRole(body.role)) return c.json({ error: '유효하지 않은 역할입니다.' }, 400);
+
+    const phoneDup = await db.prepare('SELECT user_id, name FROM users WHERE phone = ? AND status = ?').bind(normalizePhone(body.phone), 'ACTIVE').first();
+    if (phoneDup) return c.json({ error: `이미 등록된 핸드폰 번호입니다. (${(phoneDup as any).name})` }, 409);
+
+    let loginId = body.login_id;
+    if (loginId) {
+      if (!isValidLoginId(loginId)) return c.json({ error: '로그인 ID는 영문/숫자/밑줄로 3~50자입니다.' }, 400);
+    } else {
+      const phoneLast4 = normalizePhone(body.phone).slice(-4);
+      loginId = `user_${phoneLast4}_${Date.now().toString(36).slice(-4)}`;
+    }
+
+    const loginDup = await db.prepare('SELECT user_id FROM users WHERE login_id = ?').bind(loginId).first();
+    if (loginDup) return c.json({ error: '이미 사용 중인 아이디입니다.' }, 409);
+
+    const initialPassword = body.password || normalizePhone(body.phone).slice(-4) + '!';
+    if (initialPassword.length < 4) return c.json({ error: '비밀번호는 최소 4자 이상이어야 합니다.' }, 400);
+    
+    const passwordHash = await hashPassword(initialPassword);
+
+    const result = await db.prepare(`
+      INSERT INTO users (org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo)
+      VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 0, datetime('now'), ?)
+    `).bind(
+      Number(body.org_id), loginId, passwordHash,
+      body.name, normalizePhone(body.phone), body.email || null, body.memo || null
+    ).run();
+
+    const newUserId = result.meta.last_row_id as number;
+
+    const roleRow = await db.prepare('SELECT role_id FROM roles WHERE code = ?').bind(body.role).first();
+    if (roleRow) {
+      await db.prepare('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)').bind(newUserId, roleRow.role_id).run();
+    }
+
+    await writeAuditLog(db, {
+      entity_type: 'USER', entity_id: newUserId, action: 'CREATE',
+      actor_id: currentUser.user_id,
+      detail_json: JSON.stringify({ name: body.name, org_id: body.org_id, role: body.role, login_id: loginId })
+    });
+
+    return c.json({
+      user_id: newUserId,
+      login_id: loginId,
+      initial_password: initialPassword,
+      message: `사용자 "${body.name}" 등록 완료. 초기 비밀번호: ${initialPassword}`
+    }, 201);
+  });
+
+  // ─── 사용자 정보 수정 ───
+  router.put('/users/:user_id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const currentUser = c.get('user')!;
+    const db = c.env.DB;
+    const userId = Number(c.req.param('user_id'));
+    if (isNaN(userId)) return c.json({ error: '유효하지 않은 사용자 ID입니다.' }, 400);
+
+    const body = await c.req.json();
+
+    const target = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(userId).first();
+    if (!target) return c.json({ error: '사용자를 찾을 수 없습니다.' }, 404);
+
+    if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN') && target.org_id !== currentUser.org_id) {
+      return c.json({ error: '권한이 없습니다.' }, 403);
+    }
+
+    if (body.phone && !isValidPhone(body.phone)) return c.json({ error: '올바른 핸드폰 번호를 입력하세요.' }, 400);
+    if (body.email && !isValidEmail(body.email)) return c.json({ error: '올바른 이메일 형식을 입력하세요.' }, 400);
+
+    if (body.phone && normalizePhone(body.phone) !== target.phone) {
+      const phoneDup = await db.prepare('SELECT user_id, name FROM users WHERE phone = ? AND status = ? AND user_id != ?').bind(normalizePhone(body.phone), 'ACTIVE', userId).first();
+      if (phoneDup) return c.json({ error: `이미 등록된 핸드폰 번호입니다. (${(phoneDup as any).name})` }, 409);
+    }
+
+    const sets: string[] = [];
+    const params: any[] = [];
+
+    if (body.name !== undefined) { sets.push('name = ?'); params.push(body.name); }
+    if (body.phone !== undefined) { sets.push('phone = ?'); params.push(normalizePhone(body.phone)); sets.push('phone_verified = 0'); }
+    if (body.email !== undefined) { sets.push('email = ?'); params.push(body.email); }
+    if (body.memo !== undefined) { sets.push('memo = ?'); params.push(body.memo); }
+    if (body.org_id !== undefined && currentUser.roles.includes('SUPER_ADMIN')) { sets.push('org_id = ?'); params.push(Number(body.org_id)); }
+
+    if (sets.length === 0 && !body.role) return c.json({ error: '변경할 항목이 없습니다.' }, 400);
+
+    if (sets.length > 0) {
+      sets.push("updated_at = datetime('now')");
+      params.push(userId);
+      await db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE user_id = ?`).bind(...params).run();
+    }
+
+    if (body.role) {
+      if (!isValidRole(body.role)) return c.json({ error: '유효하지 않은 역할입니다.' }, 400);
+      await db.prepare('DELETE FROM user_roles WHERE user_id = ?').bind(userId).run();
+      const roleRow = await db.prepare('SELECT role_id FROM roles WHERE code = ?').bind(body.role).first();
+      if (roleRow) {
+        await db.prepare('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)').bind(userId, roleRow.role_id).run();
+      }
+    }
+
+    await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: 'UPDATE', actor_id: currentUser.user_id, detail_json: JSON.stringify(body) });
+
+    return c.json({ ok: true });
+  });
+
+  // ─── 사용자 활성화/비활성화 ───
+  router.patch('/users/:user_id/status', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const currentUser = c.get('user')!;
+    const db = c.env.DB;
+    const userId = Number(c.req.param('user_id'));
+    if (isNaN(userId)) return c.json({ error: '유효하지 않은 사용자 ID입니다.' }, 400);
+
+    const { status } = await c.req.json();
+
+    if (!['ACTIVE', 'INACTIVE'].includes(status)) return c.json({ error: '상태는 ACTIVE 또는 INACTIVE입니다.' }, 400);
+
+    const target = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(userId).first();
+    if (!target) return c.json({ error: '사용자를 찾을 수 없습니다.' }, 404);
+
+    if (userId === currentUser.user_id && status === 'INACTIVE') {
+      return c.json({ error: '자기 자신을 비활성화할 수 없습니다.' }, 400);
+    }
+
+    if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN') && target.org_id !== currentUser.org_id) {
+      return c.json({ error: '권한이 없습니다.' }, 403);
+    }
+
+    await db.prepare("UPDATE users SET status = ?, updated_at = datetime('now') WHERE user_id = ?").bind(status, userId).run();
+
+    if (status === 'INACTIVE') {
+      await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId).run();
+    }
+
+    await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: status === 'ACTIVE' ? 'ACTIVATE' : 'DEACTIVATE', actor_id: currentUser.user_id });
+
+    return c.json({ ok: true, message: status === 'ACTIVE' ? '활성화되었습니다.' : '비활성화되었습니다. 해당 사용자는 더 이상 로그인할 수 없습니다.' });
+  });
+
+  // ─── 비밀번호 초기화 (관리자) ───
+  router.post('/users/:user_id/reset-password', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const currentUser = c.get('user')!;
+    const db = c.env.DB;
+    const userId = Number(c.req.param('user_id'));
+    if (isNaN(userId)) return c.json({ error: '유효하지 않은 사용자 ID입니다.' }, 400);
+
+    const target = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(userId).first();
+    if (!target) return c.json({ error: '사용자를 찾을 수 없습니다.' }, 404);
+
+    if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN') && target.org_id !== currentUser.org_id) {
+      return c.json({ error: '권한이 없습니다.' }, 403);
+    }
+
+    const phone = (target.phone as string) || '0000';
+    const newPassword = normalizePhone(phone).slice(-4) + '!';
+    const passwordHash = await hashPassword(newPassword);
+
+    await db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE user_id = ?").bind(passwordHash, userId).run();
+    await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId).run();
+
+    await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: 'RESET_PASSWORD', actor_id: currentUser.user_id });
+
+    return c.json({ ok: true, new_password: newPassword, message: `비밀번호가 "${newPassword}"로 초기화되었습니다.` });
+  });
+
+  // ─── 비밀번호 변경 (본인) ───
+  router.post('/users/change-password', async (c) => {
+    const authErr = requireAuth(c);
+    if (authErr) return authErr;
+
+    const currentUser = c.get('user')!;
+    const db = c.env.DB;
+    const { current_password, new_password } = await c.req.json();
+
+    if (!current_password || !new_password) return c.json({ error: '현재 비밀번호와 새 비밀번호를 입력하세요.' }, 400);
+    if (new_password.length < 4) return c.json({ error: '비밀번호는 최소 4자 이상이어야 합니다.' }, 400);
+
+    const userRow = await db.prepare('SELECT password_hash FROM users WHERE user_id = ?').bind(currentUser.user_id).first();
+    if (!userRow?.password_hash) return c.json({ error: '사용자 정보를 찾을 수 없습니다.' }, 500);
+
+    const valid = await verifyPassword(current_password, userRow.password_hash as string);
+    if (!valid) return c.json({ error: '현재 비밀번호가 틀렸습니다.' }, 401);
+
+    const newHash = await hashPassword(new_password);
+    await db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE user_id = ?").bind(newHash, currentUser.user_id).run();
+
+    await writeAuditLog(db, { entity_type: 'USER', entity_id: currentUser.user_id, action: 'CHANGE_PASSWORD', actor_id: currentUser.user_id });
+
+    return c.json({ ok: true, message: '비밀번호가 변경되었습니다.' });
+  });
+
+  // ─── ID/PW 직접 설정 (관리자) ───
+  router.post('/users/:user_id/set-credentials', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const currentUser = c.get('user')!;
+    const db = c.env.DB;
+    const userId = Number(c.req.param('user_id'));
+    if (isNaN(userId)) return c.json({ error: '유효하지 않은 사용자 ID입니다.' }, 400);
+
+    const { login_id, password } = await c.req.json();
+
+    const target = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(userId).first();
+    if (!target) return c.json({ error: '사용자를 찾을 수 없습니다.' }, 404);
+
+    if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN') && target.org_id !== currentUser.org_id) {
+      return c.json({ error: '권한이 없습니다.' }, 403);
+    }
+
+    const updates: string[] = [];
+    const params: any[] = [];
+
+    if (login_id) {
+      if (!isValidLoginId(login_id)) return c.json({ error: '로그인 ID는 영문/숫자/밑줄로 3~50자입니다.' }, 400);
+      const loginDup = await db.prepare('SELECT user_id FROM users WHERE login_id = ? AND user_id != ?').bind(login_id, userId).first();
+      if (loginDup) return c.json({ error: '이미 사용 중인 아이디입니다.' }, 409);
+      updates.push('login_id = ?');
+      params.push(login_id);
+    }
+
+    if (password) {
+      if (password.length < 4) return c.json({ error: '비밀번호는 최소 4자 이상이어야 합니다.' }, 400);
+      const passwordHash = await hashPassword(password);
+      updates.push('password_hash = ?');
+      params.push(passwordHash);
+    }
+
+    if (updates.length === 0) return c.json({ error: '변경할 항목이 없습니다.' }, 400);
+
+    updates.push("updated_at = datetime('now')");
+    params.push(userId);
+
+    await db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE user_id = ?`).bind(...params).run();
+
+    if (password) {
+      await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId).run();
+    }
+
+    await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: 'SET_CREDENTIALS', actor_id: currentUser.user_id, detail_json: JSON.stringify({ login_id_changed: !!login_id, password_changed: !!password }) });
+
+    return c.json({ ok: true, message: 'ID/PW가 설정되었습니다.' });
+  });
+
+  // ─── 역할 목록 ───
+  router.get('/roles', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const result = await c.env.DB.prepare('SELECT * FROM roles ORDER BY role_id').all();
+    return c.json({ roles: result.results });
+  });
+}
