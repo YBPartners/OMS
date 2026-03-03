@@ -1,22 +1,30 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, writeAuditLog } from '../middleware/auth';
+import { verifyPassword, needsRehash, hashPassword, checkRateLimit, cleanExpiredSessions } from '../middleware/security';
 
 const auth = new Hono<Env>();
 
 // 로그인
 auth.post('/login', async (c) => {
-  const { login_id, password } = await c.req.json();
+  const db = c.env.DB;
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: '잘못된 요청 형식입니다.' }, 400);
+  }
+
+  const { login_id, password } = body;
   if (!login_id || !password) return c.json({ error: '아이디와 비밀번호를 입력하세요.' }, 400);
 
-  const db = c.env.DB;
-  
-  // 간이 해시 (SHA-256: 실운영시 bcrypt/argon2 권장)
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const passwordHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  // Rate Limiting: 로그인 시도 - IP(또는 login_id)당 1분에 10회
+  const rlKey = `login:${login_id}`;
+  const rl = checkRateLimit(rlKey, 10, 60_000);
+  if (!rl.ok) {
+    return c.json({ error: '로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요.' }, 429);
+  }
 
   const user = await db.prepare(`
     SELECT u.user_id, u.org_id, u.login_id, u.name, u.password_hash, o.org_type
@@ -24,14 +32,45 @@ auth.post('/login', async (c) => {
     WHERE u.login_id = ? AND u.status = 'ACTIVE'
   `).bind(login_id).first();
 
-  if (!user || user.password_hash !== passwordHash) {
+  if (!user || !user.password_hash) {
     return c.json({ error: '아이디 또는 비밀번호가 틀렸습니다.' }, 401);
+  }
+
+  // PBKDF2 검증 (레거시 SHA-256도 자동 호환)
+  const valid = await verifyPassword(password, user.password_hash as string);
+  if (!valid) {
+    await writeAuditLog(db, { entity_type: 'USER', entity_id: user.user_id as number, action: 'LOGIN_FAILED', detail_json: JSON.stringify({ login_id }) });
+    return c.json({ error: '아이디 또는 비밀번호가 틀렸습니다.' }, 401);
+  }
+
+  // 레거시 해시 → PBKDF2 자동 마이그레이션 (투명하게)
+  if (needsRehash(user.password_hash as string)) {
+    try {
+      const newHash = await hashPassword(password);
+      await db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE user_id = ?")
+        .bind(newHash, user.user_id).run();
+    } catch {
+      // 마이그레이션 실패해도 로그인은 진행
+    }
   }
 
   // 역할 조회
   const roles = await db.prepare(`
     SELECT r.code FROM user_roles ur JOIN roles r ON ur.role_id = r.role_id WHERE ur.user_id = ?
   `).bind(user.user_id).all();
+
+  // 기존 세션 수 제한 (사용자당 최대 5개)
+  const sessionCount = await db.prepare(
+    "SELECT COUNT(*) as cnt FROM sessions WHERE user_id = ? AND expires_at > datetime('now')"
+  ).bind(user.user_id).first();
+  if (sessionCount && (sessionCount.cnt as number) >= 5) {
+    // 가장 오래된 세션 삭제
+    await db.prepare(`
+      DELETE FROM sessions WHERE session_id IN (
+        SELECT session_id FROM sessions WHERE user_id = ? ORDER BY created_at ASC LIMIT 1
+      )
+    `).bind(user.user_id).run();
+  }
 
   // 세션 생성
   const sessionId = crypto.randomUUID();
@@ -41,6 +80,11 @@ auth.post('/login', async (c) => {
     .bind(sessionId, user.user_id, expiresAt).run();
 
   await writeAuditLog(db, { entity_type: 'USER', entity_id: user.user_id as number, action: 'LOGIN', actor_id: user.user_id as number });
+
+  // 만료 세션 주기적 정리 (10% 확률로, 성능 영향 최소화)
+  if (Math.random() < 0.1) {
+    cleanExpiredSessions(db).catch(() => {});
+  }
 
   const setCookie = `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`;
   
@@ -66,7 +110,7 @@ auth.post('/logout', async (c) => {
   if (sessionId) {
     await c.env.DB.prepare('DELETE FROM sessions WHERE session_id = ?').bind(sessionId).run();
   }
-  return c.json({ ok: true }, 200, { 'Set-Cookie': 'session_id=; Path=/; Max-Age=0' });
+  return c.json({ ok: true }, 200, { 'Set-Cookie': 'session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' });
 });
 
 // 현재 사용자 정보

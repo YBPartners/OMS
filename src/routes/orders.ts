@@ -12,7 +12,9 @@ orders.get('/', async (c) => {
   const user = c.get('user')!;
   const db = c.env.DB;
   const { status, page = '1', limit = '20', from, to, search, region_org_id, team_leader_id } = c.req.query();
-  const offset = (Number(page) - 1) * Number(limit);
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+  const offset = (pageNum - 1) * limitNum;
   const conditions: string[] = [];
   const params: any[] = [];
 
@@ -54,9 +56,9 @@ orders.get('/', async (c) => {
     ${where}
     ORDER BY o.created_at DESC
     LIMIT ? OFFSET ?
-  `).bind(...params, Number(limit), offset).all();
+  `).bind(...params, limitNum, offset).all();
 
-  return c.json({ orders: result.results, total: (countResult as any)?.total || 0, page: Number(page), limit: Number(limit) });
+  return c.json({ orders: result.results, total: (countResult as any)?.total || 0, page: pageNum, limit: limitNum });
 });
 
 // ─── 주문 상세 ───
@@ -116,12 +118,13 @@ orders.post('/', async (c) => {
 
   const user = c.get('user')!;
   const db = c.env.DB;
-  const body = await c.req.json();
+  let body: any;
+  try { body = await c.req.json(); } catch { return c.json({ error: '잘못된 요청 형식입니다.' }, 400); }
 
   // 필수 필드 검증
   if (!body.address_text) return c.json({ error: '주소(address_text)는 필수입니다.' }, 400);
-  if (!body.requested_date && !body.base_amount) {
-    // 최소한 주소는 반드시 있어야 함
+  if (body.base_amount !== undefined && (isNaN(Number(body.base_amount)) || Number(body.base_amount) < 0)) {
+    return c.json({ error: '금액은 0 이상의 숫자여야 합니다.' }, 400);
   }
 
   // fingerprint 생성

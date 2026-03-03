@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env } from './types';
 import { authMiddleware } from './middleware/auth';
+import { cleanupRateLimit } from './middleware/security';
 import authRoutes from './routes/auth';
 import orderRoutes from './routes/orders';
 import settlementRoutes from './routes/settlements';
@@ -11,9 +12,26 @@ import hrRoutes from './routes/hr';
 
 const app = new Hono<Env>();
 
+// ─── 글로벌 에러 핸들러 ───
+app.onError((err, c) => {
+  console.error(`[OMS ERROR] ${c.req.method} ${c.req.path}:`, err.message);
+  // SQL/DB 에러는 사용자에게 상세 내용을 노출하지 않음
+  const isDbError = err.message?.includes('D1') || err.message?.includes('SQL');
+  return c.json({
+    error: isDbError ? '데이터 처리 중 오류가 발생했습니다.' : (err.message || '서버 오류가 발생했습니다.'),
+    _debug: (c.env as any).DEV_MODE === 'true' ? err.message : undefined,
+  }, 500);
+});
+
 // ─── 미들웨어 ───
 app.use('*', cors());
 app.use('/api/*', authMiddleware);
+
+// Rate limit 메모리 정리 (매 요청 시 확률적 실행)
+app.use('*', async (c, next) => {
+  if (Math.random() < 0.01) cleanupRateLimit();
+  await next();
+});
 
 // ─── API 라우트 ───
 app.route('/api/auth', authRoutes);
@@ -24,7 +42,7 @@ app.route('/api/stats', statsRoutes);
 app.route('/api/hr', hrRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '1.0.0', system: '다하다 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '2.0.0', system: '다하다 OMS' }));
 
 // ─── SPA 라우팅: 모든 페이지 요청에 index.html 반환 ───
 app.get('*', async (c) => {

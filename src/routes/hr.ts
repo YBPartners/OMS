@@ -1,17 +1,9 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, writeAuditLog } from '../middleware/auth';
+import { hashPassword, verifyPassword, needsRehash, checkRateLimit, normalizePhone, isValidPhone, isValidLoginId, isValidEmail } from '../middleware/security';
 
 const hr = new Hono<Env>();
-
-// SHA-256 해시 헬퍼
-async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
 
 // ════════════════════════════════════════════
 // 조직(법인) 관리
@@ -53,9 +45,16 @@ hr.post('/organizations', async (c) => {
   if (!['HQ', 'REGION'].includes(body.org_type)) {
     return c.json({ error: '유형은 HQ 또는 REGION이어야 합니다.' }, 400);
   }
+  // 조직명 길이 제한
+  if (body.name.length > 50) {
+    return c.json({ error: '조직명은 50자 이하로 입력하세요.' }, 400);
+  }
 
   // 코드 중복 체크
   if (body.code) {
+    if (!/^[A-Z0-9_]{2,30}$/.test(body.code)) {
+      return c.json({ error: '조직 코드는 영문대문자, 숫자, 밑줄만 사용 가능합니다 (2~30자).' }, 400);
+    }
     const dup = await db.prepare('SELECT org_id FROM organizations WHERE code = ?').bind(body.code).first();
     if (dup) return c.json({ error: '이미 사용 중인 조직 코드입니다.' }, 409);
   }
@@ -77,6 +76,8 @@ hr.put('/organizations/:org_id', async (c) => {
   const user = c.get('user')!;
   const db = c.env.DB;
   const orgId = Number(c.req.param('org_id'));
+  if (isNaN(orgId)) return c.json({ error: '유효하지 않은 조직 ID입니다.' }, 400);
+
   const body = await c.req.json();
 
   const existing = await db.prepare('SELECT * FROM organizations WHERE org_id = ?').bind(orgId).first();
@@ -104,7 +105,9 @@ hr.get('/users', async (c) => {
   const user = c.get('user')!;
   const db = c.env.DB;
   const { org_id, role, status: filterStatus, search, page = '1', limit = '30' } = c.req.query();
-  const offset = (Number(page) - 1) * Number(limit);
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
+  const offset = (pageNum - 1) * limitNum;
 
   const conditions: string[] = [];
   const params: any[] = [];
@@ -119,7 +122,11 @@ hr.get('/users', async (c) => {
   }
 
   if (filterStatus) { conditions.push('u.status = ?'); params.push(filterStatus); }
-  if (search) { conditions.push("(u.name LIKE ? OR u.login_id LIKE ? OR u.phone LIKE ? OR u.email LIKE ?)"); params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`); }
+  if (search) { 
+    const safeSearch = `%${search.slice(0, 50)}%`;
+    conditions.push("(u.name LIKE ? OR u.login_id LIKE ? OR u.phone LIKE ? OR u.email LIKE ?)");
+    params.push(safeSearch, safeSearch, safeSearch, safeSearch);
+  }
 
   const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
 
@@ -139,7 +146,7 @@ hr.get('/users', async (c) => {
     GROUP BY u.user_id
     ORDER BY u.org_id, u.name
     LIMIT ? OFFSET ?
-  `).bind(...params, Number(limit), offset).all();
+  `).bind(...params, limitNum, offset).all();
 
   // 역할별 필터 (후처리 - GROUP_CONCAT 내에서 필터 어려움)
   let users = result.results.map((u: any) => ({
@@ -152,7 +159,7 @@ hr.get('/users', async (c) => {
     users = users.filter((u: any) => u.roles.includes(role));
   }
 
-  return c.json({ users, total: (countResult as any)?.total || 0, page: Number(page), limit: Number(limit) });
+  return c.json({ users, total: (countResult as any)?.total || 0, page: pageNum, limit: limitNum });
 });
 
 // 사용자 상세
@@ -163,6 +170,7 @@ hr.get('/users/:user_id', async (c) => {
   const currentUser = c.get('user')!;
   const db = c.env.DB;
   const userId = Number(c.req.param('user_id'));
+  if (isNaN(userId)) return c.json({ error: '유효하지 않은 사용자 ID입니다.' }, 400);
 
   const targetUser = await db.prepare(`
     SELECT u.*, o.name as org_name, o.org_type, o.code as org_code
@@ -219,6 +227,15 @@ hr.post('/users', async (c) => {
   if (!body.org_id) return c.json({ error: '소속 조직은 필수입니다.' }, 400);
   if (!body.role) return c.json({ error: '역할은 필수입니다.' }, 400);
 
+  // 이름 길이 제한
+  if (body.name.length > 50) return c.json({ error: '이름은 50자 이하로 입력하세요.' }, 400);
+
+  // 전화번호 검증
+  if (!isValidPhone(body.phone)) return c.json({ error: '올바른 핸드폰 번호를 입력하세요 (01X로 시작하는 10~11자리).' }, 400);
+
+  // 이메일 검증
+  if (body.email && !isValidEmail(body.email)) return c.json({ error: '올바른 이메일 형식을 입력하세요.' }, 400);
+
   // REGION_ADMIN은 자기 법인에만 팀장 등록 가능
   if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN')) {
     if (Number(body.org_id) !== currentUser.org_id) {
@@ -229,15 +246,21 @@ hr.post('/users', async (c) => {
     }
   }
 
+  // 유효한 역할인지 확인
+  const validRoles = ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'TEAM_LEADER', 'AUDITOR'];
+  if (!validRoles.includes(body.role)) return c.json({ error: '유효하지 않은 역할입니다.' }, 400);
+
   // 핸드폰 중복 체크
-  const phoneDup = await db.prepare('SELECT user_id, name FROM users WHERE phone = ? AND status = ?').bind(body.phone, 'ACTIVE').first();
+  const phoneDup = await db.prepare('SELECT user_id, name FROM users WHERE phone = ? AND status = ?').bind(normalizePhone(body.phone), 'ACTIVE').first();
   if (phoneDup) return c.json({ error: `이미 등록된 핸드폰 번호입니다. (${(phoneDup as any).name})` }, 409);
 
   // login_id 자동 생성 또는 수동 입력
   let loginId = body.login_id;
-  if (!loginId) {
+  if (loginId) {
+    if (!isValidLoginId(loginId)) return c.json({ error: '로그인 ID는 영문/숫자/밑줄로 3~50자입니다.' }, 400);
+  } else {
     // 핸드폰 뒷자리 기반 자동 생성
-    const phoneLast4 = body.phone.replace(/[^0-9]/g, '').slice(-4);
+    const phoneLast4 = normalizePhone(body.phone).slice(-4);
     loginId = `user_${phoneLast4}_${Date.now().toString(36).slice(-4)}`;
   }
 
@@ -246,7 +269,10 @@ hr.post('/users', async (c) => {
   if (loginDup) return c.json({ error: '이미 사용 중인 아이디입니다.' }, 409);
 
   // 초기 비밀번호: 수동 입력 또는 핸드폰 뒷자리 4자리
-  const initialPassword = body.password || body.phone.replace(/[^0-9]/g, '').slice(-4) + '!';
+  const initialPassword = body.password || normalizePhone(body.phone).slice(-4) + '!';
+  if (initialPassword.length < 4) return c.json({ error: '비밀번호는 최소 4자 이상이어야 합니다.' }, 400);
+  
+  // PBKDF2 해싱
   const passwordHash = await hashPassword(initialPassword);
 
   // 사용자 등록
@@ -255,7 +281,7 @@ hr.post('/users', async (c) => {
     VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 0, datetime('now'), ?)
   `).bind(
     Number(body.org_id), loginId, passwordHash,
-    body.name, body.phone, body.email || null, body.memo || null
+    body.name, normalizePhone(body.phone), body.email || null, body.memo || null
   ).run();
 
   const newUserId = result.meta.last_row_id as number;
@@ -288,6 +314,8 @@ hr.put('/users/:user_id', async (c) => {
   const currentUser = c.get('user')!;
   const db = c.env.DB;
   const userId = Number(c.req.param('user_id'));
+  if (isNaN(userId)) return c.json({ error: '유효하지 않은 사용자 ID입니다.' }, 400);
+
   const body = await c.req.json();
 
   const target = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(userId).first();
@@ -298,9 +326,13 @@ hr.put('/users/:user_id', async (c) => {
     return c.json({ error: '권한이 없습니다.' }, 403);
   }
 
+  // 입력값 검증
+  if (body.phone && !isValidPhone(body.phone)) return c.json({ error: '올바른 핸드폰 번호를 입력하세요.' }, 400);
+  if (body.email && !isValidEmail(body.email)) return c.json({ error: '올바른 이메일 형식을 입력하세요.' }, 400);
+
   // 핸드폰 변경 시 중복 체크 + 인증 초기화
-  if (body.phone && body.phone !== target.phone) {
-    const phoneDup = await db.prepare('SELECT user_id, name FROM users WHERE phone = ? AND status = ? AND user_id != ?').bind(body.phone, 'ACTIVE', userId).first();
+  if (body.phone && normalizePhone(body.phone) !== target.phone) {
+    const phoneDup = await db.prepare('SELECT user_id, name FROM users WHERE phone = ? AND status = ? AND user_id != ?').bind(normalizePhone(body.phone), 'ACTIVE', userId).first();
     if (phoneDup) return c.json({ error: `이미 등록된 핸드폰 번호입니다. (${(phoneDup as any).name})` }, 409);
   }
 
@@ -308,7 +340,7 @@ hr.put('/users/:user_id', async (c) => {
   const params: any[] = [];
 
   if (body.name !== undefined) { sets.push('name = ?'); params.push(body.name); }
-  if (body.phone !== undefined) { sets.push('phone = ?'); params.push(body.phone); sets.push('phone_verified = 0'); }
+  if (body.phone !== undefined) { sets.push('phone = ?'); params.push(normalizePhone(body.phone)); sets.push('phone_verified = 0'); }
   if (body.email !== undefined) { sets.push('email = ?'); params.push(body.email); }
   if (body.memo !== undefined) { sets.push('memo = ?'); params.push(body.memo); }
   if (body.org_id !== undefined && currentUser.roles.includes('SUPER_ADMIN')) { sets.push('org_id = ?'); params.push(Number(body.org_id)); }
@@ -323,6 +355,9 @@ hr.put('/users/:user_id', async (c) => {
 
   // 역할 변경
   if (body.role) {
+    const validRoles = ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'TEAM_LEADER', 'AUDITOR'];
+    if (!validRoles.includes(body.role)) return c.json({ error: '유효하지 않은 역할입니다.' }, 400);
+    
     await db.prepare('DELETE FROM user_roles WHERE user_id = ?').bind(userId).run();
     const roleRow = await db.prepare('SELECT role_id FROM roles WHERE code = ?').bind(body.role).first();
     if (roleRow) {
@@ -343,6 +378,8 @@ hr.patch('/users/:user_id/status', async (c) => {
   const currentUser = c.get('user')!;
   const db = c.env.DB;
   const userId = Number(c.req.param('user_id'));
+  if (isNaN(userId)) return c.json({ error: '유효하지 않은 사용자 ID입니다.' }, 400);
+
   const { status } = await c.req.json();
 
   if (!['ACTIVE', 'INACTIVE'].includes(status)) return c.json({ error: '상태는 ACTIVE 또는 INACTIVE입니다.' }, 400);
@@ -380,6 +417,7 @@ hr.post('/users/:user_id/reset-password', async (c) => {
   const currentUser = c.get('user')!;
   const db = c.env.DB;
   const userId = Number(c.req.param('user_id'));
+  if (isNaN(userId)) return c.json({ error: '유효하지 않은 사용자 ID입니다.' }, 400);
 
   const target = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(userId).first();
   if (!target) return c.json({ error: '사용자를 찾을 수 없습니다.' }, 404);
@@ -390,7 +428,7 @@ hr.post('/users/:user_id/reset-password', async (c) => {
 
   // 핸드폰 뒷자리 4자리 + !
   const phone = (target.phone as string) || '0000';
-  const newPassword = phone.replace(/[^0-9]/g, '').slice(-4) + '!';
+  const newPassword = normalizePhone(phone).slice(-4) + '!';
   const passwordHash = await hashPassword(newPassword);
 
   await db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE user_id = ?").bind(passwordHash, userId).run();
@@ -416,9 +454,11 @@ hr.post('/users/change-password', async (c) => {
   if (new_password.length < 4) return c.json({ error: '비밀번호는 최소 4자 이상이어야 합니다.' }, 400);
 
   const user = await db.prepare('SELECT password_hash FROM users WHERE user_id = ?').bind(currentUser.user_id).first();
-  const currentHash = await hashPassword(current_password);
+  if (!user?.password_hash) return c.json({ error: '사용자 정보를 찾을 수 없습니다.' }, 500);
 
-  if (user?.password_hash !== currentHash) return c.json({ error: '현재 비밀번호가 틀렸습니다.' }, 401);
+  // PBKDF2 검증 (레거시 호환)
+  const valid = await verifyPassword(current_password, user.password_hash as string);
+  if (!valid) return c.json({ error: '현재 비밀번호가 틀렸습니다.' }, 401);
 
   const newHash = await hashPassword(new_password);
   await db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE user_id = ?").bind(newHash, currentUser.user_id).run();
@@ -428,7 +468,7 @@ hr.post('/users/change-password', async (c) => {
   return c.json({ ok: true, message: '비밀번호가 변경되었습니다.' });
 });
 
-// ─── ID/PW 직접 설정 (관리자가 신규 등록 시 또는 사용자 본인) ───
+// ─── ID/PW 직접 설정 (관리자) ───
 hr.post('/users/:user_id/set-credentials', async (c) => {
   const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
   if (authErr) return authErr;
@@ -436,6 +476,8 @@ hr.post('/users/:user_id/set-credentials', async (c) => {
   const currentUser = c.get('user')!;
   const db = c.env.DB;
   const userId = Number(c.req.param('user_id'));
+  if (isNaN(userId)) return c.json({ error: '유효하지 않은 사용자 ID입니다.' }, 400);
+
   const { login_id, password } = await c.req.json();
 
   const target = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(userId).first();
@@ -449,6 +491,7 @@ hr.post('/users/:user_id/set-credentials', async (c) => {
   const params: any[] = [];
 
   if (login_id) {
+    if (!isValidLoginId(login_id)) return c.json({ error: '로그인 ID는 영문/숫자/밑줄로 3~50자입니다.' }, 400);
     const loginDup = await db.prepare('SELECT user_id FROM users WHERE login_id = ? AND user_id != ?').bind(login_id, userId).first();
     if (loginDup) return c.json({ error: '이미 사용 중인 아이디입니다.' }, 409);
     updates.push('login_id = ?');
@@ -485,17 +528,32 @@ hr.post('/users/:user_id/set-credentials', async (c) => {
 // OTP 발송 요청
 hr.post('/phone/send-otp', async (c) => {
   const db = c.env.DB;
-  const { phone, purpose = 'REGISTER', user_id } = await c.req.json();
+  
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: '잘못된 요청 형식입니다.' }, 400);
+  }
+
+  const { phone, purpose = 'REGISTER', user_id } = body;
 
   if (!phone) return c.json({ error: '핸드폰 번호를 입력하세요.' }, 400);
 
-  // 정규화
-  const normalizedPhone = phone.replace(/[^0-9]/g, '');
-  if (normalizedPhone.length < 10 || normalizedPhone.length > 11) {
+  // 정규화 & 검증
+  const normalizedPhone = normalizePhone(phone);
+  if (!isValidPhone(normalizedPhone)) {
     return c.json({ error: '올바른 핸드폰 번호를 입력하세요.' }, 400);
   }
 
-  // 최근 60초 이내 발송 방지 (도배 방지)
+  // Rate Limiting: 전화번호당 1분에 2회까지
+  const rlKey = `otp:${normalizedPhone}`;
+  const rl = checkRateLimit(rlKey, 2, 60_000);
+  if (!rl.ok) {
+    return c.json({ error: '인증번호가 이미 발송되었습니다. 1분 후 다시 시도하세요.' }, 429);
+  }
+
+  // DB 기반 도배 방지 (1분 이내 기존 발송 확인)
   const recent = await db.prepare(`
     SELECT verification_id FROM phone_verifications 
     WHERE phone = ? AND purpose = ? AND created_at > datetime('now', '-1 minutes')
@@ -503,8 +561,9 @@ hr.post('/phone/send-otp', async (c) => {
 
   if (recent) return c.json({ error: '인증번호가 이미 발송되었습니다. 1분 후 다시 시도하세요.' }, 429);
 
-  // 6자리 OTP 생성
-  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  // 6자리 OTP 생성 (crypto.getRandomValues 사용)
+  const randomBuf = crypto.getRandomValues(new Uint32Array(1));
+  const otp = String(100000 + (randomBuf[0] % 900000));
   const expiresAt = new Date(Date.now() + 3 * 60 * 1000).toISOString(); // 3분
 
   await db.prepare(`
@@ -513,16 +572,22 @@ hr.post('/phone/send-otp', async (c) => {
   `).bind(normalizedPhone, otp, purpose, user_id || null, expiresAt).run();
 
   // 실제 SMS 발송은 외부 서비스 연동 필요 (현재는 시뮬레이션)
-  // 운영환경에서는 NHN Cloud SMS / Twilio 등 연동
   console.log(`[SMS 시뮬레이션] ${normalizedPhone}에 OTP: ${otp} 발송`);
 
-  return c.json({ 
+  const response: any = { 
     ok: true, 
     message: `인증번호가 ${normalizedPhone}으로 발송되었습니다. (3분 이내 입력)`,
-    // 개발/테스트 환경에서만 노출 (운영 시 제거)
-    _dev_otp: otp,
     expires_at: expiresAt,
-  });
+  };
+
+  // 개발 환경에서만 OTP 노출 (wrangler pages dev --local 시에만)
+  // 프로덕션 배포 시에는 이 필드가 절대 포함되지 않음
+  // 환경 변수 DEV_MODE=true 설정 시에만 노출
+  if ((c.env as any).DEV_MODE === 'true') {
+    response._dev_otp = otp;
+  }
+
+  return c.json(response);
 });
 
 // OTP 검증
@@ -532,7 +597,14 @@ hr.post('/phone/verify-otp', async (c) => {
 
   if (!phone || !otp_code) return c.json({ error: '핸드폰 번호와 인증번호를 입력하세요.' }, 400);
 
-  const normalizedPhone = phone.replace(/[^0-9]/g, '');
+  const normalizedPhone = normalizePhone(phone);
+
+  // Rate Limiting: OTP 검증 시도 - 전화번호당 1분에 10회
+  const rlKey = `otp-verify:${normalizedPhone}`;
+  const rl = checkRateLimit(rlKey, 10, 60_000);
+  if (!rl.ok) {
+    return c.json({ error: '인증 시도가 너무 많습니다. 잠시 후 다시 시도하세요.' }, 429);
+  }
 
   // 최신 미인증 OTP 조회
   const verification = await db.prepare(`
@@ -573,7 +645,7 @@ hr.get('/phone/status', async (c) => {
   const phone = c.req.query('phone');
   if (!phone) return c.json({ error: '핸드폰 번호를 입력하세요.' }, 400);
 
-  const normalizedPhone = phone.replace(/[^0-9]/g, '');
+  const normalizedPhone = normalizePhone(phone);
 
   const verified = await db.prepare(`
     SELECT verification_id, verified, created_at FROM phone_verifications
