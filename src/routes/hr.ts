@@ -313,12 +313,13 @@ hr.put('/users/:user_id', async (c) => {
   if (body.memo !== undefined) { sets.push('memo = ?'); params.push(body.memo); }
   if (body.org_id !== undefined && currentUser.roles.includes('SUPER_ADMIN')) { sets.push('org_id = ?'); params.push(Number(body.org_id)); }
 
-  if (sets.length === 0) return c.json({ error: '변경할 항목이 없습니다.' }, 400);
+  if (sets.length === 0 && !body.role) return c.json({ error: '변경할 항목이 없습니다.' }, 400);
 
-  sets.push("updated_at = datetime('now')");
-  params.push(userId);
-
-  await db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE user_id = ?`).bind(...params).run();
+  if (sets.length > 0) {
+    sets.push("updated_at = datetime('now')");
+    params.push(userId);
+    await db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE user_id = ?`).bind(...params).run();
+  }
 
   // 역할 변경
   if (body.role) {

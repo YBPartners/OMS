@@ -118,6 +118,12 @@ orders.post('/', async (c) => {
   const db = c.env.DB;
   const body = await c.req.json();
 
+  // 필수 필드 검증
+  if (!body.address_text) return c.json({ error: '주소(address_text)는 필수입니다.' }, 400);
+  if (!body.requested_date && !body.base_amount) {
+    // 최소한 주소는 반드시 있어야 함
+  }
+
   // fingerprint 생성
   const fpData = `${body.address_text}|${body.requested_date}|${body.service_type || 'DEFAULT'}|${body.base_amount || 0}`;
   const encoder = new TextEncoder();
