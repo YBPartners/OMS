@@ -21,26 +21,26 @@ INSERT OR IGNORE INTO organizations (org_id, org_type, name, code, status) VALUE
   (4, 'REGION', '인천지역법인', 'REGION_INCHEON', 'ACTIVE'),
   (5, 'REGION', '부산지역법인', 'REGION_BUSAN', 'ACTIVE');
 
--- 사용자: HQ 관리자 (password: admin123 → 간이 해시)
-INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status) VALUES
-  (1, 1, 'admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '시스템관리자', '010-0000-0000', 'admin@dahada.co.kr', 'ACTIVE'),
-  (2, 1, 'hq_operator', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'HQ운영자', '010-0000-0001', 'operator@dahada.co.kr', 'ACTIVE');
+-- 사용자: HQ 관리자 (password: admin123 → SHA-256 해시)
+INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo) VALUES
+  (1, 1, 'admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '시스템관리자', '01000000000', 'admin@dahada.co.kr', 'ACTIVE', 1, '2024-01-01', '전권 관리자'),
+  (2, 1, 'hq_operator', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'HQ운영자', '01000000001', 'operator@dahada.co.kr', 'ACTIVE', 1, '2024-01-15', NULL);
 
 -- 사용자: 지역법인 관리자
-INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status) VALUES
-  (3, 2, 'seoul_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '서울관리자', '010-1111-0001', 'seoul@dahada.co.kr', 'ACTIVE'),
-  (4, 3, 'gyeonggi_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '경기관리자', '010-2222-0001', 'gyeonggi@dahada.co.kr', 'ACTIVE'),
-  (5, 4, 'incheon_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '인천관리자', '010-3333-0001', 'incheon@dahada.co.kr', 'ACTIVE'),
-  (6, 5, 'busan_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '부산관리자', '010-4444-0001', 'busan@dahada.co.kr', 'ACTIVE');
+INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo) VALUES
+  (3, 2, 'seoul_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '서울관리자', '01011110001', 'seoul@dahada.co.kr', 'ACTIVE', 1, '2024-02-01', '서울지역법인 담당'),
+  (4, 3, 'gyeonggi_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '경기관리자', '01022220001', 'gyeonggi@dahada.co.kr', 'ACTIVE', 1, '2024-02-01', '경기지역법인 담당'),
+  (5, 4, 'incheon_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '인천관리자', '01033330001', 'incheon@dahada.co.kr', 'ACTIVE', 1, '2024-02-01', '인천지역법인 담당'),
+  (6, 5, 'busan_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '부산관리자', '01044440001', 'busan@dahada.co.kr', 'ACTIVE', 1, '2024-02-01', '부산지역법인 담당');
 
 -- 사용자: 팀장
-INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status) VALUES
-  (7,  2, 'leader_seoul_1',    '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '김팀장', '010-1111-1001', NULL, 'ACTIVE'),
-  (8,  2, 'leader_seoul_2',    '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '이팀장', '010-1111-1002', NULL, 'ACTIVE'),
-  (9,  3, 'leader_gyeonggi_1', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '박팀장', '010-2222-1001', NULL, 'ACTIVE'),
-  (10, 3, 'leader_gyeonggi_2', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '최팀장', '010-2222-1002', NULL, 'ACTIVE'),
-  (11, 4, 'leader_incheon_1',  '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '정팀장', '010-3333-1001', NULL, 'ACTIVE'),
-  (12, 5, 'leader_busan_1',    '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '한팀장', '010-4444-1001', NULL, 'ACTIVE');
+INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo) VALUES
+  (7,  2, 'leader_seoul_1',    '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '김팀장', '01011111001', NULL, 'ACTIVE', 1, '2024-03-01', '강남/서초 담당'),
+  (8,  2, 'leader_seoul_2',    '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '이팀장', '01011111002', NULL, 'ACTIVE', 1, '2024-03-15', '송파/마포 담당'),
+  (9,  3, 'leader_gyeonggi_1', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '박팀장', '01022221001', NULL, 'ACTIVE', 0, '2024-04-01', '분당/수원 담당'),
+  (10, 3, 'leader_gyeonggi_2', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '최팀장', '01022221002', NULL, 'ACTIVE', 0, '2024-04-15', '고양/용인 담당'),
+  (11, 4, 'leader_incheon_1',  '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '정팀장', '01033331001', NULL, 'ACTIVE', 1, '2024-05-01', '남동/연수 담당'),
+  (12, 5, 'leader_busan_1',    '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '한팀장', '01044441001', NULL, 'ACTIVE', 1, '2024-05-01', '해운대/부산진 담당');
 
 -- 역할 매핑
 INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES

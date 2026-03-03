@@ -7,6 +7,7 @@ import orderRoutes from './routes/orders';
 import settlementRoutes from './routes/settlements';
 import reconciliationRoutes from './routes/reconciliation';
 import statsRoutes from './routes/stats';
+import hrRoutes from './routes/hr';
 
 const app = new Hono<Env>();
 
@@ -20,6 +21,7 @@ app.route('/api/orders', orderRoutes);
 app.route('/api/settlements', settlementRoutes);
 app.route('/api/reconciliation', reconciliationRoutes);
 app.route('/api/stats', statsRoutes);
+app.route('/api/hr', hrRoutes);
 
 // ─── 헬스체크 ───
 app.get('/api/health', (c) => c.json({ status: 'ok', version: '1.0.0', system: '다하다 OMS' }));
