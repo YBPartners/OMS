@@ -1,7 +1,8 @@
-# 다하다 OMS 개발 문서 v1.1
+# 다하다 OMS 개발 문서 v2.0.0
 
 > 주문처리 / 배분 / 검수 / 정산 / 대사 / 통계 시스템  
-> 최종 수정: 2026-03-03
+> 최종 수정: 2026-03-03  
+> 버전: v2.0.0 (보안 강화 + 안정성 개선)
 
 ---
 
@@ -15,7 +16,7 @@
 | **Database** | Cloudflare D1 (SQLite) | 로컬 개발은 `--local` 모드 |
 | **Build** | Vite + @hono/vite-cloudflare-pages | SSR 번들링 |
 | **Frontend** | Vanilla JS + TailwindCSS (CDN) | SPA, 단일 app.js |
-| **Auth** | 세션 기반 (SHA-256 해시, Cookie + Header) | 프로덕션: bcrypt/argon2 권장 |
+| **Auth** | 세션 기반 (PBKDF2 해시, HttpOnly Cookie + Header) | SHA-256 자동 마이그레이션 |
 
 ### 1.2 디렉토리 구조
 ```
@@ -24,6 +25,7 @@ webapp/
 │   ├── index.tsx            # Hono 앱 엔트리, SPA HTML, 미들웨어 등록
 │   ├── types/index.ts       # 타입, 상태머신, Env 정의
 │   ├── middleware/auth.ts   # 세션 인증, RBAC, 감사로그 헬퍼
+│   ├── middleware/security.ts # PBKDF2 해싱, Rate Limiting, 입력 검증 유틸
 │   ├── routes/
 │   │   ├── auth.ts          # 로그인/로그아웃/me/users/organizations/team-leaders
 │   │   ├── orders.ts        # 주문 CRUD, 배분, 배정, 작업, 보고서, 검수, 퍼널
