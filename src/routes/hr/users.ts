@@ -24,9 +24,10 @@ export function mountUsers(router: Hono<Env>) {
     const conditions: string[] = [];
     const params: any[] = [];
 
+    // ★ Scope: REGION은 자기 총판+하위 TEAM, HQ는 전체
     if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
-      conditions.push('u.org_id = ?');
-      params.push(user.org_id);
+      conditions.push('(u.org_id = ? OR u.org_id IN (SELECT org_id FROM organizations WHERE parent_org_id = ?))');
+      params.push(user.org_id, user.org_id);
     } else if (org_id) {
       conditions.push('u.org_id = ?');
       params.push(Number(org_id));
@@ -90,8 +91,13 @@ export function mountUsers(router: Hono<Env>) {
 
     if (!targetUser) return c.json({ error: '사용자를 찾을 수 없습니다.' }, 404);
 
-    if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN') && targetUser.org_id !== currentUser.org_id) {
-      return c.json({ error: '권한이 없습니다.' }, 403);
+    // ★ Scope: REGION은 자기 총판+하위 TEAM 사용자만
+    if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN')) {
+      const isOwnOrg = targetUser.org_id === currentUser.org_id;
+      const isChildTeam = await db.prepare(
+        "SELECT 1 FROM organizations WHERE org_id = ? AND parent_org_id = ? AND org_type = 'TEAM'"
+      ).bind(targetUser.org_id, currentUser.org_id).first();
+      if (!isOwnOrg && !isChildTeam) return c.json({ error: '권한이 없습니다.' }, 403);
     }
 
     const roles = await db.prepare(`
@@ -137,12 +143,20 @@ export function mountUsers(router: Hono<Env>) {
     if (!isValidPhone(body.phone)) return c.json({ error: '올바른 핸드폰 번호를 입력하세요 (01X로 시작하는 10~11자리).' }, 400);
     if (body.email && !isValidEmail(body.email)) return c.json({ error: '올바른 이메일 형식을 입력하세요.' }, 400);
 
+    // ★ Scope: REGION은 자기 총판 + 하위 TEAM에만 등록 가능
     if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN')) {
-      if (Number(body.org_id) !== currentUser.org_id) {
-        return c.json({ error: '자기 법인에만 인원을 등록할 수 있습니다.' }, 403);
+      const targetOrg = await db.prepare(
+        'SELECT org_id, org_type, parent_org_id FROM organizations WHERE org_id = ?'
+      ).bind(Number(body.org_id)).first();
+      if (!targetOrg) return c.json({ error: '조직을 찾을 수 없습니다.' }, 404);
+
+      const isOwnOrg = Number(body.org_id) === currentUser.org_id;
+      const isChildTeam = targetOrg.org_type === 'TEAM' && targetOrg.parent_org_id === currentUser.org_id;
+      if (!isOwnOrg && !isChildTeam) {
+        return c.json({ error: '자기 총판 또는 하위 팀에만 인원을 등록할 수 있습니다.' }, 403);
       }
-      if (body.role !== 'TEAM_LEADER') {
-        return c.json({ error: '지역법인 관리자는 팀장만 등록할 수 있습니다.' }, 403);
+      if (body.role !== 'TEAM_LEADER' && body.role !== 'REGION_ADMIN') {
+        return c.json({ error: '총판 관리자는 팀장 또는 파트장만 등록할 수 있습니다.' }, 403);
       }
     }
 
@@ -211,8 +225,12 @@ export function mountUsers(router: Hono<Env>) {
     const target = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(userId).first();
     if (!target) return c.json({ error: '사용자를 찾을 수 없습니다.' }, 404);
 
-    if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN') && target.org_id !== currentUser.org_id) {
-      return c.json({ error: '권한이 없습니다.' }, 403);
+    if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN')) {
+      const isOwnOrg = target.org_id === currentUser.org_id;
+      const isChildTeam = await db.prepare(
+        "SELECT 1 FROM organizations WHERE org_id = ? AND parent_org_id = ? AND org_type = 'TEAM'"
+      ).bind(target.org_id, currentUser.org_id).first();
+      if (!isOwnOrg && !isChildTeam) return c.json({ error: '권한이 없습니다.' }, 403);
     }
 
     if (body.phone && !isValidPhone(body.phone)) return c.json({ error: '올바른 핸드폰 번호를 입력하세요.' }, 400);

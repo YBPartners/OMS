@@ -1,14 +1,20 @@
 // ================================================================
-// 다하다 OMS — 정산 산출/확정 비즈니스 로직
+// 다하다 OMS — 정산 산출/확정 v5.0
+// Batch Builder + State Machine 적용
+// 기존: for문 개별 INSERT → BatchBuilder 1회 batch()
 // ================================================================
 import { Hono } from 'hono';
-import type { Env } from '../../types';
+import type { Env, CommissionMode } from '../../types';
 import { requireAuth } from '../../middleware/auth';
-import { writeAuditLog, writeStatusHistory } from '../../lib/audit';
+import { writeAuditLog } from '../../lib/audit';
+import { buildSettlementBatch, BatchBuilder } from '../../lib/batch-builder';
+import type { SettlementItem } from '../../lib/batch-builder';
+import { bulkTransitionOrders } from '../../lib/state-machine';
+import { today } from '../../lib/db-helpers';
 
 export function mountCalculation(router: Hono<Env>) {
 
-  // ─── 정산 산출 (calculate) — 에러 발생 시 정리 보장 ───
+  // ─── 정산 산출 (calculate) — Batch Builder 적용 ───
   router.post('/runs/:run_id/calculate', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
     if (authErr) return authErr;
@@ -22,78 +28,98 @@ export function mountCalculation(router: Hono<Env>) {
     if (!run) return c.json({ error: '정산 Run을 찾을 수 없습니다.' }, 404);
     if (run.status !== 'DRAFT') return c.json({ error: '이미 산출된 정산입니다. DRAFT 상태에서만 산출 가능합니다.' }, 400);
 
+    // HQ_APPROVED 주문 조회 (정산 대상)
     const approvedOrders = await db.prepare(`
       SELECT o.order_id, o.base_amount, o.requested_date,
              od.region_org_id,
-             oa.team_leader_id
+             oa.team_leader_id,
+             u.org_id as team_org_id
       FROM orders o
       JOIN order_distributions od ON o.order_id = od.order_id AND od.status = 'ACTIVE'
       JOIN order_assignments oa ON o.order_id = oa.order_id AND oa.status = 'HQ_APPROVED'
+      LEFT JOIN users u ON oa.team_leader_id = u.user_id
       WHERE o.status = 'HQ_APPROVED'
         AND o.requested_date >= ? AND o.requested_date <= ?
         AND o.order_id NOT IN (SELECT order_id FROM settlements WHERE status IN ('PENDING','CONFIRMED','PAID'))
     `).bind(run.period_start, run.period_end).all();
 
-    let totalBase = 0, totalCommission = 0, totalPayable = 0, count = 0;
+    if (approvedOrders.results.length === 0) {
+      return c.json({ error: '산출 대상 주문이 없습니다.', run_id: runId }, 400);
+    }
+
+    // ★ 수수료 정책 일괄 캐싱 (N+1 문제 해결)
+    const commPolicies = await db.prepare(`
+      SELECT * FROM commission_policies WHERE is_active = 1 ORDER BY effective_from DESC
+    `).all();
+
+    const policyMap = new Map<string, any>();
+    for (const p of commPolicies.results as any[]) {
+      const key = p.team_leader_id ? `${p.org_id}:${p.team_leader_id}` : `${p.org_id}:null`;
+      if (!policyMap.has(key)) policyMap.set(key, p);
+    }
+
+    // 정산 아이템 계산
+    const items: SettlementItem[] = [];
     const errors: any[] = [];
 
     for (const order of approvedOrders.results as any[]) {
       try {
-        let commPolicy = await db.prepare(`
-          SELECT * FROM commission_policies
-          WHERE org_id = ? AND team_leader_id = ? AND is_active = 1
-          ORDER BY effective_from DESC LIMIT 1
-        `).bind(order.region_org_id, order.team_leader_id).first();
+        // 개인별 정책 → 조직 기본 정책 순서
+        let policy = policyMap.get(`${order.region_org_id}:${order.team_leader_id}`);
+        if (!policy) policy = policyMap.get(`${order.region_org_id}:null`);
 
-        if (!commPolicy) {
-          commPolicy = await db.prepare(`
-            SELECT * FROM commission_policies
-            WHERE org_id = ? AND team_leader_id IS NULL AND is_active = 1
-            ORDER BY effective_from DESC LIMIT 1
-          `).bind(order.region_org_id).first();
-        }
-
-        const mode = (commPolicy?.mode || 'PERCENT') as string;
-        const rate = (commPolicy?.value || 0) as number;
-        let commissionAmount = mode === 'FIXED' ? rate : Math.round(order.base_amount * rate / 100);
+        const mode: CommissionMode = (policy?.mode || 'PERCENT') as CommissionMode;
+        const rate = Number(policy?.value || 0);
+        const commissionAmount = mode === 'FIXED' ? rate : Math.round(order.base_amount * rate / 100);
         const payableAmount = Math.max(0, order.base_amount - commissionAmount);
 
-        await db.prepare(`
-          INSERT INTO settlements (run_id, order_id, team_leader_id, region_org_id,
-            base_amount, commission_mode, commission_rate, commission_amount, payable_amount,
-            period_type, period_start, period_end, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
-        `).bind(
-          runId, order.order_id, order.team_leader_id, order.region_org_id,
-          order.base_amount, mode, rate, commissionAmount, payableAmount,
-          run.period_type, run.period_start, run.period_end
-        ).run();
-
-        totalBase += order.base_amount;
-        totalCommission += commissionAmount;
-        totalPayable += payableAmount;
-        count++;
+        items.push({
+          orderId: order.order_id,
+          teamLeaderId: order.team_leader_id,
+          teamOrgId: order.team_org_id || undefined,
+          regionOrgId: order.region_org_id,
+          baseAmount: order.base_amount,
+          commissionMode: mode,
+          commissionRate: rate,
+          commissionAmount,
+          payableAmount,
+          periodType: run.period_type as string,
+          periodStart: run.period_start as string,
+          periodEnd: run.period_end as string,
+        });
       } catch (err: any) {
         errors.push({ order_id: order.order_id, error: err.message });
       }
     }
 
-    if (errors.length > 0 && count === 0) {
-      await db.prepare('DELETE FROM settlements WHERE run_id = ?').bind(runId).run();
-      await db.prepare(`UPDATE settlement_runs SET status = 'DRAFT', updated_at = datetime('now') WHERE run_id = ?`).bind(runId).run();
+    if (items.length === 0) {
       return c.json({ error: '정산 산출 중 모든 주문에서 오류가 발생했습니다.', errors }, 500);
     }
 
-    await db.prepare(`
-      UPDATE settlement_runs SET status = 'CALCULATED',
-        total_base_amount = ?, total_commission_amount = ?, total_payable_amount = ?, total_count = ?,
-        updated_at = datetime('now')
-      WHERE run_id = ?
-    `).bind(totalBase, totalCommission, totalPayable, count, runId).run();
+    // ★ Batch Builder로 원자적 실행 (−98% DB 호출)
+    const batch = buildSettlementBatch(db, runId, items);
+    await batch.execute();
 
-    await writeAuditLog(db, { entity_type: 'SETTLEMENT_RUN', entity_id: runId, action: 'CALCULATE', actor_id: user.user_id, detail_json: JSON.stringify({ total_orders: count, total_payable_amount: totalPayable, errors: errors.length }) });
+    await writeAuditLog(db, {
+      entity_type: 'SETTLEMENT_RUN', entity_id: runId, action: 'CALCULATE',
+      actor_id: user.user_id,
+      detail_json: JSON.stringify({
+        total_orders: items.length,
+        total_payable_amount: items.reduce((s, i) => s + i.payableAmount, 0),
+        errors: errors.length,
+      }),
+    });
 
-    const response: any = { run_id: runId, total_orders: count, total_base_amount: totalBase, total_commission_amount: totalCommission, total_payable_amount: totalPayable };
+    const totalBase = items.reduce((s, i) => s + i.baseAmount, 0);
+    const totalCommission = items.reduce((s, i) => s + i.commissionAmount, 0);
+    const totalPayable = items.reduce((s, i) => s + i.payableAmount, 0);
+
+    const response: any = {
+      run_id: runId, total_orders: items.length,
+      total_base_amount: totalBase,
+      total_commission_amount: totalCommission,
+      total_payable_amount: totalPayable,
+    };
     if (errors.length > 0) {
       response.warnings = `${errors.length}건 산출 실패 (부분 산출 완료)`;
       response.errors = errors;
@@ -101,7 +127,7 @@ export function mountCalculation(router: Hono<Env>) {
     return c.json(response);
   });
 
-  // ─── 정산 확정 (confirm) → 원장 반영 ───
+  // ─── 정산 확정 (confirm) → Batch Builder + State Machine 적용 ───
   router.post('/runs/:run_id/confirm', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
     if (authErr) return authErr;
@@ -123,65 +149,110 @@ export function mountCalculation(router: Hono<Env>) {
       return c.json({ error: '확정할 정산 항목이 없습니다.' }, 400);
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    const todayStr = today();
+
+    // ★ Batch Builder로 확정 처리 (원자적)
+    const batch = new BatchBuilder(db).label(`settlement-confirm-${runId}`);
     let confirmedCount = 0;
     const confirmErrors: any[] = [];
 
-    for (const s of pendingSettlements.results as any[]) {
-      try {
-        const orderCheck = await db.prepare('SELECT status FROM orders WHERE order_id = ?').bind(s.order_id).first();
-        if (orderCheck?.status !== 'HQ_APPROVED') {
-          confirmErrors.push({ order_id: s.order_id, error: `주문 상태가 ${orderCheck?.status}로 변경됨 (HQ_APPROVED 필요)` });
-          continue;
-        }
+    // 선 검증: 모든 주문의 현재 상태가 HQ_APPROVED인지 확인
+    const orderIds = (pendingSettlements.results as any[]).map(s => s.order_id);
+    const orderStatuses = await db.prepare(`
+      SELECT order_id, status FROM orders WHERE order_id IN (${orderIds.map(() => '?').join(',')})
+    `).bind(...orderIds).all();
 
-        await db.prepare(`
-          UPDATE settlements SET status = 'CONFIRMED', confirmed_by = ?, confirmed_at = datetime('now') WHERE settlement_id = ?
-        `).bind(user.user_id, s.settlement_id).run();
-
-        await db.prepare(`UPDATE orders SET status = 'SETTLEMENT_CONFIRMED', updated_at = datetime('now') WHERE order_id = ?`).bind(s.order_id).run();
-        await db.prepare(`UPDATE order_assignments SET status = 'SETTLEMENT_CONFIRMED', updated_at = datetime('now') WHERE order_id = ? AND status = 'HQ_APPROVED'`).bind(s.order_id).run();
-        await writeStatusHistory(db, { order_id: s.order_id, from_status: 'HQ_APPROVED', to_status: 'SETTLEMENT_CONFIRMED', actor_id: user.user_id, note: `정산확정 run_id:${runId}` });
-
-        await db.prepare(`
-          INSERT INTO team_leader_ledger_daily (date, team_leader_id, confirmed_payable_sum, confirmed_count, updated_at)
-          VALUES (?, ?, ?, 1, datetime('now'))
-          ON CONFLICT(date, team_leader_id) DO UPDATE SET
-            confirmed_payable_sum = confirmed_payable_sum + ?,
-            confirmed_count = confirmed_count + 1,
-            updated_at = datetime('now')
-        `).bind(today, s.team_leader_id, s.payable_amount, s.payable_amount).run();
-
-        await db.prepare(`
-          INSERT INTO team_leader_daily_stats (date, team_leader_id, settlement_confirmed_count, payable_amount_sum, updated_at)
-          VALUES (?, ?, 1, ?, datetime('now'))
-          ON CONFLICT(date, team_leader_id) DO UPDATE SET
-            settlement_confirmed_count = settlement_confirmed_count + 1,
-            payable_amount_sum = payable_amount_sum + ?,
-            updated_at = datetime('now')
-        `).bind(today, s.team_leader_id, s.payable_amount, s.payable_amount).run();
-
-        await db.prepare(`
-          INSERT INTO region_daily_stats (date, region_org_id, settlement_confirmed_count, payable_amount_sum, updated_at)
-          VALUES (?, ?, 1, ?, datetime('now'))
-          ON CONFLICT(date, region_org_id) DO UPDATE SET
-            settlement_confirmed_count = settlement_confirmed_count + 1,
-            payable_amount_sum = payable_amount_sum + ?,
-            updated_at = datetime('now')
-        `).bind(today, s.region_org_id, s.payable_amount, s.payable_amount).run();
-
-        confirmedCount++;
-      } catch (err: any) {
-        confirmErrors.push({ order_id: s.order_id, settlement_id: s.settlement_id, error: err.message });
-      }
+    const statusMap = new Map<number, string>();
+    for (const os of orderStatuses.results as any[]) {
+      statusMap.set(os.order_id, os.status);
     }
 
-    const finalStatus = confirmedCount > 0 ? 'CONFIRMED' : 'CALCULATED';
-    await db.prepare(`
-      UPDATE settlement_runs SET status = ?, updated_at = datetime('now') WHERE run_id = ?
-    `).bind(finalStatus, runId).run();
+    for (const s of pendingSettlements.results as any[]) {
+      const currentStatus = statusMap.get(s.order_id);
+      if (currentStatus !== 'HQ_APPROVED') {
+        confirmErrors.push({
+          order_id: s.order_id,
+          error: `주문 상태가 ${currentStatus}로 변경됨 (HQ_APPROVED 필요)`,
+        });
+        continue;
+      }
 
-    await writeAuditLog(db, { entity_type: 'SETTLEMENT_RUN', entity_id: runId, action: 'CONFIRM', actor_id: user.user_id, detail_json: JSON.stringify({ confirmed_count: confirmedCount, errors: confirmErrors.length }) });
+      // 정산 확정
+      batch.add(
+        `UPDATE settlements SET status = 'CONFIRMED', confirmed_by = ?, confirmed_at = datetime('now') WHERE settlement_id = ?`,
+        [user.user_id, s.settlement_id]
+      );
+
+      // 주문 상태 전이
+      batch.add(
+        `UPDATE orders SET status = 'SETTLEMENT_CONFIRMED', updated_at = datetime('now') WHERE order_id = ? AND status = 'HQ_APPROVED'`,
+        [s.order_id]
+      );
+
+      // 배정 상태 동기화
+      batch.add(
+        `UPDATE order_assignments SET status = 'SETTLEMENT_CONFIRMED', updated_at = datetime('now') WHERE order_id = ? AND status = 'HQ_APPROVED'`,
+        [s.order_id]
+      );
+
+      // 상태 이력
+      batch.add(
+        `INSERT INTO order_status_history (order_id, from_status, to_status, actor_id, note) VALUES (?, 'HQ_APPROVED', 'SETTLEMENT_CONFIRMED', ?, ?)`,
+        [s.order_id, user.user_id, `정산확정 run_id:${runId}`]
+      );
+
+      // 팀장 원장
+      batch.add(
+        `INSERT INTO team_leader_ledger_daily (date, team_leader_id, confirmed_payable_sum, confirmed_count, updated_at)
+         VALUES (?, ?, ?, 1, datetime('now'))
+         ON CONFLICT(date, team_leader_id) DO UPDATE SET
+           confirmed_payable_sum = confirmed_payable_sum + ?,
+           confirmed_count = confirmed_count + 1,
+           updated_at = datetime('now')`,
+        [todayStr, s.team_leader_id, s.payable_amount, s.payable_amount]
+      );
+
+      // 팀장 일별 통계
+      batch.add(
+        `INSERT INTO team_leader_daily_stats (date, team_leader_id, settlement_confirmed_count, payable_amount_sum, updated_at)
+         VALUES (?, ?, 1, ?, datetime('now'))
+         ON CONFLICT(date, team_leader_id) DO UPDATE SET
+           settlement_confirmed_count = settlement_confirmed_count + 1,
+           payable_amount_sum = payable_amount_sum + ?,
+           updated_at = datetime('now')`,
+        [todayStr, s.team_leader_id, s.payable_amount, s.payable_amount]
+      );
+
+      // 지역 일별 통계
+      batch.add(
+        `INSERT INTO region_daily_stats (date, region_org_id, settlement_confirmed_count, payable_amount_sum, updated_at)
+         VALUES (?, ?, 1, ?, datetime('now'))
+         ON CONFLICT(date, region_org_id) DO UPDATE SET
+           settlement_confirmed_count = settlement_confirmed_count + 1,
+           payable_amount_sum = payable_amount_sum + ?,
+           updated_at = datetime('now')`,
+        [todayStr, s.region_org_id, s.payable_amount, s.payable_amount]
+      );
+
+      confirmedCount++;
+    }
+
+    if (confirmedCount > 0) {
+      // Run 상태 업데이트
+      batch.add(
+        `UPDATE settlement_runs SET status = 'CONFIRMED', updated_at = datetime('now') WHERE run_id = ?`,
+        [runId]
+      );
+
+      // ★ 배치 실행 (원자적 트랜잭션)
+      await batch.execute();
+    }
+
+    await writeAuditLog(db, {
+      entity_type: 'SETTLEMENT_RUN', entity_id: runId, action: 'CONFIRM',
+      actor_id: user.user_id,
+      detail_json: JSON.stringify({ confirmed_count: confirmedCount, errors: confirmErrors.length }),
+    });
 
     const response: any = { ok: confirmedCount > 0, confirmed_count: confirmedCount };
     if (confirmErrors.length > 0) {

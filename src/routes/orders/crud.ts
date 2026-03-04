@@ -1,5 +1,6 @@
 // ================================================================
-// 다하다 OMS — 주문 CRUD (목록/상세/수동등록/배치임포트)
+// 다하다 OMS — 주문 CRUD v5.0 (Scope Engine 적용)
+// 기존: 개별 role/org 필터 코드 → Scope Engine으로 통합
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -7,10 +8,11 @@ import { requireAuth } from '../../middleware/auth';
 import { writeStatusHistory } from '../../lib/audit';
 import { generateFingerprint } from '../../lib/db-helpers';
 import { normalizePagination } from '../../lib/validators';
+import { getOrderScope } from '../../lib/scope-engine';
 
 export function mountCrud(router: Hono<Env>) {
 
-  // ─── 주문 목록 조회 (스코프 기반) ───
+  // ─── 주문 목록 조회 (Scope Engine 기반) ───
   router.get('/', async (c) => {
     const authErr = requireAuth(c);
     if (authErr) return authErr;
@@ -19,25 +21,25 @@ export function mountCrud(router: Hono<Env>) {
     const db = c.env.DB;
     const { status, page, limit, from, to, search, region_org_id, team_leader_id } = c.req.query();
     const pg = normalizePagination(page, limit);
-    const conditions: string[] = [];
-    const params: any[] = [];
 
-    if (user.roles.includes('TEAM_LEADER')) {
-      conditions.push(`oa.team_leader_id = ?`);
-      params.push(user.user_id);
-    } else if (user.org_type === 'REGION') {
-      conditions.push(`od.region_org_id = ?`);
-      params.push(user.org_id);
-    }
+    // ★ Scope Engine 적용 — 역할/조직 기반 자동 필터
+    const scope = await getOrderScope(user, db, { tableAlias: 'o' });
+
+    const conditions: string[] = [scope.where];
+    const params: any[] = [...scope.binds];
 
     if (status) { conditions.push('o.status = ?'); params.push(status); }
     if (from) { conditions.push("o.requested_date >= ?"); params.push(from); }
     if (to) { conditions.push("o.requested_date <= ?"); params.push(to); }
-    if (search) { conditions.push("(o.customer_name LIKE ? OR o.address_text LIKE ? OR o.external_order_no LIKE ?)"); params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
-    if (region_org_id) { conditions.push('od.region_org_id = ?'); params.push(Number(region_org_id)); }
-    if (team_leader_id) { conditions.push('oa.team_leader_id = ?'); params.push(Number(team_leader_id)); }
+    if (search) {
+      conditions.push("(o.customer_name LIKE ? OR o.address_text LIKE ? OR o.external_order_no LIKE ?)");
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    // HQ/REGION만 추가 필터 사용 가능
+    if (region_org_id && scope.isGlobal) { conditions.push('od.region_org_id = ?'); params.push(Number(region_org_id)); }
+    if (team_leader_id && (scope.isGlobal || user.org_type === 'REGION')) { conditions.push('oa.team_leader_id = ?'); params.push(Number(team_leader_id)); }
 
-    const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+    const where = 'WHERE ' + conditions.join(' AND ');
 
     const countResult = await db.prepare(`
       SELECT COUNT(DISTINCT o.order_id) as total
@@ -64,26 +66,37 @@ export function mountCrud(router: Hono<Env>) {
     return c.json({ orders: result.results, total: (countResult as any)?.total || 0, page: pg.page, limit: pg.limit });
   });
 
-  // ─── 주문 상세 ───
+  // ─── 주문 상세 (Scope Engine으로 접근 권한 검증) ───
   router.get('/:order_id', async (c) => {
     const authErr = requireAuth(c);
     if (authErr) return authErr;
 
+    const user = c.get('user')!;
     const orderId = Number(c.req.param('order_id'));
     const db = c.env.DB;
 
     const order = await db.prepare(`
       SELECT o.*, od.region_org_id, org.name as region_name, od.distributed_at, od.distribution_policy_version,
-             oa.team_leader_id, tl.name as team_leader_name, oa.assigned_at, oa.status as assignment_status
+             oa.team_leader_id, tl.name as team_leader_name, oa.assigned_at, oa.status as assignment_status,
+             team_org.name as team_name, team_org.org_id as team_org_id
       FROM orders o
       LEFT JOIN order_distributions od ON o.order_id = od.order_id AND od.status = 'ACTIVE'
       LEFT JOIN organizations org ON od.region_org_id = org.org_id
       LEFT JOIN order_assignments oa ON o.order_id = oa.order_id AND oa.status != 'REASSIGNED'
       LEFT JOIN users tl ON oa.team_leader_id = tl.user_id
+      LEFT JOIN organizations team_org ON tl.org_id = team_org.org_id
       WHERE o.order_id = ?
     `).bind(orderId).first();
 
     if (!order) return c.json({ error: '주문을 찾을 수 없습니다.' }, 404);
+
+    // ★ Scope 검증: TEAM/REGION은 자기 주문만 조회 가능
+    if (user.org_type === 'TEAM' && order.team_leader_id !== user.user_id) {
+      return c.json({ error: '해당 주문에 대한 접근 권한이 없습니다.' }, 403);
+    }
+    if (user.org_type === 'REGION' && order.region_org_id !== user.org_id) {
+      return c.json({ error: '해당 주문에 대한 접근 권한이 없습니다.' }, 403);
+    }
 
     const history = await db.prepare(`
       SELECT h.*, u.name as actor_name FROM order_status_history h
@@ -206,27 +219,20 @@ export function mountCrud(router: Hono<Env>) {
     return c.json({ batch_id: batchId, total: rows.length, success: successCount, fail: failCount, errors });
   });
 
-  // ─── 퍼널 현황 (대시보드) ───
+  // ─── 퍼널 현황 (Scope Engine 기반) ───
   router.get('/stats/funnel', async (c) => {
     const authErr = requireAuth(c);
     if (authErr) return authErr;
 
     const user = c.get('user')!;
     const db = c.env.DB;
-    let scopeCondition = '';
-    const params: any[] = [];
 
-    if (user.roles.includes('TEAM_LEADER')) {
-      scopeCondition = `AND o.order_id IN (SELECT order_id FROM order_assignments WHERE team_leader_id = ?)`;
-      params.push(user.user_id);
-    } else if (user.org_type === 'REGION') {
-      scopeCondition = `AND o.order_id IN (SELECT order_id FROM order_distributions WHERE region_org_id = ? AND status = 'ACTIVE')`;
-      params.push(user.org_id);
-    }
+    // ★ Scope Engine 적용
+    const scope = await getOrderScope(user, db, { tableAlias: 'o' });
 
     const result = await db.prepare(`
       SELECT status, COUNT(*) as count, COALESCE(SUM(base_amount), 0) as total_amount
-      FROM orders o WHERE 1=1 ${scopeCondition}
+      FROM orders o WHERE ${scope.where}
       GROUP BY status
       ORDER BY CASE status
         WHEN 'RECEIVED' THEN 1 WHEN 'VALIDATED' THEN 2 WHEN 'DISTRIBUTION_PENDING' THEN 3
@@ -234,7 +240,7 @@ export function mountCrud(router: Hono<Env>) {
         WHEN 'SUBMITTED' THEN 7 WHEN 'REGION_APPROVED' THEN 8 WHEN 'REGION_REJECTED' THEN 9
         WHEN 'HQ_APPROVED' THEN 10 WHEN 'HQ_REJECTED' THEN 11 WHEN 'SETTLEMENT_CONFIRMED' THEN 12
         WHEN 'PAID' THEN 13 ELSE 99 END
-    `).bind(...params).all();
+    `).bind(...scope.binds).all();
 
     return c.json({ funnel: result.results });
   });

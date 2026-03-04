@@ -1,10 +1,11 @@
 // ================================================================
-// 다하다 OMS — 팀장 배정 (칸반) + 작업 시작
+// 다하다 OMS — 팀장 배정 (칸반) + 작업 시작 v5.0
+// State Machine 적용 — transitionOrder()로 통합
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { requireAuth } from '../../middleware/auth';
-import { writeStatusHistory } from '../../lib/audit';
+import { transitionOrder } from '../../lib/state-machine';
 import { upsertTeamLeaderDailyStats } from '../../lib/db-helpers';
 
 export function mountAssign(router: Hono<Env>) {
@@ -19,24 +20,43 @@ export function mountAssign(router: Hono<Env>) {
     const orderId = Number(c.req.param('order_id'));
     const { team_leader_id } = await c.req.json();
 
-    const order = await db.prepare('SELECT * FROM orders WHERE order_id = ?').bind(orderId).first();
-    if (!order) return c.json({ error: '주문을 찾을 수 없습니다.' }, 404);
+    if (!team_leader_id) return c.json({ error: '팀장 ID는 필수입니다.' }, 400);
 
+    // ★ Scope 검증: REGION은 자기 배분 주문만
     if (user.org_type === 'REGION') {
-      const dist = await db.prepare('SELECT region_org_id FROM order_distributions WHERE order_id = ? AND status = ?').bind(orderId, 'ACTIVE').first();
-      if (!dist || dist.region_org_id !== user.org_id) return c.json({ error: '해당 주문에 대한 권한이 없습니다.' }, 403);
+      const dist = await db.prepare(
+        "SELECT region_org_id FROM order_distributions WHERE order_id = ? AND status = 'ACTIVE'"
+      ).bind(orderId).first();
+      if (!dist || dist.region_org_id !== user.org_id) {
+        return c.json({ error: '해당 주문에 대한 권한이 없습니다.' }, 403);
+      }
     }
 
-    await db.prepare(`UPDATE order_assignments SET status = 'REASSIGNED', updated_at = datetime('now') WHERE order_id = ? AND status NOT IN ('REASSIGNED','SETTLEMENT_CONFIRMED')`).bind(orderId).run();
+    // ★ State Machine 적용 — DISTRIBUTED → ASSIGNED
+    const result = await transitionOrder(db, orderId, 'ASSIGNED', user, {
+      note: `팀장 배정 → user_id:${team_leader_id}`,
+      afterTransition: async (db, order) => {
+        // 기존 배정 해제
+        await db.prepare(`
+          UPDATE order_assignments SET status = 'REASSIGNED', updated_at = datetime('now')
+          WHERE order_id = ? AND status NOT IN ('REASSIGNED','SETTLEMENT_CONFIRMED')
+        `).bind(orderId).run();
 
-    await db.prepare(`
-      INSERT INTO order_assignments (order_id, team_leader_id, assigned_by, status) VALUES (?, ?, ?, 'ASSIGNED')
-    `).bind(orderId, team_leader_id, user.user_id).run();
+        // 새 배정 생성
+        await db.prepare(`
+          INSERT INTO order_assignments (order_id, team_leader_id, assigned_by, status) VALUES (?, ?, ?, 'ASSIGNED')
+        `).bind(orderId, team_leader_id, user.user_id).run();
 
-    await db.prepare(`UPDATE orders SET status = 'ASSIGNED', updated_at = datetime('now') WHERE order_id = ?`).bind(orderId).run();
-    await writeStatusHistory(db, { order_id: orderId, from_status: order.status as string, to_status: 'ASSIGNED', actor_id: user.user_id, note: `팀장 배정 → user_id:${team_leader_id}` });
+        // 통계 업데이트
+        await upsertTeamLeaderDailyStats(db, team_leader_id, 'intake_count');
+      },
+    });
 
-    await upsertTeamLeaderDailyStats(db, team_leader_id, 'intake_count');
+    if (!result.ok) {
+      const statusCode = result.errorCode === 'ORDER_NOT_FOUND' ? 404
+        : result.errorCode === 'UNAUTHORIZED' ? 403 : 400;
+      return c.json({ error: result.error }, statusCode);
+    }
 
     return c.json({ ok: true, order_id: orderId, team_leader_id });
   });
@@ -50,13 +70,21 @@ export function mountAssign(router: Hono<Env>) {
     const db = c.env.DB;
     const orderId = Number(c.req.param('order_id'));
 
-    const order = await db.prepare('SELECT * FROM orders WHERE order_id = ?').bind(orderId).first();
-    if (!order) return c.json({ error: '주문을 찾을 수 없습니다.' }, 404);
-    if (order.status !== 'ASSIGNED') return c.json({ error: `현재 상태(${order.status})에서는 작업 시작이 불가합니다.` }, 400);
+    // ★ State Machine 적용 — ASSIGNED → IN_PROGRESS
+    const result = await transitionOrder(db, orderId, 'IN_PROGRESS', user, {
+      afterTransition: async (db) => {
+        await db.prepare(`
+          UPDATE order_assignments SET status = 'IN_PROGRESS', updated_at = datetime('now')
+          WHERE order_id = ? AND status = 'ASSIGNED'
+        `).bind(orderId).run();
+      },
+    });
 
-    await db.prepare(`UPDATE orders SET status = 'IN_PROGRESS', updated_at = datetime('now') WHERE order_id = ?`).bind(orderId).run();
-    await db.prepare(`UPDATE order_assignments SET status = 'IN_PROGRESS', updated_at = datetime('now') WHERE order_id = ? AND status = 'ASSIGNED'`).bind(orderId).run();
-    await writeStatusHistory(db, { order_id: orderId, from_status: 'ASSIGNED', to_status: 'IN_PROGRESS', actor_id: user.user_id });
+    if (!result.ok) {
+      const statusCode = result.errorCode === 'ORDER_NOT_FOUND' ? 404
+        : result.errorCode === 'UNAUTHORIZED' ? 403 : 400;
+      return c.json({ error: result.error }, statusCode);
+    }
 
     return c.json({ ok: true });
   });

@@ -1,5 +1,5 @@
 // ================================================================
-// 다하다 OMS — 일별 통계 + CSV 내보내기
+// 다하다 OMS — 일별 통계 + CSV 내보내기 v5.0 (Scope Engine 적용)
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -7,7 +7,7 @@ import { requireAuth } from '../../middleware/auth';
 
 export function mountReports(router: Hono<Env>) {
 
-  // ─── 지역법인별 일자별 통계 ───
+  // ─── 지역(총판)별 일자별 통계 ───
   router.get('/regions/daily', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'AUDITOR']);
     if (authErr) return authErr;
@@ -24,7 +24,8 @@ export function mountReports(router: Hono<Env>) {
     `;
     const params: any[] = [];
 
-    if (user.org_type === 'REGION') {
+    // ★ Scope: REGION은 자기 총판만
+    if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
       query += ' AND rds.region_org_id = ?';
       params.push(user.org_id);
     } else if (region_org_id) {
@@ -40,7 +41,7 @@ export function mountReports(router: Hono<Env>) {
     return c.json({ stats: result.results });
   });
 
-  // ─── 팀장별 일자별 통계 ───
+  // ─── 팀장별 일자별 통계 (Scope Engine 기반) ───
   router.get('/team-leaders/daily', async (c) => {
     const authErr = requireAuth(c);
     if (authErr) return authErr;
@@ -50,23 +51,28 @@ export function mountReports(router: Hono<Env>) {
     const { from, to, team_leader_id, region_org_id } = c.req.query();
 
     let query = `
-      SELECT tls.*, u.name as team_leader_name, u.org_id, o.name as org_name
+      SELECT tls.*, u.name as team_leader_name, u.org_id,
+             o.name as org_name, o.org_type, o.parent_org_id,
+             COALESCE(p.name, o.name) as distributor_name
       FROM team_leader_daily_stats tls
       JOIN users u ON tls.team_leader_id = u.user_id
       JOIN organizations o ON u.org_id = o.org_id
+      LEFT JOIN organizations p ON o.parent_org_id = p.org_id
       WHERE 1=1
     `;
     const params: any[] = [];
 
-    if (user.roles.includes('TEAM_LEADER')) {
+    // ★ Scope: TEAM은 자기만, REGION은 자기 총판+하위 팀, HQ는 전체
+    if (user.org_type === 'TEAM' || user.roles.includes('TEAM_LEADER')) {
       query += ' AND tls.team_leader_id = ?';
       params.push(user.user_id);
-    } else if (user.org_type === 'REGION') {
-      query += ' AND u.org_id = ?';
-      params.push(user.org_id);
+    } else if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
+      // 자기 총판 직속 + 하위 TEAM 소속 팀장
+      query += ' AND (u.org_id = ? OR o.parent_org_id = ?)';
+      params.push(user.org_id, user.org_id);
     } else if (region_org_id) {
-      query += ' AND u.org_id = ?';
-      params.push(Number(region_org_id));
+      query += ' AND (u.org_id = ? OR o.parent_org_id = ?)';
+      params.push(Number(region_org_id), Number(region_org_id));
     }
 
     if (team_leader_id) { query += ' AND tls.team_leader_id = ?'; params.push(Number(team_leader_id)); }
@@ -78,7 +84,7 @@ export function mountReports(router: Hono<Env>) {
     return c.json({ stats: result.results });
   });
 
-  // ─── CSV 다운로드 (통계) ───
+  // ─── CSV 다운로드 (Scope Engine 기반) ───
   router.get('/export/csv', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'AUDITOR']);
     if (authErr) return authErr;
@@ -91,7 +97,7 @@ export function mountReports(router: Hono<Env>) {
     let headers: string[] = [];
 
     if (group_by === 'team_leader') {
-      headers = ['날짜', '팀장명', '소속법인', '수임건수', '완료건수', '제출건수', '지역승인', 'HQ승인', '반려건수', '정산확정', '기본금액합', '지급금액합'];
+      headers = ['날짜', '팀장명', '소속조직', '수임건수', '완료건수', '제출건수', '지역승인', 'HQ승인', '반려건수', '정산확정', '기본금액합', '지급금액합'];
       
       let query = `
         SELECT tls.date, u.name as team_leader_name, o.name as org_name,
@@ -104,7 +110,11 @@ export function mountReports(router: Hono<Env>) {
         WHERE 1=1
       `;
       const params: any[] = [];
-      if (user.org_type === 'REGION') { query += ' AND u.org_id = ?'; params.push(user.org_id); }
+      // ★ Scope: REGION은 자기 총판+하위만
+      if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
+        query += ' AND (u.org_id = ? OR o.parent_org_id = ?)';
+        params.push(user.org_id, user.org_id);
+      }
       if (from) { query += ' AND tls.date >= ?'; params.push(from); }
       if (to) { query += ' AND tls.date <= ?'; params.push(to); }
       query += ' ORDER BY tls.date, u.name';
@@ -112,7 +122,7 @@ export function mountReports(router: Hono<Env>) {
       const result = await db.prepare(query).bind(...params).all();
       rows = result.results;
     } else {
-      headers = ['날짜', '지역법인', '인입건수', '팀장배정', '완료건수', '지역승인', 'HQ승인', '정산확정', '기본금액합', '지급금액합'];
+      headers = ['날짜', '총판명', '인입건수', '팀장배정', '완료건수', '지역승인', 'HQ승인', '정산확정', '기본금액합', '지급금액합'];
       
       let query = `
         SELECT rds.date, o.name as region_name,
@@ -124,7 +134,10 @@ export function mountReports(router: Hono<Env>) {
         WHERE 1=1
       `;
       const params: any[] = [];
-      if (user.org_type === 'REGION') { query += ' AND rds.region_org_id = ?'; params.push(user.org_id); }
+      if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
+        query += ' AND rds.region_org_id = ?';
+        params.push(user.org_id);
+      }
       if (from) { query += ' AND rds.date >= ?'; params.push(from); }
       if (to) { query += ' AND rds.date <= ?'; params.push(to); }
       query += ' ORDER BY rds.date, o.name';
