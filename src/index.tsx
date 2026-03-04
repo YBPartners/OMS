@@ -9,6 +9,8 @@ import settlementRoutes from './routes/settlements/index';
 import reconciliationRoutes from './routes/reconciliation/index';
 import statsRoutes from './routes/stats/index';
 import hrRoutes from './routes/hr/index';
+import signupRoutes from './routes/signup/index';
+import notificationRoutes from './routes/notifications';
 
 const app = new Hono<Env>();
 
@@ -38,9 +40,11 @@ app.route('/api/settlements', settlementRoutes);
 app.route('/api/reconciliation', reconciliationRoutes);
 app.route('/api/stats', statsRoutes);
 app.route('/api/hr', hrRoutes);
+app.route('/api/signup', signupRoutes);
+app.route('/api/notifications', notificationRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '5.0.0', system: '다하다 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '5.1.0', system: '다하다 OMS' }));
 
 // ─── SPA 라우팅: 모든 페이지 요청에 index.html 반환 ───
 app.get('*', async (c) => {
