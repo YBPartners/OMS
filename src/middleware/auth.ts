@@ -1,13 +1,18 @@
+// ================================================================
+// 다하다 OMS — Auth Middleware v5.0
+// TEAM org_type 지원, 구조화 역할 검증
+// ================================================================
+
 import { Context, Next } from 'hono';
-import type { Env, RoleCode, SessionUser } from '../types';
+import type { Env, RoleCode, OrgType, SessionUser } from '../types';
 
 // Re-export from lib for backward compatibility
 export { writeAuditLog, writeStatusHistory } from '../lib/audit';
 
-// 세션 기반 인증 미들웨어
+// ─── 세션 기반 인증 미들웨어 ───
 export async function authMiddleware(c: Context<Env>, next: Next) {
   const sessionId = c.req.header('X-Session-Id') || getCookie(c, 'session_id');
-  
+
   if (!sessionId) {
     c.set('user', null);
     return next();
@@ -16,7 +21,8 @@ export async function authMiddleware(c: Context<Env>, next: Next) {
   try {
     const db = c.env.DB;
     const session = await db.prepare(`
-      SELECT s.user_id, s.expires_at, u.org_id, u.login_id, u.name, o.org_type, o.name as org_name
+      SELECT s.user_id, s.expires_at, u.org_id, u.login_id, u.name, 
+             o.org_type, o.name as org_name
       FROM sessions s
       JOIN users u ON s.user_id = u.user_id
       JOIN organizations o ON u.org_id = o.org_id
@@ -36,7 +42,7 @@ export async function authMiddleware(c: Context<Env>, next: Next) {
     const user: SessionUser = {
       user_id: session.user_id as number,
       org_id: session.org_id as number,
-      org_type: session.org_type as 'HQ' | 'REGION',
+      org_type: session.org_type as OrgType,  // HQ | REGION | TEAM
       login_id: session.login_id as string,
       name: session.name as string,
       org_name: session.org_name as string,
@@ -51,7 +57,7 @@ export async function authMiddleware(c: Context<Env>, next: Next) {
   return next();
 }
 
-// 인증 필수 미들웨어
+// ─── 인증 필수 미들웨어 ───
 export function requireAuth(c: Context<Env>, roles?: RoleCode[]) {
   const user = c.get('user');
   if (!user) {
@@ -66,7 +72,7 @@ export function requireAuth(c: Context<Env>, roles?: RoleCode[]) {
   return null;
 }
 
-// HQ만 허용
+// ─── HQ만 허용 ───
 export function requireHQ(c: Context<Env>) {
   const user = c.get('user');
   if (!user) return c.json({ error: '인증이 필요합니다.' }, 401);
@@ -76,7 +82,27 @@ export function requireHQ(c: Context<Env>) {
   return null;
 }
 
-// 쿠키 파싱 헬퍼
+// ─── HQ 또는 REGION 허용 ───
+export function requireHQorRegion(c: Context<Env>) {
+  const user = c.get('user');
+  if (!user) return c.json({ error: '인증이 필요합니다.' }, 401);
+  if (user.org_type === 'TEAM' && !user.roles.includes('SUPER_ADMIN')) {
+    return c.json({ error: 'HQ 또는 총판 권한이 필요합니다.' }, 403);
+  }
+  return null;
+}
+
+// ─── SUPER_ADMIN만 허용 ───
+export function requireSuperAdmin(c: Context<Env>) {
+  const user = c.get('user');
+  if (!user) return c.json({ error: '인증이 필요합니다.' }, 401);
+  if (!user.roles.includes('SUPER_ADMIN')) {
+    return c.json({ error: '총괄관리자 권한이 필요합니다.' }, 403);
+  }
+  return null;
+}
+
+// ─── 쿠키 파싱 헬퍼 ───
 function getCookie(c: Context, name: string): string | undefined {
   const cookie = c.req.header('Cookie');
   if (!cookie) return undefined;

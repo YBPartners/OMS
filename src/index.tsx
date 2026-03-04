@@ -40,7 +40,7 @@ app.route('/api/stats', statsRoutes);
 app.route('/api/hr', hrRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '3.0.0', system: '다하다 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '5.0.0', system: '다하다 OMS' }));
 
 // ─── SPA 라우팅: 모든 페이지 요청에 index.html 반환 ───
 app.get('*', async (c) => {

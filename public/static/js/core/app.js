@@ -1,6 +1,7 @@
 // ============================================================
-// 다하다 OMS — App Bootstrap v3.0
+// 다하다 OMS — App Bootstrap v5.0
 // 메인 렌더링, 레이아웃, 초기화 (최종 로드)
+// TEAM org_type 지원, 총판 체계
 // ============================================================
 
 // ─── 메인 렌더 ───
@@ -30,7 +31,7 @@ function renderLoginPage() {
           <i class="fas fa-cubes text-white text-2xl"></i>
         </div>
         <h1 class="text-2xl font-bold text-gray-800">다하다 OMS</h1>
-        <p class="text-gray-500 mt-1">주문관리시스템 v3.0</p>
+        <p class="text-gray-500 mt-1">주문관리시스템 v5.0</p>
       </div>
       <form onsubmit="event.preventDefault();login(document.getElementById('lid').value,document.getElementById('lpw').value)">
         <div class="mb-4">
@@ -63,12 +64,13 @@ function renderLoginPage() {
 function renderLayout() {
   const isHQ = currentUser.org_type === 'HQ';
   const isRegion = currentUser.org_type === 'REGION' && currentUser.roles.includes('REGION_ADMIN');
+  const isTeam = currentUser.org_type === 'TEAM';
   const isLeader = currentUser.roles.includes('TEAM_LEADER');
 
-  let menuKey = isLeader ? 'TEAM_LEADER' : isRegion ? 'REGION' : 'HQ';
+  let menuKey = (isTeam || isLeader) ? 'TEAM_LEADER' : isRegion ? 'REGION' : 'HQ';
   const menuItems = OMS.MENU_ITEMS[menuKey] || [];
 
-  const orgBadge = isHQ ? 'bg-blue-100 text-blue-700' : isRegion ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700';
+  const orgBadge = isHQ ? 'bg-blue-100 text-blue-700' : isRegion ? 'bg-purple-100 text-purple-700' : isTeam ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700';
   const roleLabel = { SUPER_ADMIN: '총괄관리자', HQ_OPERATOR: 'HQ운영자', REGION_ADMIN: '파트장', TEAM_LEADER: '팀장', AUDITOR: '감사' };
 
   // 그룹별 메뉴
