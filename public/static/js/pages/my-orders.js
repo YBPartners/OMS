@@ -164,37 +164,206 @@ async function submitReport(orderId) {
   } else showToast(res?.error || '제출 실패', 'error');
 }
 
-// ════════ 내 프로필 (비밀번호 변경) ════════
+// ════════ 내 프로필 (계정정보 + 비밀번호 + 알림설정) ════════
 async function renderMyProfile(el) {
+  // 알림 설정 동시 로드
+  const prefsRes = await api('GET', '/notifications/preferences');
+  const prefs = prefsRes?.preferences || {};
+
+  const notifTypes = [
+    { key: 'notify_order_status', label: '주문 상태 변경', icon: 'fa-truck-fast', desc: '주문이 접수/배분/배정/완료될 때' },
+    { key: 'notify_assignment',   label: '배정/배정해제',   icon: 'fa-user-check', desc: '내게 주문이 배정되거나 해제될 때' },
+    { key: 'notify_review',       label: '검수 결과',       icon: 'fa-clipboard-check', desc: '보고서 승인/반려 시' },
+    { key: 'notify_settlement',   label: '정산 관련',       icon: 'fa-coins', desc: '정산 확정, 지급 처리 시' },
+    { key: 'notify_signup',       label: '가입 요청/승인',  icon: 'fa-user-plus', desc: '팀장 가입 요청 및 승인 결과' },
+    { key: 'notify_system',       label: '시스템 공지',     icon: 'fa-bullhorn', desc: '시스템 점검, 업데이트 안내' },
+  ];
+
+  const methodTypes = [
+    { key: 'push_enabled',  label: '인앱 알림', icon: 'fa-bell', desc: '앱 내 알림 표시' },
+    { key: 'sound_enabled', label: '알림 소리', icon: 'fa-volume-high', desc: '알림 시 소리 재생' },
+  ];
+
   el.innerHTML = `
     <div class="fade-in max-w-xl mx-auto">
       <h2 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-user-cog mr-2 text-gray-600"></i>내 프로필</h2>
       
-      <div class="bg-white rounded-xl p-6 border border-gray-100 mb-6">
-        <h3 class="font-semibold mb-4"><i class="fas fa-id-card mr-2 text-blue-500"></i>계정 정보</h3>
-        <div class="grid grid-cols-2 gap-4 text-sm">
-          <div><span class="text-gray-500">이름</span><div class="font-medium">${currentUser.name}</div></div>
-          <div><span class="text-gray-500">로그인 ID</span><div class="font-mono">${currentUser.login_id}</div></div>
-          <div><span class="text-gray-500">소속</span><div>${currentUser.org_name || currentUser.org_type}</div></div>
-          <div><span class="text-gray-500">역할</span><div>${currentUser.roles.map(r => `<span class="status-badge bg-gray-100 text-gray-700 text-xs">${r}</span>`).join(' ')}</div></div>
+      <!-- 탭 네비게이션 -->
+      <div class="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1">
+        <button onclick="switchProfileTab('account')" id="tab-account" class="profile-tab flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition bg-white text-blue-600 shadow-sm">
+          <i class="fas fa-id-card mr-1.5"></i>계정
+        </button>
+        <button onclick="switchProfileTab('password')" id="tab-password" class="profile-tab flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition text-gray-500 hover:text-gray-700">
+          <i class="fas fa-key mr-1.5"></i>비밀번호
+        </button>
+        <button onclick="switchProfileTab('notifications')" id="tab-notifications" class="profile-tab flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition text-gray-500 hover:text-gray-700">
+          <i class="fas fa-bell mr-1.5"></i>알림
+        </button>
+      </div>
+
+      <!-- 계정 정보 탭 -->
+      <div id="panel-account" class="profile-panel">
+        <div class="bg-white rounded-xl p-6 border border-gray-100">
+          <h3 class="font-semibold mb-4"><i class="fas fa-id-card mr-2 text-blue-500"></i>계정 정보</h3>
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div><span class="text-gray-500">이름</span><div class="font-medium">${currentUser.name}</div></div>
+            <div><span class="text-gray-500">로그인 ID</span><div class="font-mono">${currentUser.login_id}</div></div>
+            <div><span class="text-gray-500">소속</span><div>${currentUser.org_name || currentUser.org_type}</div></div>
+            <div><span class="text-gray-500">역할</span><div>${currentUser.roles.map(r => {
+              const rl = typeof ROLE_LABELS !== 'undefined' ? ROLE_LABELS[r] : r;
+              return '<span class="status-badge bg-gray-100 text-gray-700 text-xs">' + (rl || r) + '</span>';
+            }).join(' ')}</div></div>
+          </div>
         </div>
       </div>
 
-      <div class="bg-white rounded-xl p-6 border border-gray-100">
-        <h3 class="font-semibold mb-4"><i class="fas fa-key mr-2 text-amber-500"></i>비밀번호 변경</h3>
-        <form id="pw-change-form" class="space-y-4">
-          <div><label class="block text-xs text-gray-500 mb-1">현재 비밀번호</label>
-            <input id="pw-current" type="password" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="현재 비밀번호"></div>
-          <div><label class="block text-xs text-gray-500 mb-1">새 비밀번호</label>
-            <input id="pw-new" type="password" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="새 비밀번호 (6자 이상)" minlength="6"></div>
-          <div><label class="block text-xs text-gray-500 mb-1">새 비밀번호 확인</label>
-            <input id="pw-confirm" type="password" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="새 비밀번호 재입력"></div>
-          <button type="button" onclick="submitPasswordChange()" class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">
-            <i class="fas fa-save mr-1"></i>비밀번호 변경
-          </button>
-        </form>
+      <!-- 비밀번호 변경 탭 -->
+      <div id="panel-password" class="profile-panel hidden">
+        <div class="bg-white rounded-xl p-6 border border-gray-100">
+          <h3 class="font-semibold mb-4"><i class="fas fa-key mr-2 text-amber-500"></i>비밀번호 변경</h3>
+          <form id="pw-change-form" class="space-y-4">
+            <div><label class="block text-xs text-gray-500 mb-1">현재 비밀번호</label>
+              <input id="pw-current" type="password" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="현재 비밀번호"></div>
+            <div><label class="block text-xs text-gray-500 mb-1">새 비밀번호</label>
+              <input id="pw-new" type="password" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="새 비밀번호 (6자 이상)" minlength="6"></div>
+            <div><label class="block text-xs text-gray-500 mb-1">새 비밀번호 확인</label>
+              <input id="pw-confirm" type="password" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="새 비밀번호 재입력"></div>
+            <button type="button" onclick="submitPasswordChange()" class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">
+              <i class="fas fa-save mr-1"></i>비밀번호 변경
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- 알림 설정 탭 -->
+      <div id="panel-notifications" class="profile-panel hidden">
+        <!-- 알림 유형별 설정 -->
+        <div class="bg-white rounded-xl p-6 border border-gray-100 mb-4">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold"><i class="fas fa-sliders mr-2 text-indigo-500"></i>알림 유형</h3>
+            <button onclick="toggleAllNotifPrefs(true)" class="text-xs text-blue-600 hover:underline">전체 켜기</button>
+          </div>
+          <div class="space-y-1" id="notif-type-list">
+            ${notifTypes.map(t => `
+              <label class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition group">
+                <div class="flex items-center gap-3">
+                  <div class="w-9 h-9 rounded-lg bg-${prefs[t.key] ? 'blue' : 'gray'}-50 flex items-center justify-center transition notif-icon-${t.key}">
+                    <i class="fas ${t.icon} text-${prefs[t.key] ? 'blue' : 'gray'}-400 text-sm"></i>
+                  </div>
+                  <div>
+                    <div class="text-sm font-medium text-gray-800">${t.label}</div>
+                    <div class="text-xs text-gray-400">${t.desc}</div>
+                  </div>
+                </div>
+                <div class="relative">
+                  <input type="checkbox" class="notif-pref-toggle sr-only" data-key="${t.key}" 
+                         ${prefs[t.key] ? 'checked' : ''} onchange="updateNotifPref('${t.key}', this.checked)">
+                  <div class="w-11 h-6 rounded-full transition ${prefs[t.key] ? 'bg-blue-500' : 'bg-gray-200'} notif-track-${t.key}"></div>
+                  <div class="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${prefs[t.key] ? 'translate-x-5' : ''} notif-knob-${t.key}"></div>
+                </div>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- 알림 수단 설정 -->
+        <div class="bg-white rounded-xl p-6 border border-gray-100 mb-4">
+          <h3 class="font-semibold mb-4"><i class="fas fa-paper-plane mr-2 text-emerald-500"></i>알림 수단</h3>
+          <div class="space-y-1">
+            ${methodTypes.map(t => `
+              <label class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition group">
+                <div class="flex items-center gap-3">
+                  <div class="w-9 h-9 rounded-lg bg-${prefs[t.key] ? 'emerald' : 'gray'}-50 flex items-center justify-center transition notif-icon-${t.key}">
+                    <i class="fas ${t.icon} text-${prefs[t.key] ? 'emerald' : 'gray'}-400 text-sm"></i>
+                  </div>
+                  <div>
+                    <div class="text-sm font-medium text-gray-800">${t.label}</div>
+                    <div class="text-xs text-gray-400">${t.desc}</div>
+                  </div>
+                </div>
+                <div class="relative">
+                  <input type="checkbox" class="notif-pref-toggle sr-only" data-key="${t.key}"
+                         ${prefs[t.key] ? 'checked' : ''} onchange="updateNotifPref('${t.key}', this.checked)">
+                  <div class="w-11 h-6 rounded-full transition ${prefs[t.key] ? 'bg-emerald-500' : 'bg-gray-200'} notif-track-${t.key}"></div>
+                  <div class="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${prefs[t.key] ? 'translate-x-5' : ''} notif-knob-${t.key}"></div>
+                </div>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- 안내 -->
+        <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-blue-700">
+          <i class="fas fa-info-circle mr-1"></i>
+          알림 설정은 실시간으로 저장됩니다. 비활성화한 유형의 알림은 더 이상 수신되지 않습니다.
+        </div>
       </div>
     </div>`;
+}
+
+// ─── 프로필 탭 전환 ───
+function switchProfileTab(tab) {
+  document.querySelectorAll('.profile-panel').forEach(p => p.classList.add('hidden'));
+  document.querySelectorAll('.profile-tab').forEach(t => {
+    t.classList.remove('bg-white', 'text-blue-600', 'shadow-sm');
+    t.classList.add('text-gray-500');
+  });
+  const panel = document.getElementById('panel-' + tab);
+  const tabBtn = document.getElementById('tab-' + tab);
+  if (panel) panel.classList.remove('hidden');
+  if (tabBtn) {
+    tabBtn.classList.add('bg-white', 'text-blue-600', 'shadow-sm');
+    tabBtn.classList.remove('text-gray-500');
+  }
+}
+
+// ─── 알림 설정 개별 업데이트 ───
+async function updateNotifPref(key, enabled) {
+  const body = {};
+  body[key] = enabled;
+
+  // 즉시 UI 반영 (토글 애니메이션)
+  const track = document.querySelector('.notif-track-' + key);
+  const knob = document.querySelector('.notif-knob-' + key);
+  const iconWrap = document.querySelector('.notif-icon-' + key);
+  if (track) {
+    track.classList.toggle('bg-blue-500', enabled && key.startsWith('notify_'));
+    track.classList.toggle('bg-emerald-500', enabled && !key.startsWith('notify_'));
+    track.classList.toggle('bg-gray-200', !enabled);
+  }
+  if (knob) knob.classList.toggle('translate-x-5', enabled);
+  if (iconWrap) {
+    const isMethod = !key.startsWith('notify_');
+    iconWrap.className = iconWrap.className.replace(/bg-\w+-50/g, enabled ? (isMethod ? 'bg-emerald-50' : 'bg-blue-50') : 'bg-gray-50');
+    const icon = iconWrap.querySelector('i');
+    if (icon) icon.className = icon.className.replace(/text-\w+-400/g, enabled ? (isMethod ? 'text-emerald-400' : 'text-blue-400') : 'text-gray-400');
+  }
+
+  const res = await api('PUT', '/notifications/preferences', body);
+  if (!res?.ok) {
+    showToast('알림 설정 저장 실패', 'error');
+    // 롤백
+    if (track) {
+      track.classList.toggle('bg-blue-500', !enabled && key.startsWith('notify_'));
+      track.classList.toggle('bg-emerald-500', !enabled && !key.startsWith('notify_'));
+      track.classList.toggle('bg-gray-200', enabled);
+    }
+    if (knob) knob.classList.toggle('translate-x-5', !enabled);
+  }
+}
+
+// ─── 전체 알림 켜기/끄기 ───
+async function toggleAllNotifPrefs(enabled) {
+  const body = {
+    notify_order_status: enabled, notify_assignment: enabled,
+    notify_review: enabled, notify_settlement: enabled,
+    notify_signup: enabled, notify_system: enabled,
+  };
+  const res = await api('PUT', '/notifications/preferences', body);
+  if (res?.ok) {
+    showToast(enabled ? '모든 알림이 활성화되었습니다.' : '모든 알림이 비활성화되었습니다.', 'success');
+    renderContent(); // 리렌더
+  } else showToast('설정 저장 실패', 'error');
 }
 
 async function submitPasswordChange() {

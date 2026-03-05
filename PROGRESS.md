@@ -1,8 +1,8 @@
 # 다하다 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-05
-> **현재 버전**: v7.1.0
-> **총 코드량**: Backend 7,357줄 (45 TS) + Services 634줄 + Frontend 8,034줄 (22 JS) + SQL 873줄 = **16,898줄**
+> **현재 버전**: v10.0.0
+> **총 코드량**: Backend 7,478줄 (46 TS) + Frontend 8,770줄 (22 JS) + CSS 419줄 + SQL 994줄 = **17,661줄**
 
 ---
 
@@ -18,12 +18,93 @@
 | 5 | Kanban 강화 + 감사로그 + 배포 | ✅ 완료 | 2026-03-04 | 칸반 개선, 감사 UI, CF Pages 프로덕션 배포 |
 | 6 | 인터랙션 디자인 시스템 | ✅ 완료 | 2026-03-05 | 드로어/팝오버/컨텍스트메뉴/호버프리뷰 |
 | 6.5 | 서비스 레이어 리팩터링 | ✅ 완료 | 2026-03-05 | 5개 서비스, 모듈 간 교차 의존성 해소 |
-| **7.0** | **다채널 + 대리점 계층** | **✅ 완료** | **2026-03-05** | **주문 채널 관리, AGENCY_LEADER 역할, 대리점 전용 UI** |
-| **7.1** | **배분 기능 완성** | **✅ 완료** | **2026-03-05** | **개별/일괄 수동배분, 드로어 배분 액션, 모달 개선** |
+| 7.0 | 다채널 + 대리점 계층 | ✅ 완료 | 2026-03-05 | 주문 채널 관리, AGENCY_LEADER 역할, 대리점 전용 UI |
+| 7.1 | 배분 기능 완성 | ✅ 완료 | 2026-03-05 | 개별/일괄 수동배분, 드로어 배분 액션, 모달 개선 |
+| **8.0** | **데이터 시각화 + CSV** | **✅ 완료** | **2026-03-05** | **Chart.js 대시보드, CSV 내보내기, exportToCSV 유틸** |
+| **9.0** | **모바일 반응형** | **✅ 완료** | **2026-03-05** | **하단 내비, 풀투리프레시, 스와이프, mobile.css 419줄** |
+| **10.0** | **성능 최적화 + 알림 설정** | **✅ 완료** | **2026-03-05** | **16개 DB 인덱스, 알림 설정 UI/API, 프로필 탭 리디자인** |
 
 ---
 
-## Phase 7.1 — 배분 기능 완성 ✅ (신규)
+## Phase 10.0 — 성능 최적화 + 알림 설정 ✅ (최신)
+
+> **목적**: DB 쿼리 성능 인덱스 추가 + 사용자별 알림 설정 기능
+
+### 10-1: DB 성능 인덱스 (마이그레이션 0007) ✅
+- 16개 복합 인덱스 추가 (쿼리 패턴 기반)
+- `idx_orders_status_created` — 대시보드 통계, 목록 필터
+- `idx_notif_user_read` — 미읽음 카운트 최적화
+- `idx_session_id`, `idx_session_user_exp` — 인증 미들웨어 매 요청
+- `idx_org_parent_type` — 하위 조직 조회
+- `idx_dist_order_status`, `idx_assign_order_status` — 활성 배분/배정
+- `idx_rds_date_region`, `idx_tlds_date_leader` — 통계 차트
+- 기타: 감사로그, OTP, 가입요청 인덱스
+
+### 10-2: 알림 설정 테이블 + API ✅
+- `notification_preferences` 테이블 생성 (user_id UNIQUE)
+- 유형별 on/off: 주문상태, 배정, 검수, 정산, 가입, 시스템
+- 수단별 on/off: 인앱 푸시, 알림 소리
+- `GET /api/notifications/preferences` — 설정 조회 (없으면 기본값 자동 생성)
+- `PUT /api/notifications/preferences` — 설정 업데이트 (upsert)
+
+### 10-3: notification-service 설정 연동 ✅
+- `TYPE_TO_PREF_COL` 매핑 (22개 알림 유형 → 6개 설정 컬럼)
+- `isNotificationEnabled()` — 알림 생성 전 사용자 설정 확인
+- 비활성화 유형은 알림 생성 자체를 skip (DB 쓰기 절감)
+
+### 10-4: 프로필 페이지 알림 설정 UI ✅
+- 프로필 페이지 탭 구조 리디자인 (계정/비밀번호/알림 3탭)
+- `switchProfileTab()` — 탭 전환 함수
+- 알림 유형 6개 토글 스위치 (CSS 커스텀 toggle)
+- 알림 수단 2개 토글 스위치
+- `updateNotifPref()` — 실시간 저장 + 즉시 UI 반영 (optimistic update)
+- `toggleAllNotifPrefs()` — 전체 켜기 기능
+- 설정 저장 실패 시 자동 롤백
+
+### 변경 통계
+- 4 files changed: notification-service.ts (+48줄), notifications.ts (기존 API), my-orders.js (+169줄), migrations/0007 (+73줄)
+- 신규 함수 5개: switchProfileTab, updateNotifPref, toggleAllNotifPrefs, isNotificationEnabled, TYPE_TO_PREF_COL
+
+---
+
+## Phase 9.0 — 모바일 반응형 최적화 ✅
+
+> **목적**: 768px 이하 모바일 환경에서 사용 가능한 반응형 레이아웃
+
+### 9-1: 모바일 레이아웃 ✅
+- 사이드바 → 하단 내비게이션 (4메인 + 더보기)
+- 모바일 헤더 (제목 + 알림벨)
+- '더보기' 시트 패널 (전체 메뉴 + 프로필/로그아웃)
+- resize 핸들러 (768px 기준 자동 전환)
+
+### 9-2: 모바일 전용 CSS (419줄) ✅
+- 테이블 6개 컬럼 자동 숨김
+- 칸반 세로 배치 + 접을 수 있는 컬럼
+- 드로어/모달 전폭 표시
+- 배치 액션바 하단 내비 위 표시
+
+### 9-3: 터치 제스처 ✅
+- 풀투리프레시 (pull-to-refresh)
+- 검수 카드 좌/우 스와이프 (승인/반려)
+
+---
+
+## Phase 8.0 — 데이터 시각화 + CSV 내보내기 ✅
+
+> **목적**: 실시간 대시보드 차트 + 주문 데이터 CSV 다운로드
+
+### 8-1: 대시보드 차트 (Chart.js) ✅
+- 일별 주문 추이 라인차트
+- 상태별 분포 도넛차트
+- 지역별 실적 바차트
+
+### 8-2: CSV 내보내기 ✅
+- 주문 목록 CSV 다운로드 (core/ui.js exportToCSV 유틸)
+- 지역/팀장 통계 CSV
+
+---
+
+## Phase 7.1 — 배분 기능 완성 ✅
 
 > **목적**: 미배분 주문의 개별/일괄 수동배분 기능 완성 및 UX 개선
 

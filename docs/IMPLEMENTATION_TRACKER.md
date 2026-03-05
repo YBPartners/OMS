@@ -1,7 +1,7 @@
 # 다하다 OMS — 구현 추적 문서 (Implementation Tracker)
 
 > **최종 업데이트**: 2026-03-05
-> **버전**: v7.0.0
+> **버전**: v10.0.0
 > **이 문서는 대화 압축/토큰 초과 시 컨텍스트 복구용입니다.**
 > **항상 이 파일 + ARCHITECTURE.md + PROGRESS.md 를 먼저 읽어 현재 진행 상황을 파악하세요.**
 
@@ -22,13 +22,13 @@
 
 ## 현재 상태 요약
 
-- **전체 Phase**: 0~9 완료 (Phase 9: 모바일/반응형 최적화)
+- **전체 Phase**: 0~10 완료 (Phase 10: 성능 최적화 + 알림 설정)
 - **프로덕션 배포**: ✅ https://dahada-oms.pages.dev
 - **로컬 개발**: ✅ PM2 + wrangler pages dev, port 3000
 - **서비스 레이어**: ✅ 5개 서비스, 모듈 간 교차 의존성 해소
-- **v9.0 신규**: ✅ 모바일 반응형 (바텀네비, 풀투리프레시, 스와이프 제스처, CSS 419줄)
+- **v10.0 신규**: ✅ 16개 DB 인덱스, 알림 설정 UI/API, 프로필 탭 리디자인
 - **알려진 이슈**: signup SQL 오류 ✅해결, Tailwind CDN 경고 (경미)
-- **총 코드량**: Backend 7,361줄 + Frontend 8,601줄 + CSS 419줄 + SQL 921줄 = **17,302줄**
+- **총 코드량**: Backend 7,478줄 + Frontend 8,770줄 + CSS 419줄 + SQL 994줄 = **17,661줄**
 
 ---
 
@@ -154,6 +154,18 @@
 - [x] 스와이프 액션 (initSwipeAction, enableReviewSwipe)
 - [x] viewport-fit=cover, apple-mobile-web-app 메타
 
+### ✅ Phase 10: 성능 최적화 + 알림 설정
+- [x] 0007_performance_notifications.sql — 16개 복합 인덱스 + notification_preferences 테이블
+- [x] 주문/알림/세션/조직/배분/배정/통계/감사로그 인덱스
+- [x] notification_preferences 테이블 (user_id UNIQUE, 유형6 + 수단2)
+- [x] GET /api/notifications/preferences — 설정 조회 (기본값 자동 생성)
+- [x] PUT /api/notifications/preferences — 설정 업데이트 (upsert)
+- [x] notification-service: TYPE_TO_PREF_COL 매핑 + isNotificationEnabled()
+- [x] 비활성 알림 유형 → createNotification skip 처리
+- [x] my-orders.js: renderMyProfile 탭 리디자인 (계정/비밀번호/알림)
+- [x] switchProfileTab(), updateNotifPref(), toggleAllNotifPrefs()
+- [x] 토글 스위치 CSS 애니메이션 + optimistic update + 실패 롤백
+
 ---
 
 ## 핵심 설계 결정 요약
@@ -171,6 +183,8 @@
 11. **서비스 레이어**: 도메인 간 DB 쓰기는 서비스 경유 필수, 읽기(SELECT)는 라우트 직접 허용 (v6.5)
 12. **대리점 계층**: 별도 org_type 없이 user_roles + agency_team_mappings로 구현 (v7.0)
 13. **주문 채널**: order_channels 테이블 + orders.channel_id 연결, N개 원장 관리 (v7.0)
+14. **알림 설정**: notification_preferences 테이블, 유형별/수단별 on/off, 서비스 레이어 연동으로 비활성 알림 skip (v10.0)
+15. **성능 인덱스**: 쿼리 패턴 기반 16개 복합 인덱스, 인증/대시보드/통계 쿼리 최적화 (v10.0)
 
 ---
 

@@ -1,6 +1,6 @@
 // ================================================================
-// 다하다 OMS — 알림 API v5.0
-// 사용자별 알림 조회, 읽음 처리, 삭제
+// 다하다 OMS — 알림 API v10.0
+// 사용자별 알림 조회, 읽음 처리, 삭제, 알림 설정
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -133,6 +133,79 @@ notifications.delete('/', async (c) => {
   ).bind(user.user_id).run();
 
   return c.json({ ok: true, deleted: result.meta.changes || 0 });
+});
+
+// ─── 알림 설정 조회 ───
+notifications.get('/preferences', async (c) => {
+  const authErr = requireAuth(c);
+  if (authErr) return authErr;
+
+  const user = c.get('user')!;
+  const db = c.env.DB;
+
+  let prefs = await db.prepare(
+    'SELECT * FROM notification_preferences WHERE user_id = ?'
+  ).bind(user.user_id).first();
+
+  if (!prefs) {
+    // 기본 설정 생성
+    await db.prepare(
+      'INSERT OR IGNORE INTO notification_preferences (user_id) VALUES (?)'
+    ).bind(user.user_id).run();
+    prefs = await db.prepare(
+      'SELECT * FROM notification_preferences WHERE user_id = ?'
+    ).bind(user.user_id).first();
+  }
+
+  return c.json({ preferences: prefs });
+});
+
+// ─── 알림 설정 업데이트 ───
+notifications.put('/preferences', async (c) => {
+  const authErr = requireAuth(c);
+  if (authErr) return authErr;
+
+  const user = c.get('user')!;
+  const db = c.env.DB;
+  const body = await c.req.json();
+
+  const allowed = [
+    'notify_order_status', 'notify_assignment', 'notify_review',
+    'notify_settlement', 'notify_signup', 'notify_system',
+    'push_enabled', 'sound_enabled'
+  ];
+
+  const updates: string[] = [];
+  const values: any[] = [];
+
+  for (const key of allowed) {
+    if (body[key] !== undefined) {
+      updates.push(`${key} = ?`);
+      values.push(body[key] ? 1 : 0);
+    }
+  }
+
+  if (updates.length === 0) {
+    return c.json({ error: '변경할 설정이 없습니다.' }, 400);
+  }
+
+  // Upsert
+  await db.prepare(
+    'INSERT OR IGNORE INTO notification_preferences (user_id) VALUES (?)'
+  ).bind(user.user_id).run();
+
+  updates.push('updated_at = CURRENT_TIMESTAMP');
+  values.push(user.user_id);
+
+  await db.prepare(
+    `UPDATE notification_preferences SET ${updates.join(', ')} WHERE user_id = ?`
+  ).bind(...values).run();
+
+  const updated = await db.prepare(
+    'SELECT * FROM notification_preferences WHERE user_id = ?'
+  ).bind(user.user_id).first();
+
+  return c.json({ ok: true, preferences: updated });
 });
 
 export default notifications;

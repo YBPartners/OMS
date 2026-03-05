@@ -15,12 +15,56 @@ export interface CreateNotificationParams {
   metadata_json?: string;
 }
 
-/** 단건 알림 생성 */
+/** 알림 유형 → notification_preferences 컬럼 매핑 */
+const TYPE_TO_PREF_COL: Record<string, string> = {
+  ORDER_STATUS:       'notify_order_status',
+  ORDER_RECEIVED:     'notify_order_status',
+  ORDER_COMPLETED:    'notify_order_status',
+  DISTRIBUTION:       'notify_assignment',
+  ASSIGNMENT:         'notify_assignment',
+  ASSIGNMENT_CANCEL:  'notify_assignment',
+  REVIEW_APPROVED:    'notify_review',
+  REVIEW_REJECTED:    'notify_review',
+  REGION_APPROVED:    'notify_review',
+  REGION_REJECTED:    'notify_review',
+  HQ_APPROVED:        'notify_review',
+  HQ_REJECTED:        'notify_review',
+  SETTLEMENT:         'notify_settlement',
+  SETTLEMENT_CONFIRMED: 'notify_settlement',
+  PAID:               'notify_settlement',
+  SIGNUP_REQUEST:     'notify_signup',
+  SIGNUP_APPROVED:    'notify_signup',
+  SIGNUP_REJECTED:    'notify_signup',
+  REGION_ADD_REQUEST: 'notify_signup',
+  REGION_ADD_APPROVED:'notify_signup',
+  SYSTEM:             'notify_system',
+};
+
+/** 사용자의 알림 설정 확인 — 해당 유형이 비활성이면 false 반환 */
+async function isNotificationEnabled(
+  db: D1Database, userId: number, type: string
+): Promise<boolean> {
+  const col = TYPE_TO_PREF_COL[type];
+  if (!col) return true; // 매핑 없는 유형은 기본 허용
+
+  const row = await db.prepare(
+    `SELECT ${col} as enabled FROM notification_preferences WHERE user_id = ?`
+  ).bind(userId).first() as { enabled: number } | null;
+
+  // 설정 행이 없으면 기본값 1(활성)
+  return row ? row.enabled === 1 : true;
+}
+
+/** 단건 알림 생성 (사용자 설정 확인 후 발송) */
 export async function createNotification(
   db: D1Database,
   recipientUserId: number,
   params: CreateNotificationParams
 ): Promise<void> {
+  // 사용자가 해당 유형 알림을 끈 경우 skip
+  const enabled = await isNotificationEnabled(db, recipientUserId, params.type);
+  if (!enabled) return;
+
   await db.prepare(`
     INSERT INTO notifications (recipient_user_id, type, title, message, link_url, metadata_json)
     VALUES (?, ?, ?, ?, ?, ?)

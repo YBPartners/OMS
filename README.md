@@ -1,4 +1,4 @@
-# 다하다 OMS - 주문관리시스템 v9.0.0
+# 다하다 OMS - 주문관리시스템 v10.0.0
 
 ## 프로젝트 개요
 - **명칭**: 다하다 OMS (Order Management System)
@@ -48,6 +48,26 @@
 | 7.1 | 배분 기능 완성 | ✅ | 일괄/개별 수동배분, 드로어 빠른액션 |
 | 8.0 | 데이터 시각화 + CSV | ✅ | Dashboard Chart.js 3종, CSV 내보내기 |
 | 9.0 | 모바일/반응형 | ✅ | 바텀네비, 풀투리프레시, 스와이프, 모바일 UI |
+| **10.0** | **성능 최적화 + 알림 설정** | **✅** | **16개 DB 인덱스, 알림 설정 UI/API, 프로필 탭 리디자인** |
+
+## v10.0 신규 기능 — 성능 최적화 + 알림 설정
+
+### DB 성능 인덱스 (마이그레이션 0007)
+- 16개 복합 인덱스 추가 (주문/알림/세션/조직/배분/배정/통계/감사로그)
+- 쿼리 패턴 기반 최적화: 대시보드 통계, 목록 조회, 미읽음 카운트 등
+
+### 알림 설정 (notification_preferences)
+- **유형별 on/off**: 주문상태, 배정, 검수, 정산, 가입, 시스템 (6가지)
+- **수단별 on/off**: 인앱 푸시, 알림 소리 (2가지)
+- `GET /api/notifications/preferences` — 설정 조회
+- `PUT /api/notifications/preferences` — 설정 업데이트
+- notification-service 연동: 비활성 유형은 알림 생성 자체를 skip
+
+### 프로필 페이지 리디자인
+- 3탭 구조: 계정 정보 / 비밀번호 변경 / 알림 설정
+- 커스텀 토글 스위치 (CSS transition)
+- 실시간 저장 (optimistic update + 실패 시 롤백)
+- 전체 켜기 일괄 조작
 
 ## v9.0 신규 기능 — 모바일/반응형 최적화
 
@@ -175,11 +195,11 @@
 | **대리점** | **/api/hr/agencies** | **대리점 관리, 팀장 배정/해제** (v7.0) |
 | 가입 | /api/signup | OTP, 신청, 승인/반려 |
 | 통계 | /api/stats | 대시보드, 리포트, 정책 |
-| 알림 | /api/notifications | CRUD, 미읽음 수, 전체 읽음 |
+| 알림 | /api/notifications | CRUD, 미읽음 수, 전체 읽음, **설정 조회/수정** (v10) |
 | 감사 | /api/audit | 로그 목록, 통계, 상세 |
 
 ## 데이터 아키텍처
-- **Cloudflare D1**: SQLite 기반 **38개 테이블** (v7.0: +2 order_channels, agency_team_mappings)
+- **Cloudflare D1**: SQLite 기반 **39개 테이블** (v10: +notification_preferences)
 - **State Machine**: 13단계 주문 상태 전이 (v7.0: AGENCY_LEADER 역할 추가)
 - **Scope Engine v7.0**: 역할별 데이터 가시성 (HQ → REGION → AGENCY → TEAM)
 - **Batch Builder**: D1 batch()를 활용한 원자적 트랜잭션
@@ -189,8 +209,8 @@
 - **플랫폼**: Cloudflare Pages + D1
 - **상태**: ✅ Active
 - **D1 ID**: 0b7aedd5-7510-44d3-8b81-d421b03fffa6
-- **버전**: v9.0.0
-- **총 코드량**: Backend 7,361 + Frontend 8,601 + CSS 419 + SQL 921 = **17,302줄**
+- **버전**: v10.0.0
+- **총 코드량**: Backend 7,478 + Frontend 8,770 + CSS 419 + SQL 994 = **17,661줄**
 - **최종 업데이트**: 2026-03-05
 
 ## 로컬 개발
