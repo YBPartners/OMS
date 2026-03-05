@@ -1,4 +1,4 @@
-# 다하다 OMS - 주문관리시스템 v5.5.0
+# 다하다 OMS - 주문관리시스템 v6.0.0
 
 ## 프로젝트 개요
 - **명칭**: 다하다 OMS (Order Management System)
@@ -10,151 +10,102 @@
 - **프로덕션**: https://dahada-oms.pages.dev
 - **샌드박스**: https://3000-inedg4lr7hnug2y22i9nx-5185f4aa.sandbox.novita.ai
 
+## 관련 문서 (새 대화에서 이어가기)
+> **⚠️ 새 대화를 시작할 때 반드시 아래 파일들을 순서대로 읽으세요:**
+1. **`ARCHITECTURE.md`** — 시스템 구조, 기술 스택, 디렉터리, DB 모델, API 전체 맵
+2. **`PROGRESS.md`** — Phase별 개발 진행 상태, 미구현 목록, 알려진 이슈
+3. **`docs/IMPLEMENTATION_TRACKER.md`** — 세부 체크리스트, 설계 결정, 파일 경로
+
 ## 테스트 계정
 | 역할 | 아이디 | 비밀번호 |
 |------|--------|----------|
 | HQ 총괄관리자 | admin | admin123 |
 | HQ 운영자 | hq_operator | admin123 |
-| 서울 파트장 | seoul_admin | admin123 |
-| 경기 파트장 | gyeonggi_admin | admin123 |
-| 인천 파트장 | incheon_admin | admin123 |
-| 부산 파트장 | busan_admin | admin123 |
+| 서울 지역법인 | seoul_admin | admin123 |
+| 경기 지역법인 | gyeonggi_admin | admin123 |
+| 인천 지역법인 | incheon_admin | admin123 |
+| 부산 지역법인 | busan_admin | admin123 |
 | 서울 팀장1 | leader_seoul_1 | admin123 |
+| 서울 팀장2 | leader_seoul_2 | admin123 |
 | 경기 팀장1 | leader_gyeonggi_1 | admin123 |
+| 경기 팀장2 | leader_gyeonggi_2 | admin123 |
+| 인천 팀장1 | leader_incheon_1 | admin123 |
+| 부산 팀장1 | leader_busan_1 | admin123 |
 
 ## 구현 Phase 이력
 
-### Phase 1 — DB 마이그레이션 & 코어 엔진 ✅
-- 5개 마이그레이션 (0001~0005): organizations, users, roles, orders, settlements, audit_logs, notifications 등 36개 테이블
-- Scope Engine, State Machine, Batch Builder 3대 혁신 엔진
+| Phase | 이름 | 상태 | 주요 내용 |
+|-------|------|------|-----------|
+| 0 | 초기 세팅 + v1.0 | ✅ | Hono+D1, 기본 CRUD, 보안 |
+| 1 | DB + 코어 엔진 | ✅ | 5개 마이그레이션, Scope/State/Batch 엔진 |
+| 2 | Admin API, 총판/팀 | ✅ | 행정구역, 조직 매핑, 14개 엔진 적용 |
+| 3 | 가입 워크플로, 알림 | ✅ | OTP, 가입 신청/승인, 알림 시스템 |
+| 4 | 프론트엔드 UI | ✅ | 15개 페이지, SPA 구조 |
+| 5 | Kanban + 감사 + 배포 | ✅ | 칸반, 감사 UI, CF Pages 배포 |
+| 6 | 인터랙션 디자인 | ✅ | 드로어, 팝오버, 컨텍스트메뉴, 호버프리뷰, 배치바 |
 
-### Phase 2 — Admin API, CRUD, 전체 라우팅 ✅
-- 행정구역 API (sido/sigungu/eupmyeondong/search), 조직-지역 매핑
-- 총판/팀 CRUD, 팀장 배정, org-tree 뷰
-- 14개 혁신 엔진 변경 적용
+## 주요 기능 요약
 
-### Phase 3 — 자가 가입 워크플로, 추가지역, 알림 ✅
-- OTP 인증 → 정보 입력 → 지역 선택 → 제출 → 관리자 승인/반려
-- 추가지역 요청 (관할권 외 지역 별도 승인)
-- 알림 시스템 (생성, 조회, 읽음 처리, 삭제)
-- 19개 신규 API 엔드포인트
+### 핵심 비즈니스 흐름
+```
+주문 수신 → 유효성검증 → 행정동 기반 자동배분 → 팀장 배정
+→ 작업 수행 → 보고서 제출 → 지역 1차 검수 → HQ 2차 검수
+→ 정산 산출/확정 → 대사(정합성 검증) → 정산 완료
+```
 
-### Phase 4 — 프론트엔드 UI ✅
-- signup-wizard.js (~27KB): 5단계 팀장 자가 가입 위자드
-- signup-admin.js (~24KB): 가입 승인/반려, 추가지역 관리, 조직트리
-- notifications.js (~11KB): 알림 벨, 드롭다운, 전체 페이지
-- 6개 기존 파일 수정 (레이아웃, 라우팅, 상수, HR 탭)
-
-### Phase 5 — Kanban 강화 + 감사로그 + 프로덕션 배포 ✅
-**5-1: Kanban 보드 개선**
-- `POST /api/orders/batch-assign` — 다중 주문 배치 배정 (최대 50건)
-- `POST /api/orders/:id/unassign` — 배정 해제 (ASSIGNED → DISTRIBUTED)
-- kanban.js (~25KB) 전면 개편:
-  - 다중 선택 + 배치 배정 (클릭 토글, 전체선택 버튼)
-  - 드래그 애니메이션 + 드롭 하이라이트 + 배정해제 드롭존
-  - 상단 통계 요약 카드 (미배정/배정/금액/팀장수)
-  - 주문 검색 필터 + 정렬 (금액순/요청일순)
-  - 팀장 컬럼별 배정/작업중 카운트 + 금액 합계
-  - 배정 해제 버튼 (hover시 표시) + 확인 모달
-- team-leaders API: parent_org_id 기반 하위 팀 팀장 조회 수정
-
-**5-2: 감사 로그 시스템**
-- `GET /api/audit` — 목록 조회 (엔티티/액션/실행자/날짜/검색 필터, 페이지네이션)
-- `GET /api/audit/stats` — 통계 (엔티티별/액션별/사용자별/일별 집계)
-- `GET /api/audit/:id` — 상세 조회
-- audit.js (~20KB):
-  - 목록 뷰 (필터, 페이지네이션, 엔티티 색상 분류)
-  - 통계 뷰 (4-패널: 엔티티/액션/사용자/일별 추이)
-  - 상세 모달 (Raw JSON 토글)
-  - SUPER_ADMIN / HQ_OPERATOR / AUDITOR 전용
-
-**5-3: E2E 테스트 23/23 ALL PASS**
-
-**5-5: Cloudflare Pages 프로덕션 배포**
-- D1 dahada-production (0b7aedd5-...) 생성 + 5개 마이그레이션 + 시드 데이터
-- 프로덕션 검증: health ✓, login ✓, dashboard(10주문/1,690,000원) ✓, audit ✓, team-leaders ✓, distribute ✓
+### 페이지별 기능
+| 페이지 | 주요 기능 |
+|--------|-----------|
+| 대시보드 | 요약 카드, 퍼널, 최근 주문, 지역 통계 |
+| 주문관리 | CRUD, 필터, 드로어 상세, 배치 액션 |
+| 자동배분 | 행정동 기반 자동매칭, 수동배분 |
+| 칸반 | 드래그 배정, 다중선택, 배치배정/해제 |
+| 검수 | 지역1차/HQ2차, 배치 승인/반려 |
+| 정산 | Run 생성, 산출, 확정, 상세 |
+| 대사 | 자동 정합성 검증, 이슈 관리 |
+| 통계 | 지역별/팀장별 일별, CSV 내보내기 |
+| 인사관리 | 사용자/조직/수수료/행정구역/총판 |
+| 팀장가입 | 5단계 위자드 (OTP→정보→지역→확인→완료) |
+| 가입관리 | 신청 승인/반려, 추가지역 |
+| 알림 | 벨 드롭다운, 전체 목록, 폴링 |
+| 감사로그 | 목록, 통계 4패널, 상세 |
+| 내주문 | 팀장 전용, 보고서 제출 |
 
 ## API 엔드포인트 요약
 
-### 인증 (Public)
-| Method | Path | 설명 |
-|--------|------|------|
-| POST | /api/auth/login | 로그인 |
-| POST | /api/auth/logout | 로그아웃 |
-| GET | /api/auth/me | 현재 세션 사용자 |
-| GET | /api/auth/organizations | 조직 목록 |
-| GET | /api/auth/team-leaders | 팀장 목록 (parent_org 지원) |
+총 **60+개** API 엔드포인트. 상세 맵은 `ARCHITECTURE.md` 참조.
 
-### 주문 관리
-| Method | Path | 설명 |
-|--------|------|------|
-| GET | /api/orders | 주문 목록 (필터, 페이지네이션) |
-| GET | /api/orders/:id | 주문 상세 |
-| POST | /api/orders | 수동 주문 등록 |
-| POST | /api/orders/import | 일괄 수신 |
-| POST | /api/orders/distribute | 자동 배분 |
-| PATCH | /api/orders/:id/distribution | 수동 배분 |
-| POST | /api/orders/:id/assign | 팀장 배정 |
-| POST | /api/orders/batch-assign | **배치 배정 (Phase 5)** |
-| POST | /api/orders/:id/unassign | **배정 해제 (Phase 5)** |
-| POST | /api/orders/:id/start | 작업 시작 |
-| POST | /api/orders/:id/reports | 보고서 제출 |
-| POST | /api/orders/:id/review/region | 지역 1차 검수 |
-| POST | /api/orders/:id/review/hq | HQ 2차 검수 |
-
-### 정산 · 대사
-| Method | Path | 설명 |
-|--------|------|------|
-| GET/POST | /api/settlements/runs | 정산 Run 관리 |
-| POST | /api/settlements/runs/:id/calculate | 정산 산출 |
-| POST | /api/settlements/runs/:id/confirm | 정산 확정 |
-| GET/POST | /api/reconciliation/runs | 대사 실행 |
-| GET | /api/reconciliation/issues | 이슈 목록 |
-| PATCH | /api/reconciliation/issues/:id/resolve | 이슈 해결 |
-
-### 인사 관리 (HR)
-| Method | Path | 설명 |
-|--------|------|------|
-| GET/POST | /api/hr/users | 사용자 관리 |
-| GET/POST | /api/hr/organizations | 조직 관리 |
-| GET/POST | /api/hr/commission-policies | 수수료 정책 |
-| GET | /api/hr/regions/* | 행정구역 조회/검색/매핑 |
-| GET/POST | /api/hr/distributors | 총판 관리 |
-
-### 자가 가입 (Public)
-| Method | Path | 설명 |
-|--------|------|------|
-| POST | /api/signup/check-phone | 전화번호 중복 확인 |
-| POST | /api/signup/send-otp | OTP 발송 |
-| POST | /api/signup/verify-otp | OTP 검증 |
-| POST | /api/signup/submit | 가입 신청 |
-| GET | /api/signup/status | 신청 상태 조회 |
-| POST | /api/signup/admin/approve | 관리자 승인 |
-| POST | /api/signup/admin/reject | 관리자 반려 |
-
-### 감사 로그 (Phase 5)
-| Method | Path | 설명 |
-|--------|------|------|
-| GET | /api/audit | 감사 로그 목록 |
-| GET | /api/audit/stats | 감사 로그 통계 |
-| GET | /api/audit/:id | 감사 로그 상세 |
-
-### 알림
-| Method | Path | 설명 |
-|--------|------|------|
-| GET | /api/notifications | 알림 목록 |
-| GET | /api/notifications/unread-count | 미읽음 수 |
-| PATCH | /api/notifications/:id/read | 읽음 처리 |
-| POST | /api/notifications/read-all | 전체 읽음 |
+| 도메인 | 경로 프리픽스 | 주요 기능 |
+|--------|-------------|-----------|
+| 인증 | /api/auth | 로그인, 로그아웃, 세션, 조직/팀장 조회 |
+| 주문 | /api/orders | CRUD, 배분, 배정, 보고서, 검수 |
+| 정산 | /api/settlements | Run 관리, 산출, 확정 |
+| 대사 | /api/reconciliation | 대사 실행, 이슈 관리 |
+| HR | /api/hr | 사용자, 조직, 수수료, 행정구역, 총판 |
+| 가입 | /api/signup | OTP, 신청, 승인/반려 |
+| 통계 | /api/stats | 대시보드, 리포트, 정책 |
+| 알림 | /api/notifications | CRUD, 미읽음 수, 전체 읽음 |
+| 감사 | /api/audit | 로그 목록, 통계, 상세 |
 
 ## 데이터 아키텍처
-- **Cloudflare D1**: SQLite 기반 36개 테이블
-- **주요 테이블**: organizations, users, orders, order_distributions, order_assignments, work_reports, reviews, settlements, audit_logs, notifications, admin_regions, signup_requests
-- **State Machine**: 13단계 주문 상태 전이 (RECEIVED → PAID)
-- **Scope Engine**: 역할별 데이터 가시성 제어 (HQ → REGION → TEAM)
+- **Cloudflare D1**: SQLite 기반 **36개 테이블**
+- **State Machine**: 13단계 주문 상태 전이
+- **Scope Engine**: 역할별 데이터 가시성 (HQ → REGION → TEAM)
+- **Batch Builder**: D1 batch()를 활용한 원자적 트랜잭션
 
 ## 배포 정보
 - **플랫폼**: Cloudflare Pages + D1
 - **상태**: ✅ Active
-- **버전**: v5.5.0
+- **D1 ID**: 0b7aedd5-7510-44d3-8b81-d421b03fffa6
+- **버전**: v6.0.0
 - **최종 업데이트**: 2026-03-05
+
+## 로컬 개발
+```bash
+cd /home/user/webapp
+npm run build
+pm2 start ecosystem.config.cjs
+curl http://localhost:3000/api/health
+# DB가 비어있으면:
+npx wrangler d1 execute dahada-production --local --file=./seed.sql
+```
