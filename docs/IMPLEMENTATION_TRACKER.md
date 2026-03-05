@@ -22,15 +22,13 @@
 
 ## 현재 상태 요약
 
-- **전체 Phase**: 0~8 완료 (Phase 8: 데이터 시각화 + CSV 내보내기)
+- **전체 Phase**: 0~9 완료 (Phase 9: 모바일/반응형 최적화)
 - **프로덕션 배포**: ✅ https://dahada-oms.pages.dev
 - **로컬 개발**: ✅ PM2 + wrangler pages dev, port 3000
 - **서비스 레이어**: ✅ 5개 서비스, 모듈 간 교차 의존성 해소
-- **v7.0 신규**: ✅ 주문 채널 관리, AGENCY_LEADER 역할/스코프/UI
-- **v7.1 신규**: ✅ 배분 기능 완성 (일괄/개별 수동배분, 드로어 빠른액션)
-- **v8.0 신규**: ✅ Dashboard Chart.js 3종 차트, 주문 CSV 내보내기, 공통 exportToCSV
-- **알려진 이슈**: signup SQL 오류 ✅해결 (admin_regions seed 데이터 추가), Tailwind CDN 경고 (경미)
-- **총 코드량**: Backend 7,357줄 (45 TS) + Services 634줄 + Frontend 8,318줄 (22 JS) + SQL 921줄 = **16,596줄**
+- **v9.0 신규**: ✅ 모바일 반응형 (바텀네비, 풀투리프레시, 스와이프 제스처, CSS 419줄)
+- **알려진 이슈**: signup SQL 오류 ✅해결, Tailwind CDN 경고 (경미)
+- **총 코드량**: Backend 7,361줄 + Frontend 8,601줄 + CSS 419줄 + SQL 921줄 = **17,302줄**
 
 ---
 
@@ -146,6 +144,16 @@
 - [x] org_region_mappings 시드 데이터 추가
 - [x] 가입 → OTP → 제출 → 승인 전체 플로우 테스트 통과
 
+### ✅ Phase 9: 모바일/반응형 최적화
+- [x] mobile.css (419줄) — @media 768px 이하 전면 제어
+- [x] app.js 전면 재작성 — 바텀네비, 더보기 시트 패널, 풀투리프레시
+- [x] 역할별 바텀네비 맞춤 (HQ/REGION/AGENCY/TEAM_LEADER)
+- [x] 주문 테이블 컬럼 자동 숨김 (6개 컬럼)
+- [x] 칸반 세로 배치 + 컬럼 접기
+- [x] 드로어 풀스크린 + 모달 95% 폭
+- [x] 스와이프 액션 (initSwipeAction, enableReviewSwipe)
+- [x] viewport-fit=cover, apple-mobile-web-app 메타
+
 ---
 
 ## 핵심 설계 결정 요약
@@ -170,7 +178,7 @@
 
 - Backend: Hono v4 + TypeScript + Cloudflare Workers + D1
 - Services: 5개 서비스 파일 (634줄) — 교차 도메인 쓰기 일원화
-- Frontend: Vanilla JS + TailwindCSS (CDN) + FontAwesome + Chart.js + CSV export
+- Frontend: Vanilla JS + TailwindCSS (CDN) + FontAwesome + Chart.js + CSV export + **mobile.css (419줄)**
 - Build: Vite + @hono/vite-cloudflare-pages
 - Dev: PM2 + wrangler pages dev --local, port 3000
 - Deploy: Cloudflare Pages (`wrangler pages deploy dist`)
@@ -183,7 +191,8 @@
 - 백엔드 소스: `/home/user/webapp/src/` (45파일, 7,357줄)
 - **서비스 레이어**: `/home/user/webapp/src/services/` (6파일, 634줄)
 - **채널+대리점 API**: `/home/user/webapp/src/routes/hr/channels-agency.ts` (373줄) ← v7.0 신규
-- 프론트엔드: `/home/user/webapp/public/static/js/` (22파일, 8,318줄)
+- 프론트엔드: `/home/user/webapp/public/static/js/` (22파일, 8,601줄)
+- **모바일 CSS**: `/home/user/webapp/public/static/css/mobile.css` (419줄) ← v9.0 신규
 - **채널 페이지**: `/home/user/webapp/public/static/js/pages/channels.js` (145줄) ← v7.0
 - **대리점 페이지**: `/home/user/webapp/public/static/js/pages/agency.js` (400줄) ← v7.0
 - **대시보드 차트**: `/home/user/webapp/public/static/js/pages/dashboard.js` (~250줄) ← v8.0 Chart.js

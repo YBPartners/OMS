@@ -164,7 +164,7 @@ async function renderKanban(el) {
       </div>
 
       <!-- 칸반 보드 -->
-      <div class="flex gap-4 overflow-x-auto pb-4" style="min-height: 520px;">
+      <div class="kanban-board flex gap-4 overflow-x-auto pb-4" style="min-height: 520px;">
         <!-- 미배정 컬럼 -->
         <div class="flex-shrink-0 w-80 bg-white rounded-xl border-2 border-dashed border-blue-200 flex flex-col kanban-column">
           <div class="px-4 py-3 bg-blue-50 rounded-t-xl border-b flex items-center justify-between">
@@ -177,7 +177,7 @@ async function renderKanban(el) {
               <span class="bg-blue-200 text-blue-800 text-xs px-2 py-0.5 rounded-full font-bold">${filteredDistributed.length}</span>
             </div>
           </div>
-          <div id="kanban-unassigned" class="flex-1 p-2 space-y-2 overflow-y-auto max-h-[58vh] kanban-drop-zone"
+          <div id="kanban-unassigned" class="kanban-body flex-1 p-2 space-y-2 overflow-y-auto max-h-[58vh] kanban-drop-zone"
                data-zone="unassigned"
                ondragover="kanbanDragOver(event)"
                ondragleave="kanbanDragLeave(event)"
@@ -214,7 +214,7 @@ async function renderKanban(el) {
                 <span class="text-green-600 font-bold ml-auto">${formatAmount(leaderAmount)}</span>
               </div>
             </div>
-            <div id="kanban-leader-${l.user_id}" class="flex-1 p-2 space-y-2 overflow-y-auto max-h-[58vh] kanban-drop-zone"
+            <div id="kanban-leader-${l.user_id}" class="kanban-body flex-1 p-2 space-y-2 overflow-y-auto max-h-[58vh] kanban-drop-zone"
                  data-zone="leader"
                  data-leader-id="${l.user_id}"
                  ondragover="kanbanDragOver(event)"

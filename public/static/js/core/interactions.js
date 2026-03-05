@@ -849,3 +849,87 @@ if (document.readyState === 'loading') {
 } else {
   initInteractionSystem();
 }
+
+// ============================================================
+// Mobile Swipe Actions v9.0
+// 카드/행에 좌우 스와이프 → 빠른 액션 (승인/반려/배정)
+// ============================================================
+
+function initSwipeAction(element, options = {}) {
+  if (!element || !isMobile()) return;
+  
+  const threshold = options.threshold || 60;
+  const actions = options.actions || []; // [{direction:'right', label, icon, color, handler}]
+  let startX = 0, startY = 0, currentX = 0, swiping = false;
+
+  element.style.position = 'relative';
+  element.style.overflow = 'hidden';
+
+  const content = element.querySelector('.swipe-content') || element;
+
+  element.addEventListener('touchstart', (e) => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    swiping = true;
+    content.style.transition = 'none';
+  }, { passive: true });
+
+  element.addEventListener('touchmove', (e) => {
+    if (!swiping) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    
+    // 세로 스크롤 우선
+    if (Math.abs(dy) > Math.abs(dx)) { swiping = false; return; }
+    
+    currentX = dx;
+    const leftActions = actions.filter(a => a.direction === 'left');
+    const rightActions = actions.filter(a => a.direction === 'right');
+    
+    if (dx < 0 && leftActions.length > 0) {
+      content.style.transform = `translateX(${Math.max(dx, -150)}px)`;
+    } else if (dx > 0 && rightActions.length > 0) {
+      content.style.transform = `translateX(${Math.min(dx, 150)}px)`;
+    }
+  }, { passive: true });
+
+  element.addEventListener('touchend', () => {
+    if (!swiping) return;
+    swiping = false;
+    content.style.transition = 'transform 0.2s ease-out';
+
+    if (Math.abs(currentX) > threshold) {
+      const direction = currentX > 0 ? 'right' : 'left';
+      const action = actions.find(a => a.direction === direction);
+      if (action && action.handler) {
+        // 퀵 피드백
+        content.style.transform = `translateX(${currentX > 0 ? '100%' : '-100%'})`;
+        setTimeout(() => {
+          content.style.transform = 'translateX(0)';
+          action.handler();
+        }, 200);
+        return;
+      }
+    }
+    content.style.transform = 'translateX(0)';
+    currentX = 0;
+  }, { passive: true });
+}
+
+// 검수 페이지용 스와이프: 우측 → 승인, 좌측 → 반려
+function enableReviewSwipe(cardEl, orderId) {
+  if (!isMobile()) return;
+  initSwipeAction(cardEl, {
+    threshold: 70,
+    actions: [
+      { 
+        direction: 'right', label: '승인', icon: 'fa-check', color: '#22c55e',
+        handler: () => { if (typeof quickApprove === 'function') quickApprove(orderId); }
+      },
+      { 
+        direction: 'left', label: '반려', icon: 'fa-times', color: '#ef4444',
+        handler: () => { if (typeof showRejectModal === 'function') showRejectModal(orderId); }
+      }
+    ]
+  });
+}
