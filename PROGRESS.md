@@ -32,7 +32,7 @@
 
 ---
 
-## Phase 16.0 — 품질 강화 + 문서 정비 + E2E 테스트 🔄 (최신)
+## Phase 16.0 — 품질 강화 + 문서 정비 + E2E 테스트 ✅ (최신)
 
 > **목적**: 프로덕션 안정성 확보, 문서 정합성, 에러 핸들링, 통합 테스트
 
@@ -42,19 +42,37 @@
 - 프로덕션 orders/order_assignments 테이블에 READY_DONE/DONE CHECK 제약 확인
 - 데이터 무결성 검증 (주문 10건, 배정 7건 보존)
 
-### 16-2: 문서 3종 정합성 업데이트 🔄
-- ARCHITECTURE.md → v15.0 (기술스택, 디렉토리, 상태전이, API 맵 전면 갱신)
-- PROGRESS.md → Phase 15.0/16.0 추가
-- IMPLEMENTATION_TRACKER.md → Phase 15.0 체크리스트 추가
+### 16-2: 문서 3종 + README 정합성 업데이트 ✅
+- ARCHITECTURE.md → v16.0 (전체 구조, 상태전이, API 맵, E2E 테스트, 코드 통계 반영)
+- PROGRESS.md → v16.0 (Phase 16 완료 상태 반영)
+- IMPLEMENTATION_TRACKER.md → v16.0 (세부 체크리스트 완료)
+- README.md → v16.0 (버전/URL/코드량/기능 업데이트)
 
-### 16-3: E2E 워크플로 테스트 ⏳
-- 주문 전체 라이프사이클 (RECEIVED → PAID)
-- 팀장 가입 워크플로
-- 정산 산출/확정 워크플로
+### 16-3: E2E 통합 테스트 ✅
+- `tests/e2e.sh` (386줄, 50개 테스트) — **50/50 전체 통과**
+- 15개 영역: 헬스체크, 인증, 주문 CRUD, 주문 라이프사이클, 배치, 정산, 통계, 정책, 알림, 시스템, HR/감사, 채널/대리점, RBAC, 매출/정산차트, 로그아웃
+- 3역할 교차 테스트: SUPER_ADMIN, REGION_ADMIN, TEAM_LEADER
+- 타임스탬프 기반 고유 데이터로 반복 실행 안정
 
-### 16-4: 에러 핸들링 강화 ⏳
-- 프론트엔드: 글로벌 에러 경계, API retry, 오프라인 감지
-- 백엔드: 에러 응답 표준화, 입력 검증 강화
+### 16-4: 에러 핸들링 강화 ✅
+- **프론트엔드 (api.js v4.0)**:
+  - API 재시도: GET 2회, 5xx 서버 에러 자동 재시도 (지수 백오프)
+  - 오프라인 감지: `navigator.onLine` + 이벤트 리스너, 상단 배너 표시
+  - 요청 타임아웃: `AbortController` 30초 기본
+  - 글로벌 에러: `window.error`, `unhandledrejection` 핸들러
+- **백엔드 (index.tsx)**:
+  - 에러 자동 분류: DB/검증/타임아웃/404 → 적절한 HTTP 상태 코드
+  - 에러 코드 표준화: `INTERNAL_ERROR`, `DB_ERROR`, `VALIDATION_ERROR`, `TIMEOUT`, `NOT_FOUND`
+  - `_debug` 필드에 원본 에러 메시지 포함 (200자 제한)
+
+### 16-5: 버그 수정 ✅
+- **로그아웃 API**: Cookie에서 session_id 미추출 → `getSessionCookie()` 헬퍼 추가로 쿠키 기반 세션 삭제 정상화
+- **보고서 사진 업로드**: `photo.url` / `photo.file_url` 양쪽 수용 (하위 호환)
+
+### 변경 통계
+- 8 files changed, +826 insertions, -206 deletions
+- 신규 파일 1개: tests/e2e.sh (386줄)
+- 커밋: 03cfb17
 
 ---
 

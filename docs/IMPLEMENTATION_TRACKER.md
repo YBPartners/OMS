@@ -22,13 +22,13 @@
 
 ## 현재 상태 요약
 
-- **전체 Phase**: 0~13 완료 (Phase 13: 시스템 관리 + 보안 강화 + 글로벌 검색 + 타임라인)
-- **프로덕션 배포**: ✅ https://yb-oms.pages.dev
+- **전체 Phase**: 0~16 완료 (Phase 16: 품질 강화 + E2E 테스트 + 문서 정비)
+- **프로덕션 배포**: ✅ https://dahada-oms.pages.dev (v16.0.0)
 - **로컬 개발**: ✅ PM2 + wrangler pages dev, port 3000
 - **서비스 레이어**: ✅ 5개 서비스, 모듈 간 교차 의존성 해소
-- **v13.0 신규**: ✅ 시스템 관리 대시보드, 계정 잠금, Cmd+K 검색, 주문 타임라인
-- **코드량**: Backend 8,188 + Frontend 9,600 + CSS 419 + SQL 1,018 = **19,225줄**
-- **알려진 이슈**: signup SQL 오류 ✅해결, Tailwind CDN 경고 (경미)
+- **E2E 테스트**: ✅ 50/50 통과 (15개 영역, `tests/e2e.sh`)
+- **코드량**: Backend 8,902 + Frontend 10,722 + SW 143 + CSS 419 + SQL 1,112 + E2E 386 = **21,684줄**
+- **알려진 이슈**: signup SQL 오류 ✅해결, 로그아웃 세션 버그 ✅해결, Tailwind CDN 경고 (경미)
 
 ---
 
@@ -182,14 +182,17 @@
 - [x] 0010_ready_done_status.sql 마이그레이션
 - [x] 커밋 e32d798, 12파일, +788/-55
 
-### 🔄 Phase 16: 품질 강화 + 문서 정비 + E2E 테스트 (진행중)
+### ✅ Phase 16: 품질 강화 + 문서 정비 + E2E 테스트
 - [x] 프로덕션 DB 마이그레이션 0006~0010 적용 완료
-- [x] ARCHITECTURE.md v15.0 전면 갱신
-- [x] PROGRESS.md Phase 15/16 추가
-- [x] IMPLEMENTATION_TRACKER.md Phase 15/16 추가
-- [ ] E2E 워크플로 테스트 스크립트
-- [ ] 프론트엔드 에러 핸들링 강화
-- [ ] 백엔드 에러 핸들링 표준화
+- [x] ARCHITECTURE.md v16.0 전면 갱신 (구조, API, E2E, 코드 통계)
+- [x] PROGRESS.md v16.0 (Phase 16 완료 상태)
+- [x] IMPLEMENTATION_TRACKER.md v16.0 (체크리스트 완료)
+- [x] README.md v16.0 (버전/URL/코드량/기능 업데이트)
+- [x] E2E 통합 테스트 `tests/e2e.sh` — 50/50 통과 (15개 영역)
+- [x] 프론트엔드 에러 핸들링 강화 (api.js v4.0: 재시도/오프라인/타임아웃/글로벌)
+- [x] 백엔드 에러 핸들링 표준화 (DB/검증/타임아웃/404 자동 분류)
+- [x] 버그 수정: 로그아웃 쿠키 세션 버그, 보고서 사진 URL 호환성
+- [x] 커밋 03cfb17, 8 files changed, +826/-206
 
 ---
 

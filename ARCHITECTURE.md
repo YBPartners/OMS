@@ -1,6 +1,8 @@
-# 와이비 OMS — 시스템 아키텍처 (v15.0)
+# 와이비 OMS — 시스템 아키텍처 (v16.0)
 
 > **최종 업데이트**: 2026-03-05
+> **현재 버전**: v16.0.0
+> **프로덕션**: https://dahada-oms.pages.dev
 > **이 문서는 새 대화에서 컨텍스트 복구용 — 반드시 먼저 읽을 것**
 
 ---
@@ -11,7 +13,7 @@
 |------|------|------|
 | Runtime | Cloudflare Workers (Edge) | 10ms CPU 제한 (free) |
 | Framework | Hono v4 | TypeScript, 경량 라우팅 |
-| Database | Cloudflare D1 (SQLite) | 로컬: `--local` 모드, 41개 테이블 |
+| Database | Cloudflare D1 (SQLite) | 로컬: `--local` 모드, 41개 테이블, 10개 마이그레이션 |
 | Frontend | Vanilla JS + TailwindCSS (CDN) | SPA, 23개 JS 모듈 |
 | Icons | FontAwesome 6.5 (CDN) | |
 | Charts | Chart.js 4.4 (CDN) | 대시보드 5종 차트 |
@@ -26,7 +28,7 @@
 
 ```
 /home/user/webapp/
-├── src/                          # Backend (TypeScript) — 47 파일, 8,860줄
+├── src/                          # Backend (TypeScript) — 47 파일, 8,902줄
 │   ├── index.tsx                 # Hono 앱 진입점, 라우트 마운트, SPA HTML
 │   ├── types/index.ts            # 타입 정의 v6.0 (Env, SessionUser, RoleCode, OrderStatus 등)
 │   ├── middleware/
@@ -69,7 +71,7 @@
 │   ├── sw.js                     # Service Worker (오프라인 + 푸시 알림)
 │   ├── static/js/core/
 │   │   ├── constants.js          # OMS.STATUS (15상태), OMS.PERMISSIONS, ROLE_LABELS
-│   │   ├── api.js                # fetch 래퍼, 세션 관리, cachedApi, debounce
+│   │   ├── api.js                # fetch 래퍼 v4.0: 재시도, 오프라인 감지, 타임아웃, cachedApi
 │   │   ├── ui.js                 # 모달, 토스트, 포맷터, 뱃지, exportToCSV/Excel
 │   │   ├── interactions.js       # 팝오버, 컨텍스트메뉴, 드로어, 호버프리뷰, 배치바, 스와이프
 │   │   ├── auth.js               # 로그인, 로그아웃, 권한, 라우팅, 글로벌검색
@@ -99,6 +101,8 @@
 │   ├── 0001_initial_schema.sql ~ 0010_ready_done_status.sql
 ├── seed.sql                      # 기본 시드 데이터
 ├── seed_test_orders.sql          # 테스트 주문 데이터
+├── tests/
+│   └── e2e.sh                    # E2E 통합 테스트 (50개, v16.0)
 ├── docs/                         # 설계 문서
 ├── PROGRESS.md                   # 개발 진척도
 ├── ARCHITECTURE.md               # 이 문서
@@ -335,7 +339,7 @@ IX 전역 상태: activePopover, activeContextMenu, activeDrawer, activeTooltip,
 
 ---
 
-## 7. API 엔드포인트 전체 맵 (98개)
+## 7. API 엔드포인트 전체 맵 (~100개)
 
 ### 인증 (auth.ts → session-service)
 | Method | Path | 설명 |
@@ -506,9 +510,60 @@ npx wrangler d1 migrations apply dahada-production --remote  # 프로덕션 DB
 
 | 영역 | 파일 수 | 줄수 |
 |------|---------|------|
-| Backend (TypeScript) | 47 | 8,860 |
-| Frontend (JavaScript) | 23 | 10,643 |
+| Backend (TypeScript) | 47 | 8,902 |
+| Frontend (JavaScript) | 23 | 10,722 |
 | Service Worker | 1 | 143 |
 | CSS | 1 | 419 |
-| SQL (migrations + seed) | 12 | 1,169 |
-| **총계** | **84** | **21,234** |
+| SQL (migrations + seed) | 12 | 1,112 |
+| E2E Test (Shell) | 1 | 386 |
+| **총계** | **85** | **21,684** |
+
+---
+
+## 11. E2E 통합 테스트 (v16.0)
+
+> **파일**: `/home/user/webapp/tests/e2e.sh` (386줄, 50개 테스트)
+> **실행**: `cd /home/user/webapp && bash tests/e2e.sh`
+
+### 테스트 영역 (15개 그룹)
+| # | 영역 | 테스트 수 | 내용 |
+|---|------|-----------|------|
+| 1 | 헬스체크 | 2 | health API, 버전 확인 |
+| 2 | 인증 | 5 | 3역할 로그인, 실패 거부, 세션 조회 |
+| 3 | 주문 CRUD | 3 | 목록, 수동 등록(고유 데이터), 상세 |
+| 4 | 주문 라이프사이클 | 10 | RECEIVED→자동배분→수동배분→배정→READY_DONE→IN_PROGRESS→SUBMITTED→DONE→REGION_APPROVED→HQ_APPROVED |
+| 5 | 배치 작업 | 1 | 일괄 수신 (batch import) |
+| 6 | 정산 | 3 | Run 목록/생성/산출 |
+| 7 | 통계/대시보드 | 2 | 대시보드, 지역별 일별 |
+| 8 | 정책 | 4 | 배분/보고서/수수료 정책, 지역매핑 |
+| 9 | 알림 | 3 | 목록, 미읽음, 설정 |
+| 10 | 시스템 | 3 | 시스템 정보, 글로벌 검색, DB 현황 |
+| 11 | HR/감사 | 4 | 사용자, 조직, 감사 로그/통계 |
+| 12 | 채널/대리점 | 2 | 채널 목록, 대리점 목록 |
+| 13 | RBAC 권한 | 2 | TEAM_LEADER 시스템 거부, 비인증 거부 |
+| 14 | 매출/정산 차트 | 2 | 매출 추이, 정산 현황 |
+| 15 | 로그아웃 | 4 | 세션 생성→유효 확인→로그아웃→무효 확인 |
+
+### 주요 특징
+- **반복 실행 안정**: 타임스탬프 기반 고유 주문 데이터 생성
+- **주문 전체 흐름**: 13단계 상태 전이 완전 커버 (RECEIVED→HQ_APPROVED)
+- **3역할 교차**: SUPER_ADMIN, REGION_ADMIN, TEAM_LEADER 세션 동시 사용
+
+---
+
+## 12. v16.0 주요 변경사항
+
+### 버그 수정
+- **로그아웃 API**: Cookie에서 session_id 미추출 → `getSessionCookie()` 헬퍼 추가로 쿠키 기반 세션 삭제 정상화
+- **보고서 사진 업로드**: `photo.url` / `photo.file_url` 양쪽 수용 (하위 호환)
+
+### 에러 처리 강화
+- **프론트엔드 (api.js v4.0)**:
+  - API 재시도: GET 요청 2회, 5xx 서버 에러 자동 재시도 (지수 백오프)
+  - 오프라인 감지: `navigator.onLine` + 이벤트 리스너, 상단 배너 표시
+  - 요청 타임아웃: `AbortController` 30초 기본 (설정 가능)
+  - 글로벌 에러: `window.error`, `unhandledrejection` 핸들러
+- **백엔드 (index.tsx)**:
+  - 에러 자동 분류: DB 에러, 검증 에러, 타임아웃, 404 → 적절한 HTTP 상태 코드
+  - 에러 코드 표준화: `INTERNAL_ERROR`, `DB_ERROR`, `VALIDATION_ERROR`, `TIMEOUT`, `NOT_FOUND`
+  - `_debug` 필드에 원본 에러 메시지 포함 (200자 제한)
