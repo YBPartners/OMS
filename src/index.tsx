@@ -46,7 +46,7 @@ app.route('/api/notifications', notificationRoutes);
 app.route('/api/audit', auditRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '6.0.0', system: '다하다 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '7.0.0', system: '다하다 OMS' }));
 
 // ─── SPA 라우팅: 모든 페이지 요청에 index.html 반환 ───
 app.get('*', async (c) => {
@@ -135,6 +135,8 @@ function getIndexHtml(): string {
   <script src="/static/js/pages/notifications.js"></script>
   <script src="/static/js/pages/audit.js"></script>
   <script src="/static/js/pages/my-orders.js"></script>
+  <script src="/static/js/pages/agency.js"></script>
+  <script src="/static/js/pages/channels.js"></script>
   
   <!-- App bootstrap (must be last) -->
   <script src="/static/js/core/app.js"></script>

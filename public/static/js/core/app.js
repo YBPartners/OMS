@@ -1,7 +1,7 @@
 // ============================================================
-// 다하다 OMS — App Bootstrap v5.1
+// 다하다 OMS — App Bootstrap v7.0
 // 메인 렌더링, 레이아웃, 초기화 (최종 로드)
-// TEAM org_type 지원, 총판 체계, 알림, 가입 위자드
+// v7.0: AGENCY_LEADER 메뉴 분기, 대리점 계층 지원
 // ============================================================
 
 // ─── 메인 렌더 ───
@@ -20,8 +20,9 @@ function render() {
   if (hash && hash !== 'signup' && hasPermission(hash)) { currentPage = hash; }
   else if (!hasPermission(currentPage)) {
     const isHQ = currentUser.org_type === 'HQ';
+    const isAgency = currentUser.is_agency === true;
     const isLeader = currentUser.roles.includes('TEAM_LEADER');
-    currentPage = isLeader ? 'my-orders' : 'dashboard';
+    currentPage = isAgency ? 'agency-dashboard' : isLeader ? 'my-orders' : 'dashboard';
   }
   
   app.innerHTML = renderLayout();
@@ -38,7 +39,7 @@ function renderLoginPage() {
           <i class="fas fa-cubes text-white text-2xl"></i>
         </div>
         <h1 class="text-2xl font-bold text-gray-800">다하다 OMS</h1>
-        <p class="text-gray-500 mt-1">주문관리시스템 v5.1</p>
+        <p class="text-gray-500 mt-1">주문관리시스템 v7.0</p>
       </div>
       <form onsubmit="event.preventDefault();login(document.getElementById('lid').value,document.getElementById('lpw').value)">
         <div class="mb-4">
@@ -67,6 +68,7 @@ function renderLoginPage() {
           <p><span class="font-medium text-purple-600">인천파트장:</span> incheon_admin / admin123</p>
           <p><span class="font-medium text-purple-600">부산파트장:</span> busan_admin / admin123</p>
           <p><span class="font-medium text-green-600">서울팀장:</span> leader_seoul_1 / admin123</p>
+          <p><span class="font-medium text-teal-600">대리점장:</span> leader_seoul_1 / admin123</p>
         </div>
       </div>
     </div>
@@ -78,12 +80,13 @@ function renderLayout() {
   const isRegion = currentUser.org_type === 'REGION' && currentUser.roles.includes('REGION_ADMIN');
   const isTeam = currentUser.org_type === 'TEAM';
   const isLeader = currentUser.roles.includes('TEAM_LEADER');
+  const isAgency = currentUser.is_agency === true;
 
-  let menuKey = (isTeam || isLeader) ? 'TEAM_LEADER' : isRegion ? 'REGION' : 'HQ';
+  let menuKey = isAgency ? 'AGENCY' : (isTeam || isLeader) ? 'TEAM_LEADER' : isRegion ? 'REGION' : 'HQ';
   const menuItems = OMS.MENU_ITEMS[menuKey] || [];
 
-  const orgBadge = isHQ ? 'bg-blue-100 text-blue-700' : isRegion ? 'bg-purple-100 text-purple-700' : isTeam ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700';
-  const roleLabel = { SUPER_ADMIN: '총괄관리자', HQ_OPERATOR: 'HQ운영자', REGION_ADMIN: '파트장', TEAM_LEADER: '팀장', AUDITOR: '감사' };
+  const orgBadge = isAgency ? 'bg-teal-100 text-teal-700' : isHQ ? 'bg-blue-100 text-blue-700' : isRegion ? 'bg-purple-100 text-purple-700' : isTeam ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700';
+  const roleLabel = { SUPER_ADMIN: '총괄관리자', HQ_OPERATOR: 'HQ운영자', REGION_ADMIN: '파트장', AGENCY_LEADER: '대리점장', TEAM_LEADER: '팀장', AUDITOR: '감사' };
 
   // 그룹별 메뉴
   let lastGroup = '';
@@ -111,7 +114,7 @@ function renderLayout() {
           </div>
           <div>
             <div class="font-bold text-gray-800">다하다 OMS</div>
-            <div class="text-xs text-gray-400">v5.1 · ${menuKey}</div>
+            <div class="text-xs text-gray-400">v7.0 · ${menuKey}</div>
           </div>
         </div>
       </div>

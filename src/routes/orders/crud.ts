@@ -19,7 +19,7 @@ export function mountCrud(router: Hono<Env>) {
 
     const user = c.get('user')!;
     const db = c.env.DB;
-    const { status, page, limit, from, to, search, region_org_id, team_leader_id } = c.req.query();
+    const { status, page, limit, from, to, search, region_org_id, team_leader_id, channel_id } = c.req.query();
     const pg = normalizePagination(page, limit);
 
     // ★ Scope Engine 적용 — 역할/조직 기반 자동 필터
@@ -38,6 +38,7 @@ export function mountCrud(router: Hono<Env>) {
     // HQ/REGION만 추가 필터 사용 가능
     if (region_org_id && scope.isGlobal) { conditions.push('od.region_org_id = ?'); params.push(Number(region_org_id)); }
     if (team_leader_id && (scope.isGlobal || user.org_type === 'REGION')) { conditions.push('oa.team_leader_id = ?'); params.push(Number(team_leader_id)); }
+    if (channel_id) { conditions.push('o.channel_id = ?'); params.push(Number(channel_id)); }
 
     const where = 'WHERE ' + conditions.join(' AND ');
 
@@ -52,8 +53,10 @@ export function mountCrud(router: Hono<Env>) {
     const result = await db.prepare(`
       SELECT o.*, od.region_org_id, org.name as region_name,
              oa.team_leader_id, tl.name as team_leader_name,
-             oa.status as assignment_status, oa.assigned_at
+             oa.status as assignment_status, oa.assigned_at,
+             ch.name as channel_name, ch.code as channel_code
       FROM orders o
+      LEFT JOIN order_channels ch ON o.channel_id = ch.channel_id
       LEFT JOIN order_distributions od ON o.order_id = od.order_id AND od.status = 'ACTIVE'
       LEFT JOIN organizations org ON od.region_org_id = org.org_id
       LEFT JOIN order_assignments oa ON o.order_id = oa.order_id AND oa.status != 'REASSIGNED'
@@ -151,15 +154,16 @@ export function mountCrud(router: Hono<Env>) {
 
     const result = await db.prepare(`
       INSERT INTO orders (external_order_no, source_fingerprint, service_type, customer_name, customer_phone,
-        address_text, address_detail, admin_dong_code, legal_dong_code, requested_date, scheduled_date, base_amount, memo, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
+        address_text, address_detail, admin_dong_code, legal_dong_code, requested_date, scheduled_date, base_amount, memo, channel_id, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
     `).bind(
       body.external_order_no || null, fingerprint, body.service_type || 'DEFAULT',
       body.customer_name || null, body.customer_phone || null,
       body.address_text, body.address_detail || null,
       body.admin_dong_code || null, body.legal_dong_code || null,
       body.requested_date || new Date().toISOString().split('T')[0],
-      body.scheduled_date || null, body.base_amount || 0, body.memo || null
+      body.scheduled_date || null, body.base_amount || 0, body.memo || null,
+      body.channel_id || 1
     ).run();
 
     const orderId = result.meta.last_row_id;

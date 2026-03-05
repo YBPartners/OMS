@@ -42,20 +42,31 @@ INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, pho
   (11, 4, 'leader_incheon_1',  '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '정팀장', '01033331001', NULL, 'ACTIVE', 1, '2024-05-01', '남동/연수 담당'),
   (12, 5, 'leader_busan_1',    '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '한팀장', '01044441001', NULL, 'ACTIVE', 1, '2024-05-01', '해운대/부산진 담당');
 
--- 역할 매핑
-INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES
-  (1, 1),   -- admin → SUPER_ADMIN
-  (2, 2),   -- hq_operator → HQ_OPERATOR
-  (3, 3),   -- seoul_admin → REGION_ADMIN
-  (4, 3),   -- gyeonggi_admin → REGION_ADMIN
-  (5, 3),   -- incheon_admin → REGION_ADMIN
-  (6, 3),   -- busan_admin → REGION_ADMIN
-  (7, 4),   -- leader_seoul_1 → TEAM_LEADER
-  (8, 4),   -- leader_seoul_2 → TEAM_LEADER
-  (9, 4),   -- leader_gyeonggi_1 → TEAM_LEADER
-  (10, 4),  -- leader_gyeonggi_2 → TEAM_LEADER
-  (11, 4),  -- leader_incheon_1 → TEAM_LEADER
-  (12, 4);  -- leader_busan_1 → TEAM_LEADER
+-- 역할 매핑 (코드 기반 조회)
+INSERT OR IGNORE INTO user_roles (user_id, role_id) 
+  SELECT 1, role_id FROM roles WHERE code = 'SUPER_ADMIN';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) 
+  SELECT 2, role_id FROM roles WHERE code = 'HQ_OPERATOR';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) 
+  SELECT 3, role_id FROM roles WHERE code = 'REGION_ADMIN';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) 
+  SELECT 4, role_id FROM roles WHERE code = 'REGION_ADMIN';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) 
+  SELECT 5, role_id FROM roles WHERE code = 'REGION_ADMIN';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) 
+  SELECT 6, role_id FROM roles WHERE code = 'REGION_ADMIN';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) 
+  SELECT 7, role_id FROM roles WHERE code = 'TEAM_LEADER';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) 
+  SELECT 8, role_id FROM roles WHERE code = 'TEAM_LEADER';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) 
+  SELECT 9, role_id FROM roles WHERE code = 'TEAM_LEADER';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) 
+  SELECT 10, role_id FROM roles WHERE code = 'TEAM_LEADER';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) 
+  SELECT 11, role_id FROM roles WHERE code = 'TEAM_LEADER';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) 
+  SELECT 12, role_id FROM roles WHERE code = 'TEAM_LEADER';
 
 -- 지역권: 행정동 데이터 (서울)
 INSERT OR IGNORE INTO territories (territory_id, sido, sigungu, eupmyeondong, admin_dong_code, legal_dong_code) VALUES
@@ -175,3 +186,21 @@ INSERT OR IGNORE INTO order_status_history (order_id, from_status, to_status, ac
   (1, 'IN_PROGRESS', 'SUBMITTED', 7, '보고서 제출', '2026-03-01 15:00:00'),
   (1, 'SUBMITTED', 'REGION_APPROVED', 3, '1차 검수 승인', '2026-03-01 16:00:00'),
   (1, 'REGION_APPROVED', 'HQ_APPROVED', 2, '최종 검수 승인', '2026-03-01 17:00:00');
+
+-- ============================================================
+-- 대리점(AGENCY) 테스트 데이터 (Phase 7.0)
+-- ============================================================
+
+-- 김팀장(user_id=7)을 서울지역 대리점장으로 지정
+-- AGENCY_LEADER 역할 추가 (role_id는 roles 테이블에서 조회)
+INSERT OR IGNORE INTO user_roles (user_id, role_id)
+  SELECT 7, role_id FROM roles WHERE code = 'AGENCY_LEADER';
+
+-- 김팀장(7) 대리점에 이팀장(8)을 소속시킴
+INSERT OR IGNORE INTO agency_team_mappings (agency_user_id, team_user_id) VALUES (7, 8);
+
+-- 추가 주문 채널 등록
+INSERT OR IGNORE INTO order_channels (channel_id, name, code, description, is_active, priority) VALUES
+  (2, 'KT 주문원장', 'KT_ORDERS', 'KT 통신사 주문 채널', 1, 10),
+  (3, 'LG U+ 주문원장', 'LGU_ORDERS', 'LG U+ 통신사 주문 채널', 1, 9),
+  (4, 'SK 주문원장', 'SK_ORDERS', 'SK 통신사 주문 채널', 1, 8);

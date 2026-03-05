@@ -1,6 +1,7 @@
 // ============================================================
-// 다하다 OMS — Core Auth & Routing Module v3.0
+// 다하다 OMS — Core Auth & Routing Module v7.0
 // 인증, 권한, 라우팅, 레이아웃
+// v7.0: AGENCY_LEADER 라우팅 지원
 // ============================================================
 
 window.OMS = window.OMS || {};
@@ -54,8 +55,14 @@ function canEdit(entity) {
     case 'commission': return roles.some(r => ['HQ_OPERATOR', 'REGION_ADMIN', 'SUPER_ADMIN'].includes(r));
     case 'organization': return roles.includes('SUPER_ADMIN');
     case 'policy': return roles.some(r => ['HQ_OPERATOR', 'SUPER_ADMIN'].includes(r));
+    case 'agency': return roles.some(r => ['HQ_OPERATOR', 'REGION_ADMIN', 'SUPER_ADMIN'].includes(r));
     default: return false;
   }
+}
+
+// ─── 대리점 여부 확인 ───
+function isAgencyLeader() {
+  return currentUser && currentUser.is_agency === true;
 }
 
 // ─── 라우팅 ───
@@ -63,7 +70,6 @@ function navigateTo(page) {
   if (!hasPermission(page)) { showToast('접근 권한이 없습니다.', 'error'); return; }
   currentPage = page;
   renderContent();
-  // URL 해시 업데이트
   history.pushState(null, '', `#${page}`);
 }
 
@@ -73,7 +79,6 @@ async function renderContent() {
   if (!el) return;
   showLoading(el);
   
-  // 사이드바 active 업데이트
   document.querySelectorAll('.sidebar-item').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.page === currentPage);
   });
@@ -83,6 +88,7 @@ async function renderContent() {
       case 'dashboard': await renderDashboard(el); break;
       case 'orders': await renderOrders(el); break;
       case 'distribute': await renderDistribute(el); break;
+      case 'channels': await renderChannels(el); break;
       case 'review-hq': await renderReviewHQ(el); break;
       case 'review-region': await renderReviewRegion(el); break;
       case 'settlement': await renderSettlement(el); break;
@@ -96,6 +102,10 @@ async function renderContent() {
       case 'my-orders': await renderMyOrders(el); break;
       case 'my-stats': await renderMyStats(el); break;
       case 'my-profile': await renderMyProfile(el); break;
+      // v7.0: 대리점 전용 페이지
+      case 'agency-dashboard': await renderAgencyDashboard(el); break;
+      case 'agency-orders': await renderAgencyOrders(el); break;
+      case 'agency-team': await renderAgencyTeam(el); break;
       default: el.innerHTML = '<div class="text-center py-16 text-gray-400"><i class="fas fa-compass text-5xl mb-4"></i><p class="text-lg">페이지를 찾을 수 없습니다.</p></div>';
     }
   } catch (err) {

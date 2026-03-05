@@ -60,6 +60,18 @@ auth.post('/login', async (c) => {
     SELECT r.code FROM user_roles ur JOIN roles r ON ur.role_id = r.role_id WHERE ur.user_id = ?
   `).bind(user.user_id).all();
 
+  const roleCodes = roles.results.map((r: any) => r.code);
+  const isAgency = roleCodes.includes('AGENCY_LEADER');
+
+  // 대리점장인 경우 하위 팀장 목록 조회
+  let agencyTeamIds: number[] | undefined;
+  if (isAgency) {
+    const teamMappings = await db.prepare(
+      'SELECT team_user_id FROM agency_team_mappings WHERE agency_user_id = ?'
+    ).bind(user.user_id).all();
+    agencyTeamIds = teamMappings.results.map((r: any) => r.team_user_id as number);
+  }
+
   // ★ Session Service를 통한 세션 생성 (도메인 분리)
   const { sessionId, expiresAt } = await createSession(db, user.user_id as number);
 
@@ -81,7 +93,9 @@ auth.post('/login', async (c) => {
       org_name: user.org_name,
       login_id: user.login_id,
       name: user.name,
-      roles: roles.results.map((r: any) => r.code),
+      roles: roleCodes,
+      is_agency: isAgency,
+      agency_team_ids: agencyTeamIds,
     }
   }, 200, { 'Set-Cookie': setCookie });
 });

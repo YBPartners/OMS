@@ -21,6 +21,7 @@ async function renderHRManagement(el) {
         ${isAdmin ? `<button onclick="window._hrTab='region-add';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'region-add' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-map-pin mr-1"></i>추가지역</button>` : ''}
         <button onclick="window._hrTab='commission';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'commission' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-percent mr-1"></i>수수료 설정</button>
         <button onclick="window._hrTab='phone';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'phone' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-mobile-alt mr-1"></i>폰인증</button>
+        ${isAdmin || isRegion ? `<button onclick="window._hrTab='agency';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'agency' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-store mr-1"></i>대리점 관리</button>` : ''}
       </div>
       <div id="hr-content"></div>
     </div>`;
@@ -34,6 +35,7 @@ async function renderHRManagement(el) {
     case 'region-add': await renderHRRegionAddRequests(hrEl); break;
     case 'commission': await renderHRCommission(hrEl); break;
     case 'phone': renderHRPhone(hrEl); break;
+    case 'agency': await renderHRAgency(hrEl); break;
   }
 }
 
@@ -576,4 +578,209 @@ function showHRUserContextMenu(event, user) {
   ];
 
   showContextMenu(event.clientX, event.clientY, items, { title: `${u.name} (${u.login_id})` });
+}
+
+// ─── 대리점(AGENCY) 관리 탭 ───
+async function renderHRAgency(el) {
+  const res = await api('GET', '/hr/agencies');
+  const agencies = res?.agencies || [];
+
+  el.innerHTML = `
+    <div class="bg-white rounded-xl p-4 mb-4 border border-gray-100 flex items-center justify-between">
+      <div class="text-sm text-gray-600">
+        <i class="fas fa-store mr-1 text-teal-500"></i>대리점: <strong>${agencies.length}</strong>개
+        <span class="ml-4 text-xs text-gray-400">팀장에게 대리점 권한을 부여하면 하위 팀장을 관리할 수 있습니다.</span>
+      </div>
+      <button onclick="showPromoteAgencyModal()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
+        <i class="fas fa-store mr-1"></i>대리점 지정
+      </button>
+    </div>
+
+    ${agencies.length > 0 ? `
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      ${agencies.map(a => `
+        <div class="bg-white rounded-xl p-5 border border-gray-100 hover:shadow-md transition">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 bg-teal-100 rounded-xl flex items-center justify-center">
+                <i class="fas fa-store text-teal-600"></i>
+              </div>
+              <div>
+                <div class="font-bold text-gray-800">${a.name}
+                  <span class="ml-2 status-badge bg-teal-100 text-teal-700">대리점장</span>
+                </div>
+                <div class="text-xs text-gray-500">${a.region_name || ''} · ${a.org_name || ''} · ${formatPhone(a.phone)}</div>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-xl font-bold text-purple-600">${a.team_count || 0}</div>
+              <div class="text-[10px] text-gray-400">소속 팀장</div>
+            </div>
+          </div>
+          <div class="flex gap-2 border-t pt-3">
+            <button onclick="showAgencyDetailModal(${a.user_id}, '${a.name}')" class="flex-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs hover:bg-blue-100">
+              <i class="fas fa-eye mr-1"></i>상세/팀장관리
+            </button>
+            <button onclick="demoteAgency(${a.user_id}, '${a.name}')" class="px-3 py-1.5 bg-red-50 text-red-700 rounded-lg text-xs hover:bg-red-100">
+              <i class="fas fa-ban mr-1"></i>대리점 해제
+            </button>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    ` : `
+    <div class="bg-white rounded-xl p-12 text-center text-gray-400 border">
+      <i class="fas fa-store text-5xl mb-4"></i>
+      <p class="text-lg">등록된 대리점이 없습니다</p>
+      <p class="text-sm mt-2">팀장에게 대리점 권한을 부여하세요.</p>
+    </div>
+    `}`;
+}
+
+// ─── 대리점 지정 (팀장 → AGENCY_LEADER) ───
+async function showPromoteAgencyModal() {
+  const leadersRes = await api('GET', '/auth/team-leaders');
+  const leaders = leadersRes?.team_leaders || [];
+
+  const content = `
+    <div class="space-y-4">
+      <p class="text-sm text-gray-600">대리점장으로 지정할 팀장을 선택하세요. 대리점장은 하위 팀장의 주문을 관리할 수 있습니다.</p>
+      <div class="space-y-2 max-h-96 overflow-y-auto">
+        ${leaders.map(l => `
+          <button onclick="promoteToAgency(${l.user_id}, '${l.name}')"
+            class="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-lg hover:bg-teal-50 hover:border-teal-300 border border-gray-200 transition text-left">
+            <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+              <i class="fas fa-user text-green-600"></i>
+            </div>
+            <div class="flex-1">
+              <div class="font-medium">${l.name}</div>
+              <div class="text-xs text-gray-500">${l.org_name || ''} · ${formatPhone(l.phone)}</div>
+            </div>
+            <i class="fas fa-arrow-right text-gray-300"></i>
+          </button>
+        `).join('')}
+        ${leaders.length === 0 ? '<p class="text-center text-gray-400 py-4">팀장이 없습니다</p>' : ''}
+      </div>
+    </div>`;
+  showModal('대리점 지정', content);
+}
+
+async function promoteToAgency(userId, name) {
+  closeModal();
+  showConfirmModal('대리점 지정', `<strong>${name}</strong>님을 대리점장으로 지정하시겠습니까?<br><span class="text-xs text-gray-400">대리점장은 하위 팀장의 주문 관리/검수 권한을 가집니다.</span>`,
+    async () => {
+      const res = await api('POST', '/hr/agencies/promote', { user_id: userId });
+      if (res?.ok) { showToast(res.message || '대리점 지정 완료', 'success'); renderContent(); }
+      else showToast(res?.error || '지정 실패', 'error');
+    }, '지정', 'bg-teal-600');
+}
+
+function demoteAgency(userId, name) {
+  showConfirmModal('대리점 해제', `<strong>${name}</strong>님의 대리점 권한을 해제하시겠습니까?<br><span class="text-xs text-red-500">하위 팀장 매핑도 모두 해제됩니다.</span>`,
+    async () => {
+      const res = await api('POST', '/hr/agencies/demote', { user_id: userId });
+      if (res?.ok) { showToast('대리점 해제 완료', 'success'); renderContent(); }
+      else showToast(res?.error || '해제 실패', 'error');
+    }, '해제', 'bg-red-600');
+}
+
+// ─── 대리점 상세 모달 (하위 팀장 관리) ───
+async function showAgencyDetailModal(agencyUserId, agencyName) {
+  const [detailRes, candidatesRes] = await Promise.all([
+    api('GET', `/hr/agencies/${agencyUserId}`),
+    api('GET', `/hr/agencies/${agencyUserId}/candidates`),
+  ]);
+  const teamMembers = detailRes?.team_members || [];
+  const candidates = candidatesRes?.candidates || [];
+
+  const content = `
+    <div class="space-y-6">
+      <div class="bg-teal-50 rounded-xl p-4 border border-teal-200">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 bg-teal-200 rounded-xl flex items-center justify-center">
+            <i class="fas fa-store text-teal-600 text-xl"></i>
+          </div>
+          <div>
+            <div class="text-lg font-bold text-teal-800">${agencyName}</div>
+            <div class="text-sm text-teal-600">소속 팀장 ${teamMembers.length}명</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 현재 소속 팀장 -->
+      <div>
+        <h4 class="font-semibold mb-3"><i class="fas fa-users mr-1 text-purple-500"></i>소속 팀장 (${teamMembers.length}명)</h4>
+        ${teamMembers.length > 0 ? `
+        <div class="space-y-2">
+          ${teamMembers.map(m => `
+            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                  <i class="fas fa-user text-purple-600 text-xs"></i>
+                </div>
+                <div>
+                  <div class="font-medium text-sm">${m.name}</div>
+                  <div class="text-xs text-gray-400">${m.org_name} · 활성주문 ${m.active_orders || 0}건</div>
+                </div>
+              </div>
+              <button onclick="removeTeamFromAgency(${agencyUserId}, ${m.user_id}, '${m.name}', '${agencyName}')"
+                class="px-2 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100">
+                <i class="fas fa-times mr-1"></i>제거
+              </button>
+            </div>
+          `).join('')}
+        </div>
+        ` : '<p class="text-sm text-gray-400 text-center py-4">소속 팀장이 없습니다</p>'}
+      </div>
+
+      <!-- 추가 가능한 팀장 -->
+      <div>
+        <h4 class="font-semibold mb-3"><i class="fas fa-user-plus mr-1 text-green-500"></i>추가 가능한 팀장 (${candidates.length}명)</h4>
+        ${candidates.length > 0 ? `
+        <div class="space-y-2 max-h-48 overflow-y-auto">
+          ${candidates.map(c => `
+            <div class="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                  <i class="fas fa-user text-green-600 text-xs"></i>
+                </div>
+                <div>
+                  <div class="font-medium text-sm">${c.name}</div>
+                  <div class="text-xs text-gray-400">${c.org_name} · ${formatPhone(c.phone)}</div>
+                </div>
+              </div>
+              <button onclick="addTeamToAgency(${agencyUserId}, ${c.user_id}, '${c.name}', '${agencyName}')"
+                class="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700">
+                <i class="fas fa-plus mr-1"></i>추가
+              </button>
+            </div>
+          `).join('')}
+        </div>
+        ` : '<p class="text-sm text-gray-400 text-center py-4">추가 가능한 팀장이 없습니다</p>'}
+      </div>
+    </div>`;
+
+  showModal(`대리점 상세 — ${agencyName}`, content, `
+    <button onclick="closeModal();renderContent()" class="px-5 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm">닫기</button>`, { large: true });
+}
+
+async function addTeamToAgency(agencyUserId, teamUserId, teamName, agencyName) {
+  const res = await api('POST', `/hr/agencies/${agencyUserId}/add-team`, { team_user_id: teamUserId });
+  if (res?.ok) {
+    showToast(`${teamName}님이 ${agencyName} 대리점에 추가되었습니다.`, 'success');
+    closeModal();
+    showAgencyDetailModal(agencyUserId, agencyName);
+  } else showToast(res?.error || '추가 실패', 'error');
+}
+
+async function removeTeamFromAgency(agencyUserId, teamUserId, teamName, agencyName) {
+  showConfirmModal('팀장 제거', `<strong>${teamName}</strong>님을 <strong>${agencyName}</strong> 대리점에서 제거하시겠습니까?`,
+    async () => {
+      const res = await api('POST', `/hr/agencies/${agencyUserId}/remove-team`, { team_user_id: teamUserId });
+      if (res?.ok) {
+        showToast('제거 완료', 'success');
+        closeModal();
+        showAgencyDetailModal(agencyUserId, agencyName);
+      } else showToast(res?.error || '제거 실패', 'error');
+    }, '제거', 'bg-red-600');
 }

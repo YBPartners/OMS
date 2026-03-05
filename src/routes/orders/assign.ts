@@ -12,7 +12,7 @@ export function mountAssign(router: Hono<Env>) {
 
   // ─── 팀장 배정 (칸반 드래그앤드롭) ───
   router.post('/:order_id/assign', async (c) => {
-    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'AGENCY_LEADER']);
     if (authErr) return authErr;
 
     const user = c.get('user')!;
@@ -21,6 +21,14 @@ export function mountAssign(router: Hono<Env>) {
     const { team_leader_id } = await c.req.json();
 
     if (!team_leader_id) return c.json({ error: '팀장 ID는 필수입니다.' }, 400);
+
+    // ★ Scope 검증: AGENCY_LEADER는 하위 팀장에게만
+    if (user.roles.includes('AGENCY_LEADER') && user.org_type === 'TEAM' && !user.roles.includes('SUPER_ADMIN')) {
+      const agencyTeamIds = user.agency_team_ids || [];
+      if (!agencyTeamIds.includes(team_leader_id) && team_leader_id !== user.user_id) {
+        return c.json({ error: '하위 팀장에게만 배정할 수 있습니다.' }, 403);
+      }
+    }
 
     // ★ Scope 검증: REGION은 자기 배분 주문만
     if (user.org_type === 'REGION') {
@@ -63,7 +71,7 @@ export function mountAssign(router: Hono<Env>) {
 
   // ─── 배치 배정 (다중 주문 → 한 팀장) ───
   router.post('/batch-assign', async (c) => {
-    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'AGENCY_LEADER']);
     if (authErr) return authErr;
 
     const user = c.get('user')!;
@@ -110,7 +118,7 @@ export function mountAssign(router: Hono<Env>) {
 
   // ─── 배정 해제 (ASSIGNED → DISTRIBUTED) ───
   router.post('/:order_id/unassign', async (c) => {
-    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'AGENCY_LEADER']);
     if (authErr) return authErr;
 
     const user = c.get('user')!;

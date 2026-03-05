@@ -12,7 +12,7 @@ export function mountReview(router: Hono<Env>) {
 
   // ─── 1차 검수 (REGION) ───
   router.post('/:order_id/review/region', async (c) => {
-    const authErr = requireAuth(c, ['SUPER_ADMIN', 'REGION_ADMIN']);
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'REGION_ADMIN', 'AGENCY_LEADER']);
     if (authErr) return authErr;
 
     const user = c.get('user')!;

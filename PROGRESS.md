@@ -1,8 +1,8 @@
 # 다하다 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-05
-> **현재 버전**: v6.5.0
-> **총 코드량**: Backend 6,696줄 (44 TS) + Services 620줄 + Frontend 7,031줄 (20 JS) + SQL 1,880줄 = **16,227줄**
+> **현재 버전**: v7.0.0
+> **총 코드량**: Backend 7,148줄 (45 TS) + Services 620줄 + Frontend 7,814줄 (22 JS) + SQL 930줄 = **16,512줄**
 
 ---
 
@@ -18,6 +18,65 @@
 | 5 | Kanban 강화 + 감사로그 + 배포 | ✅ 완료 | 2026-03-04 | 칸반 개선, 감사 UI, CF Pages 프로덕션 배포 |
 | 6 | 인터랙션 디자인 시스템 | ✅ 완료 | 2026-03-05 | 드로어/팝오버/컨텍스트메뉴/호버프리뷰 |
 | 6.5 | 서비스 레이어 리팩터링 | ✅ 완료 | 2026-03-05 | 5개 서비스, 모듈 간 교차 의존성 해소 |
+| **7.0** | **다채널 + 대리점 계층** | **✅ 완료** | **2026-03-05** | **주문 채널 관리, AGENCY_LEADER 역할, 대리점 전용 UI** |
+
+---
+
+## Phase 7.0 — 다채널 원장 + 대리점(AGENCY) 계층 ✅ (신규)
+
+> **목적**: 다수 주문원장(채널) 관리 + 총판-팀장 사이 대리점 중간 계층 추가
+
+### 7-1: DB 마이그레이션 (0006_channels_agency.sql) ✅
+- `order_channels` 테이블 (채널 ID, 이름, 코드, 우선순위, 활성 상태)
+- `agency_team_mappings` 테이블 (대리점-팀장 매핑)
+- `orders.channel_id` 컬럼 추가 (기존 주문 → 기본 채널 자동 설정)
+- `order_import_batches.channel_id` 컬럼 추가
+- `commission_policies.updated_at` 컬럼 추가 (기존 이슈 #3 해결)
+- `AGENCY_LEADER` 역할 roles 테이블 INSERT
+
+### 7-2: 주문 채널 API ✅
+- `GET /api/hr/channels` — 채널 목록 (채널별 주문 수/금액 통계 포함)
+- `POST /api/hr/channels` — 채널 생성 (코드 중복 체크, 감사 로그)
+- `PUT /api/hr/channels/:channel_id` — 채널 수정
+
+### 7-3: 대리점 API ✅
+- `GET /api/hr/agencies` — 대리점 목록 (Scope 적용)
+- `GET /api/hr/agencies/:user_id` — 대리점 상세 (하위 팀장 목록)
+- `POST /api/hr/agencies/promote` — 대리점 권한 부여 (TEAM_LEADER → +AGENCY_LEADER)
+- `POST /api/hr/agencies/demote` — 대리점 권한 해제 (매핑 제거)
+- `POST /api/hr/agencies/:agency_id/add-team` — 하위 팀장 추가
+- `POST /api/hr/agencies/:agency_id/remove-team` — 하위 팀장 제거
+- `GET /api/hr/agencies/:agency_id/candidates` — 배정 가능한 팀장 후보
+
+### 7-4: 타입/Scope/State Machine 확장 ✅
+- `RoleCode`에 `AGENCY_LEADER` 추가
+- `NotificationType`에 `AGENCY_PROMOTED`, `AGENCY_DEMOTED` 추가
+- `AuditEventCode`에 `AGENCY.*`, `CHANNEL.*` 추가
+- `SessionUser`에 `is_agency`, `agency_team_ids` 필드 추가
+- `STATUS_TRANSITIONS`: DISTRIBUTED→ASSIGNED에 AGENCY_LEADER 허용
+- `STATUS_TRANSITIONS`: SUBMITTED→검수에 AGENCY_LEADER 허용
+- Scope Engine v7.0: AGENCY_LEADER 스코프 (자신 + 하위 팀장 데이터)
+
+### 7-5: 프론트엔드 ✅
+- `channels.js` (145줄) — 주문 채널 관리 페이지
+- `agency.js` (400줄) — 대리점 대시보드 + 주문관리 + 소속 팀장
+- `constants.js` 업데이트 — AGENCY 메뉴/권한 추가, ROLE_LABELS
+- `auth.js` 업데이트 — 대리점 라우팅 3페이지 추가, `isAgencyLeader()` 함수
+- `app.js` 업데이트 — AGENCY 메뉴 그룹 감지
+
+### 7-6: 기존 코드 수정 ✅
+- `orders/assign.ts` — AGENCY_LEADER 배정/배치배정/해제 권한 추가 + Scope 검증
+- `orders/crud.ts` — channel_id 필터/조회 반영
+- `orders/review.ts` — AGENCY_LEADER 1차 검수 권한
+- `session-service.ts` — AGENCY_LEADER 세션에 is_agency, agency_team_ids 로딩
+- `hr/index.ts` — channels-agency 라우트 마운트
+- `index.tsx` — agency.js, channels.js 스크립트 태그 추가, 버전 7.0.0
+- `seed.sql` — 대리점 테스트 데이터 추가
+
+### 변경 통계
+- 14 files changed, 438 insertions(+), 90 deletions(-)
+- 신규 파일 3개: channels-agency.ts (373줄), channels.js (145줄), agency.js (400줄)
+- 마이그레이션 1개: 0006_channels_agency.sql (48줄)
 
 ---
 
@@ -75,7 +134,7 @@
 
 ---
 
-## Phase 6.5 — 서비스 레이어 리팩터링 ✅ (신규)
+## Phase 6.5 — 서비스 레이어 리팩터링 ✅
 
 > **목적**: 모듈 간 직접 DB 접근 → 서비스 계층 경유로 의존성 방향 단일화
 
@@ -97,40 +156,41 @@
 - `routes/signup/index.ts` — 50줄 HR INSERT → `createTeamWithLeader()` + `notifySignupApproved()`
 - `routes/signup/region-add.ts` — 15줄 알림 로직 → `notifyRegionAddComplete()`
 
-### 변경 통계
-- 13 files changed, 688 insertions(+), 261 deletions(-)
-- 빌드 성공: 68 modules, 175 KB
-- 모든 API 정상 작동 확인 (로그인/세션/HR/주문/알림/권한/범위)
-
 ---
 
-## Phase 7 이후 — 미구현 / 향후 계획
+## Phase 8 이후 — 미구현 / 향후 계획
 
-### 7-1: 데이터 시각화 강화 (미구현)
+### 8-1: 데이터 시각화 강화 (미구현)
 - [ ] Dashboard 실시간 차트 (Chart.js 활용)
 - [ ] 매출 추이 그래프
 - [ ] 지역별 히트맵
 - [ ] 정산 현황 차트
 
-### 7-2: 모바일/반응형 최적화 (미구현)
+### 8-2: 모바일/반응형 최적화 (미구현)
 - [ ] 사이드바 → 바텀 네비게이션
 - [ ] 터치 제스처 지원 (스와이프 승인/반려)
 - [ ] 모바일 칸반 뷰
 
-### 7-3: 알림 고도화 (미구현)
+### 8-3: 알림 고도화 (미구현)
 - [ ] 웹 푸시 알림 (Service Worker)
 - [ ] 이메일 알림 연동
 - [ ] 알림 설정 (유형별 on/off)
 
-### 7-4: 보고서/엑셀 출력 (미구현)
+### 8-4: 보고서/엑셀 출력 (미구현)
 - [ ] 정산 보고서 PDF 출력
 - [ ] 주문 목록 엑셀 다운로드
 - [ ] 통계 CSV 내보내기 (현재 일부 구현)
 
-### 7-5: 성능 최적화 (미구현)
+### 8-5: 성능 최적화 (미구현)
 - [ ] 프론트엔드 번들 최적화 (현재 CDN 의존)
 - [ ] DB 인덱스 최적화
 - [ ] 캐시 전략 (KV 활용)
+
+### 8-6: 대리점 기능 고도화 (미구현)
+- [ ] 대리점 수수료 자동 분배
+- [ ] 대리점별 정산 명세
+- [ ] 대리점 가입 워크플로
+- [ ] 채널별 수수료 정책
 
 ---
 
@@ -140,7 +200,7 @@
 |---|------|------|------|
 | 1 | ~~로그인 실패~~ | ✅ 해결 | seed.sql 재적용으로 해결 |
 | 2 | ~~드로어 닫기 버그~~ | ✅ 해결 | race condition 수정 |
-| 3 | 수수료 정책 updated_at 컬럼 없음 | ⚠️ 미해결 | D1_ERROR: no such column: updated_at |
+| 3 | ~~commission_policies updated_at 컬럼 없음~~ | ✅ 해결 | 0006 마이그레이션에서 ALTER TABLE 추가 |
 | 4 | 가입 요청 SQL syntax error | ⚠️ 미해결 | near ")": syntax error at offset 98 |
 | 5 | Tailwind CDN 프로덕션 경고 | ℹ️ 경미 | PostCSS 설치 권장 |
 

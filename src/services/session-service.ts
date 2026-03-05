@@ -110,6 +110,18 @@ export async function validateSession(
     'SELECT r.code FROM user_roles ur JOIN roles r ON ur.role_id = r.role_id WHERE ur.user_id = ?'
   ).bind(session.user_id).all();
 
+  const roleCodes = roles.results.map((r: any) => r.code as RoleCode);
+  const isAgency = roleCodes.includes('AGENCY_LEADER');
+
+  // 대리점장인 경우 하위 팀장 목록 조회
+  let agencyTeamIds: number[] | undefined;
+  if (isAgency) {
+    const teamMappings = await db.prepare(
+      'SELECT team_user_id FROM agency_team_mappings WHERE agency_user_id = ?'
+    ).bind(session.user_id).all();
+    agencyTeamIds = teamMappings.results.map((r: any) => r.team_user_id as number);
+  }
+
   return {
     valid: true,
     user: {
@@ -119,7 +131,9 @@ export async function validateSession(
       login_id: session.login_id as string,
       name: session.name as string,
       org_name: session.org_name as string,
-      roles: roles.results.map((r: any) => r.code as RoleCode),
+      roles: roleCodes,
+      is_agency: isAgency,
+      agency_team_ids: agencyTeamIds,
     },
   };
 }

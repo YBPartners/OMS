@@ -1,7 +1,7 @@
 # 다하다 OMS — 구현 추적 문서 (Implementation Tracker)
 
 > **최종 업데이트**: 2026-03-05
-> **버전**: v6.5.0
+> **버전**: v7.0.0
 > **이 문서는 대화 압축/토큰 초과 시 컨텍스트 복구용입니다.**
 > **항상 이 파일 + ARCHITECTURE.md + PROGRESS.md 를 먼저 읽어 현재 진행 상황을 파악하세요.**
 
@@ -22,12 +22,13 @@
 
 ## 현재 상태 요약
 
-- **전체 Phase**: 0~6.5 완료 (Phase 6 인터랙션 + Phase 6.5 서비스 레이어)
+- **전체 Phase**: 0~7.0 완료 (Phase 7.0: 다채널 원장 + 대리점 계층)
 - **프로덕션 배포**: ✅ https://dahada-oms.pages.dev
 - **로컬 개발**: ✅ PM2 + wrangler pages dev, port 3000
 - **서비스 레이어**: ✅ 5개 서비스, 모듈 간 교차 의존성 해소
-- **알려진 이슈**: commission_policies updated_at 컬럼 누락, signup SQL syntax error (2건 미해결)
-- **총 코드량**: Backend 6,696줄 + Services 620줄 + Frontend 7,031줄 + SQL 1,880줄 = **16,227줄**
+- **v7.0 신규**: ✅ 주문 채널 관리, AGENCY_LEADER 역할/스코프/UI
+- **알려진 이슈**: signup SQL syntax error (1건 미해결), Tailwind CDN 경고 (경미)
+- **총 코드량**: Backend 7,148줄 (45 TS) + Services 620줄 + Frontend 7,814줄 (22 JS) + SQL 930줄 = **16,512줄**
 
 ---
 
@@ -92,22 +93,34 @@
 - [x] 6-fix: 드로어/팝오버/모달 race condition 수정
 - [x] 6-fix: 로그인 실패 수정 (seed.sql 재적용)
 
-### ✅ Phase 6.5: 서비스 레이어 리팩터링 (신규)
+### ✅ Phase 6.5: 서비스 레이어 리팩터링
 - [x] notification-service.ts (87줄) — 알림 테이블 유일 쓰기 진입점
 - [x] session-service.ts (125줄) — 세션 CRUD/검증/만료정리/무효화
 - [x] hr-service.ts (123줄) — 팀+리더 원자적 생성 (6테이블 배치)
 - [x] order-lifecycle-service.ts (159줄) — 정산 확정 시 주문/통계 일괄 업데이트
 - [x] stats-service.ts (111줄) — 일별 통계 upsert + 정산 확정 통계 배치
 - [x] services/index.ts (15줄) — 전체 서비스 재수출
-- [x] lib/audit.ts 리팩터링 — notification 생성 로직 제거
-- [x] middleware/auth.ts 리팩터링 — session-service.validateSession() 위임
-- [x] routes/auth.ts 리팩터링 — session-service 사용
-- [x] routes/hr/users.ts 리팩터링 — session-service.invalidateUserSessions()
-- [x] routes/settlements/calculation.ts 리팩터링 — order-lifecycle-service 사용
-- [x] routes/signup/index.ts 리팩터링 — hr-service + notification-service 사용
-- [x] routes/signup/region-add.ts 리팩터링 — notification-service 사용
-- [x] 빌드 검증 (68 modules, 175 KB)
-- [x] API 전체 테스트 (로그인/세션/HR/주문/알림/권한/범위)
+- [x] 7개 라우트 파일 리팩터링
+- [x] 빌드 검증 + API 전체 테스트
+
+### ✅ Phase 7.0: 다채널 원장 + 대리점(AGENCY) 계층 (신규)
+- [x] 0006_channels_agency.sql — order_channels, agency_team_mappings, AGENCY_LEADER 역할
+- [x] orders.channel_id, order_import_batches.channel_id, commission_policies.updated_at 추가
+- [x] channels-agency.ts (373줄) — 채널 CRUD 3개 + 대리점 API 7개 엔드포인트
+- [x] channels.js (145줄) — 주문 채널 관리 페이지
+- [x] agency.js (400줄) — 대리점 대시보드/주문관리/소속 팀장 3개 뷰
+- [x] types/index.ts — AGENCY_LEADER 역할, 알림 타입, 감사 이벤트, SessionUser 확장
+- [x] scope-engine.ts v7.0 — AGENCY_LEADER 스코프 (자신 + 하위 팀장)
+- [x] state-machine.ts — DISTRIBUTED→ASSIGNED, SUBMITTED→검수에 AGENCY_LEADER 허용
+- [x] session-service.ts — AGENCY_LEADER 세션에 is_agency, agency_team_ids 로딩
+- [x] orders/assign.ts — AGENCY_LEADER 배정/배치배정/해제 + Scope 검증
+- [x] orders/crud.ts — channel_id 필터/조회
+- [x] orders/review.ts — AGENCY_LEADER 1차 검수
+- [x] constants.js — AGENCY 메뉴/권한/역할라벨
+- [x] auth.js — 대리점 라우팅, isAgencyLeader()
+- [x] app.js — AGENCY 메뉴 그룹
+- [x] seed.sql — 대리점 테스트 데이터
+- [x] index.tsx — 스크립트 태그, 버전 7.0.0
 
 ---
 
@@ -120,10 +133,12 @@
 5. **승인 흐름**: 팀장 가입 → PENDING → 총판 체크리스트+수수료 → APPROVED → 즉시 로그인
 6. **OTP**: 개발모드 (화면 표시), 토큰 기반 30분 만료
 7. **배분**: admin_regions 우선 → 레거시 fallback
-8. **스코프**: getUserScope() 통합 (SUPER_ADMIN=전체, REGION_ADMIN=자기총판+하위팀, TEAM_LEADER=자기팀)
+8. **스코프**: getUserScope() 통합 (SUPER_ADMIN=전체, REGION=자기총판+하위팀, AGENCY=자신+하위팀장, TEAM=자기팀)
 9. **트랜잭션**: D1 batch()로 원자적 실행
 10. **인증**: PBKDF2 + 레거시 SHA-256 자동 마이그레이션, 세션 24시간, 최대 5개
 11. **서비스 레이어**: 도메인 간 DB 쓰기는 서비스 경유 필수, 읽기(SELECT)는 라우트 직접 허용 (v6.5)
+12. **대리점 계층**: 별도 org_type 없이 user_roles + agency_team_mappings로 구현 (v7.0)
+13. **주문 채널**: order_channels 테이블 + orders.channel_id 연결, N개 원장 관리 (v7.0)
 
 ---
 
@@ -141,10 +156,13 @@
 ## 파일 경로 참조
 
 - 프로젝트 루트: `/home/user/webapp/`
-- 백엔드 소스: `/home/user/webapp/src/` (44파일, 6,696줄)
-- **서비스 레이어**: `/home/user/webapp/src/services/` (6파일, 620줄) ← v6.5 신규
-- 프론트엔드: `/home/user/webapp/public/static/js/` (20파일, 7,031줄)
-- 마이그레이션: `/home/user/webapp/migrations/` (5파일)
+- 백엔드 소스: `/home/user/webapp/src/` (45파일, 7,148줄)
+- **서비스 레이어**: `/home/user/webapp/src/services/` (6파일, 620줄)
+- **채널+대리점 API**: `/home/user/webapp/src/routes/hr/channels-agency.ts` (373줄) ← v7.0 신규
+- 프론트엔드: `/home/user/webapp/public/static/js/` (22파일, 7,814줄)
+- **채널 페이지**: `/home/user/webapp/public/static/js/pages/channels.js` (145줄) ← v7.0 신규
+- **대리점 페이지**: `/home/user/webapp/public/static/js/pages/agency.js` (400줄) ← v7.0 신규
+- 마이그레이션: `/home/user/webapp/migrations/` (6파일)
 - 시드 데이터: `/home/user/webapp/seed.sql` + `/home/user/webapp/seed/`
 - 설계 문서: `/home/user/webapp/docs/`
 - 아키텍처: `/home/user/webapp/ARCHITECTURE.md`
@@ -164,3 +182,25 @@
 | order-lifecycle-service | `src/services/order-lifecycle-service.ts` | 159 | confirmSettlementOrders |
 | stats-service | `src/services/stats-service.ts` | 111 | upsertRegionDailyStats, upsertTeamLeaderDailyStats, appendSettlementStatsToBatch |
 | index | `src/services/index.ts` | 15 | (전체 재수출) |
+
+---
+
+## v7.0 신규 API 참조
+
+### 채널 API (hr/channels-agency.ts → mountChannels)
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | /api/hr/channels | 채널 목록 + 주문 수/금액 통계 |
+| POST | /api/hr/channels | 채널 생성 (코드 정규식: `[A-Z0-9_]{2,30}`) |
+| PUT | /api/hr/channels/:channel_id | 채널 수정 |
+
+### 대리점 API (hr/channels-agency.ts → mountAgency)
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | /api/hr/agencies | 대리점 목록 (REGION Scope 적용) |
+| GET | /api/hr/agencies/:user_id | 대리점 상세 + 하위 팀장 (AGENCY 자기만 조회) |
+| POST | /api/hr/agencies/promote | TEAM_LEADER → +AGENCY_LEADER 역할 부여 |
+| POST | /api/hr/agencies/demote | AGENCY_LEADER 역할 해제 + 매핑 삭제 |
+| POST | /api/hr/agencies/:agency_id/add-team | 하위 팀장 추가 (1:1 소속 검증) |
+| POST | /api/hr/agencies/:agency_id/remove-team | 하위 팀장 제거 |
+| GET | /api/hr/agencies/:agency_id/candidates | 같은 총판, 미소속 팀장 목록 |

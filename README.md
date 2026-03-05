@@ -1,8 +1,8 @@
-# 다하다 OMS - 주문관리시스템 v6.5.0
+# 다하다 OMS - 주문관리시스템 v7.0.0
 
 ## 프로젝트 개요
 - **명칭**: 다하다 OMS (Order Management System)
-- **목적**: 원청(아정당) → 다하다(HQ) → 총판(4개) → 팀 구조의 주문 처리/배분/검수/정산/대사/통계 통합 시스템
+- **목적**: 원청(아정당) → 다하다(HQ) → 총판(4개) → 대리점(AGENCY) → 팀 구조의 주문 처리/배분/검수/정산/대사/통계 통합 시스템
 - **설계 원칙**: 고품질 · 자동화 · 정합성 · 보안 우선 · 기능별 분리 설계 · 서비스 레이어 분리
 - **기술 스택**: Hono + TypeScript + Cloudflare Workers + D1 (SQLite) + TailwindCSS + Vanilla JS
 
@@ -44,8 +44,30 @@
 | 5 | Kanban + 감사 + 배포 | ✅ | 칸반, 감사 UI, CF Pages 배포 |
 | 6 | 인터랙션 디자인 | ✅ | 드로어, 팝오버, 컨텍스트메뉴, 호버프리뷰, 배치바 |
 | 6.5 | 서비스 레이어 분리 | ✅ | 5개 서비스, 모듈 간 교차 의존성 해소 |
+| 7.0 | 다채널 + 대리점 계층 | ✅ | 주문 채널 관리, AGENCY_LEADER 역할, 대리점 전용 UI |
 
-## 서비스 레이어 아키텍처 (v6.5 신규)
+## v7.0 신규 기능 — 다채널 원장 + 대리점(AGENCY) 계층
+
+### 조직 계층 확장
+```
+기존: HQ → REGION(총판) → TEAM(팀장)
+확장: HQ → REGION(총판) → AGENCY(대리점장) → TEAM(팀장)
+```
+
+### 주문 채널(다채널 원장)
+- N개의 주문원장(채널) 등록/수정/관리
+- 채널별 주문 수/금액 통계
+- orders 테이블에 channel_id 연결
+- HQ 메뉴에 '주문채널' 페이지 추가
+
+### 대리점장(AGENCY_LEADER) 역할
+- 팀장(TEAM_LEADER)에게 대리점 권한 부여/해제
+- 대리점장 전용 3개 페이지: 대리점 현황, 주문관리, 소속 팀장
+- 하위 팀장 배정/해제/관리
+- Scope Engine v7.0: 자신 + 하위 팀장 데이터 접근
+- 칸반 배정, 1차 검수 권한
+
+## 서비스 레이어 아키텍처 (v6.5)
 > 모듈 간 직접 DB 접근을 서비스 계층으로 분리하여 의존성 방향 단일화
 
 | 서비스 | 파일 | 역할 | 차단한 교차 의존 |
@@ -55,17 +77,6 @@
 | hr-service | 123줄 | 팀+리더 원자적 생성 (6개 테이블) | Signup → HR 테이블 |
 | order-lifecycle-service | 159줄 | 정산 확정 시 주문/통계 일괄 업데이트 | Settlements → Orders/Stats |
 | stats-service | 111줄 | 통계 도메인 유일 쓰기 진입점 | Settlements → 통계 테이블 |
-
-**의존성 변화**:
-```
-Before: Signup ──직접──→ HR Tables, notifications
-After:  Signup ──→ hr-service ──→ HR Tables
-        Signup ──→ notification-service ──→ notifications
-
-Before: Settlements ──직접──→ Orders, Stats Tables
-After:  Settlements ──→ order-lifecycle-service ──→ Orders
-        Settlements ──→ stats-service ──→ Stats Tables
-```
 
 ## 주요 기능 요약
 
@@ -82,6 +93,7 @@ After:  Settlements ──→ order-lifecycle-service ──→ Orders
 | 대시보드 | 요약 카드, 퍼널, 최근 주문, 지역 통계 |
 | 주문관리 | CRUD, 필터, 드로어 상세, 배치 액션 |
 | 자동배분 | 행정동 기반 자동매칭, 수동배분 |
+| **주문채널** | **다채널 원장 등록/수정/관리, 채널별 통계** (v7.0) |
 | 칸반 | 드래그 배정, 다중선택, 배치배정/해제 |
 | 검수 | 지역1차/HQ2차, 배치 승인/반려 |
 | 정산 | Run 생성, 산출, 확정, 상세 |
@@ -93,10 +105,24 @@ After:  Settlements ──→ order-lifecycle-service ──→ Orders
 | 알림 | 벨 드롭다운, 전체 목록, 폴링 |
 | 감사로그 | 목록, 통계 4패널, 상세 |
 | 내주문 | 팀장 전용, 보고서 제출 |
+| **대리점 현황** | **대리점장 전용 대시보드** (v7.0) |
+| **대리점 주문** | **대리점장 주문관리 뷰** (v7.0) |
+| **소속 팀장** | **하위 팀장 관리** (v7.0) |
+
+## RBAC 역할 체계 (v7.0)
+
+| 코드 | 한글명 | 범위 | 주요 권한 |
+|------|--------|------|-----------|
+| SUPER_ADMIN | 총괄관리자 | 전체 | 모든 기능, 시스템 설정 |
+| HQ_OPERATOR | HQ운영자 | 본사 | 주문/배분/HQ검수/정산/대사/통계/인사/채널관리 |
+| REGION_ADMIN | 파트장 | 자기 법인 | 칸반배정/1차검수/팀장관리/통계/대리점관리 |
+| **AGENCY_LEADER** | **대리점장** | **하위 팀장** | **배정/1차검수/팀장관리/내주문** (v7.0) |
+| TEAM_LEADER | 팀장 | 자기 주문 | 작업시작/보고서제출/내 현황 |
+| AUDITOR | 감사 | 전체(읽기) | 대사/통계/이력 조회 |
 
 ## API 엔드포인트 요약
 
-총 **60+개** API 엔드포인트. 상세 맵은 `ARCHITECTURE.md` 참조.
+총 **70+개** API 엔드포인트. 상세 맵은 `ARCHITECTURE.md` 참조.
 
 | 도메인 | 경로 프리픽스 | 주요 기능 |
 |--------|-------------|-----------|
@@ -105,15 +131,17 @@ After:  Settlements ──→ order-lifecycle-service ──→ Orders
 | 정산 | /api/settlements | Run 관리, 산출, 확정 |
 | 대사 | /api/reconciliation | 대사 실행, 이슈 관리 |
 | HR | /api/hr | 사용자, 조직, 수수료, 행정구역, 총판 |
+| **채널** | **/api/hr/channels** | **채널 CRUD, 채널별 통계** (v7.0) |
+| **대리점** | **/api/hr/agencies** | **대리점 관리, 팀장 배정/해제** (v7.0) |
 | 가입 | /api/signup | OTP, 신청, 승인/반려 |
 | 통계 | /api/stats | 대시보드, 리포트, 정책 |
 | 알림 | /api/notifications | CRUD, 미읽음 수, 전체 읽음 |
 | 감사 | /api/audit | 로그 목록, 통계, 상세 |
 
 ## 데이터 아키텍처
-- **Cloudflare D1**: SQLite 기반 **36개 테이블**
-- **State Machine**: 13단계 주문 상태 전이
-- **Scope Engine**: 역할별 데이터 가시성 (HQ → REGION → TEAM)
+- **Cloudflare D1**: SQLite 기반 **38개 테이블** (v7.0: +2 order_channels, agency_team_mappings)
+- **State Machine**: 13단계 주문 상태 전이 (v7.0: AGENCY_LEADER 역할 추가)
+- **Scope Engine v7.0**: 역할별 데이터 가시성 (HQ → REGION → AGENCY → TEAM)
 - **Batch Builder**: D1 batch()를 활용한 원자적 트랜잭션
 - **Service Layer**: 5개 서비스 (교차 도메인 쓰기 일원화)
 
@@ -121,7 +149,7 @@ After:  Settlements ──→ order-lifecycle-service ──→ Orders
 - **플랫폼**: Cloudflare Pages + D1
 - **상태**: ✅ Active
 - **D1 ID**: 0b7aedd5-7510-44d3-8b81-d421b03fffa6
-- **버전**: v6.5.0
+- **버전**: v7.0.0
 - **최종 업데이트**: 2026-03-05
 
 ## 로컬 개발
