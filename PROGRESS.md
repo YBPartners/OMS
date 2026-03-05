@@ -1,8 +1,8 @@
 # 다하다 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-05
-> **현재 버전**: v7.0.0
-> **총 코드량**: Backend 7,148줄 (45 TS) + Services 620줄 + Frontend 7,814줄 (22 JS) + SQL 930줄 = **16,512줄**
+> **현재 버전**: v7.1.0
+> **총 코드량**: Backend 7,357줄 (45 TS) + Services 634줄 + Frontend 8,034줄 (22 JS) + SQL 873줄 = **16,898줄**
 
 ---
 
@@ -19,10 +19,43 @@
 | 6 | 인터랙션 디자인 시스템 | ✅ 완료 | 2026-03-05 | 드로어/팝오버/컨텍스트메뉴/호버프리뷰 |
 | 6.5 | 서비스 레이어 리팩터링 | ✅ 완료 | 2026-03-05 | 5개 서비스, 모듈 간 교차 의존성 해소 |
 | **7.0** | **다채널 + 대리점 계층** | **✅ 완료** | **2026-03-05** | **주문 채널 관리, AGENCY_LEADER 역할, 대리점 전용 UI** |
+| **7.1** | **배분 기능 완성** | **✅ 완료** | **2026-03-05** | **개별/일괄 수동배분, 드로어 배분 액션, 모달 개선** |
 
 ---
 
-## Phase 7.0 — 다채널 원장 + 대리점(AGENCY) 계층 ✅ (신규)
+## Phase 7.1 — 배분 기능 완성 ✅ (신규)
+
+> **목적**: 미배분 주문의 개별/일괄 수동배분 기능 완성 및 UX 개선
+
+### 7.1-1: 주문관리 페이지 일괄배분 ✅
+- 배치 액션바의 '일괄 배분' 버튼 → 지역법인 선택 모달로 변경 (alert 제거)
+- `showOrderBatchDistributeModal()` 함수 신규 구현
+- `submitOrderBatchDistribute()` → `POST /api/orders/batch-distribute` API 호출
+- 결과 모달: 처리대상/성공/실패 통계 표시
+
+### 7.1-2: 배분관리 페이지 선택 배분 ✅
+- `showBatchDistributeModal()` 함수 신규 구현
+- 선택된 주문 목록 + 총액 표시
+- `submitBatchDistribute()` → `POST /api/orders/batch-distribute` API 호출
+- 로딩/결과 모달 지원
+
+### 7.1-3: 수동 배분 모달 UX 개선 ✅
+- `showManualDistributeModal(orderId, customerName, addressText)` 파라미터 확장
+- 주문 정보 헤더 (ID, 고객명, 주소) 표시
+- 안내 문구 추가 (행정동 자동매칭 불가 시 수동 지정 안내)
+- UI 디자인 개선 (border, focus ring, icon)
+
+### 7.1-4: 드로어 빠른 배분 액션 ✅
+- `_getQuickActions()` 확장: RECEIVED/VALIDATED/DISTRIBUTION_PENDING 상태에 '수동 배분' 빠른 액션 버튼 추가
+- 드로어에서 바로 수동 배분 모달 호출 가능
+
+### 변경 통계
+- 1 file changed: orders.js (+137줄 신규 함수)
+- 신규 함수 6개: showBatchDistributeModal, submitBatchDistribute, showOrderBatchDistributeModal, submitOrderBatchDistribute, showManualDistributeModal(개선), _getQuickActions(확장)
+
+---
+
+## Phase 7.0 — 다채널 원장 + 대리점(AGENCY) 계층 ✅
 
 > **목적**: 다수 주문원장(채널) 관리 + 총판-팀장 사이 대리점 중간 계층 추가
 

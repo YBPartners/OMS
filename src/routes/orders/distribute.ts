@@ -113,4 +113,66 @@ export function mountDistribute(router: Hono<Env>) {
 
     return c.json({ ok: true, order_id: orderId, region_org_id });
   });
+
+  // ─── 일괄 수동 배분 (여러 주문 → 하나의 지역법인) ───
+  router.post('/batch-distribute', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const { order_ids, region_org_id } = await c.req.json();
+
+    if (!order_ids?.length) return c.json({ error: '주문 ID 목록은 필수입니다.' }, 400);
+    if (!region_org_id) return c.json({ error: '지역법인 ID는 필수입니다.' }, 400);
+    if (order_ids.length > 100) return c.json({ error: '한 번에 최대 100건까지 배분 가능합니다.' }, 400);
+
+    // 지역법인 확인
+    const org = await db.prepare("SELECT org_id, name FROM organizations WHERE org_id = ? AND org_type = 'REGION'").bind(region_org_id).first();
+    if (!org) return c.json({ error: '유효한 지역법인이 아닙니다.' }, 400);
+
+    const policy = await db.prepare('SELECT version FROM distribution_policies WHERE is_active = 1 ORDER BY version DESC LIMIT 1').first();
+    const policyVersion = policy?.version || 1;
+
+    let success = 0;
+    let fail = 0;
+    const results: any[] = [];
+
+    for (const orderId of order_ids) {
+      const order = await db.prepare(
+        "SELECT order_id, status, customer_name FROM orders WHERE order_id = ? AND status IN ('RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING')"
+      ).bind(orderId).first();
+
+      if (!order) {
+        fail++;
+        results.push({ order_id: orderId, result: 'FAIL', reason: '배분 불가 상태' });
+        continue;
+      }
+
+      // RECEIVED → VALIDATED 자동 전환
+      if (order.status === 'RECEIVED') {
+        await db.prepare("UPDATE orders SET status = 'VALIDATED', updated_at = datetime('now') WHERE order_id = ?").bind(orderId).run();
+        await writeStatusHistory(db, { order_id: orderId, from_status: 'RECEIVED', to_status: 'VALIDATED', actor_id: user.user_id, note: '일괄배분 시 자동 검증' });
+      }
+
+      // 기존 배분 해제
+      await db.prepare("UPDATE order_distributions SET status = 'REASSIGNED' WHERE order_id = ? AND status = 'ACTIVE'").bind(orderId).run();
+
+      // 새 배분 생성
+      await db.prepare(`
+        INSERT INTO order_distributions (order_id, region_org_id, distributed_by, distribution_policy_version, status)
+        VALUES (?, ?, ?, ?, 'ACTIVE')
+      `).bind(orderId, region_org_id, user.user_id, policyVersion).run();
+
+      await db.prepare("UPDATE orders SET status = 'DISTRIBUTED', updated_at = datetime('now') WHERE order_id = ?").bind(orderId).run();
+      const fromStatus = order.status as string;
+      await writeStatusHistory(db, { order_id: orderId, from_status: fromStatus === 'RECEIVED' ? 'VALIDATED' : fromStatus, to_status: 'DISTRIBUTED', actor_id: user.user_id, note: `일괄 수동배분 → ${org.name}` });
+
+      await upsertRegionDailyStats(db, region_org_id, 'intake_count');
+      success++;
+      results.push({ order_id: orderId, result: 'DISTRIBUTED', customer_name: order.customer_name });
+    }
+
+    return c.json({ success, fail, total: order_ids.length, region_name: org.name, results });
+  });
 }

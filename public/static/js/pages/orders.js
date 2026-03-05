@@ -1,7 +1,8 @@
 // ============================================================
-// 다하다 OMS - 주문관리 + 자동배분 페이지 v6.0
+// 다하다 OMS - 주문관리 + 자동배분 페이지 v7.1
 // Interaction Design: 행 우클릭 컨텍스트메뉴, 호버 프리뷰,
 // 상태 플로우 시각화, 드로어 상세, 배치 액션바
+// 배분: 자동배분, 개별 수동배분, 선택 일괄배분, 드로어 배분
 // ============================================================
 
 // ─── 주문 목록 선택 상태 ───
@@ -241,6 +242,10 @@ function _getQuickActions(order) {
   actions.push(`<button onclick="closeDrawer();showOrderHistoryDrawer(${order.order_id})" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200 transition"><i class="fas fa-clock-rotate-left mr-1"></i>이력 타임라인</button>`);
   actions.push(`<button onclick="closeDrawer();showOrderAuditDrawer(${order.order_id})" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200 transition"><i class="fas fa-scroll mr-1"></i>감사 로그</button>`);
 
+  // 미배분 상태 → 수동 배분 버튼
+  if (['RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING'].includes(s)) {
+    actions.push(`<button onclick="closeDrawer();showManualDistributeModal(${order.order_id}, '${(order.customer_name||'').replace(/'/g, "\\'")}', '${(order.address_text||'').replace(/'/g, "\\'")}')" class="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs hover:bg-indigo-700 transition"><i class="fas fa-share-nodes mr-1"></i>수동 배분</button>`);
+  }
   if (s === 'DISTRIBUTED') {
     actions.push(`<button onclick="closeDrawer();showAssignModal(${order.order_id})" class="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs hover:bg-purple-700 transition"><i class="fas fa-user-plus mr-1"></i>팀장 배정</button>`);
   }
@@ -303,7 +308,7 @@ function updateOrderBatchBar() {
       { length: orderListState.selected.size, clearFn: 'orderListState.selected.clear();renderContent()' },
       [
         { icon: 'fa-eye', label: '일괄 상세보기', className: 'bg-blue-100 text-blue-700', onclick: `showBatchOrderSummary()` },
-        { icon: 'fa-share-nodes', label: '일괄 배분', className: 'bg-indigo-100 text-indigo-700', onclick: `alert('일괄 배분 기능 준비 중')` },
+        { icon: 'fa-share-nodes', label: '일괄 배분', className: 'bg-indigo-100 text-indigo-700', onclick: `showOrderBatchDistributeModal()` },
       ]
     );
   } else {
@@ -425,6 +430,11 @@ async function submitImport() {
   } catch (e) { showToast('JSON 파싱 오류', 'error'); }
 }
 
+// ─── 배분 페이지 선택 상태 ───
+const distributeState = {
+  selected: new Set(),
+};
+
 // ════════ 자동배분 관리 ════════
 async function renderDistribute(el) {
   showSkeletonLoading(el, 'cards');
@@ -435,19 +445,38 @@ async function renderDistribute(el) {
     api('GET', '/orders?status=DISTRIBUTED&limit=100'),
   ]);
   
-  const receivedCount = (receivedRes?.orders || []).length;
-  const validatedCount = (pendingRes?.orders || []).length;
-  const dpCount = (dpRes?.orders || []).length;
+  const receivedOrders = receivedRes?.orders || [];
+  const validatedOrders = pendingRes?.orders || [];
+  const dpOrders = dpRes?.orders || [];
+  const allUndistributed = [...receivedOrders, ...validatedOrders, ...dpOrders];
+  const receivedCount = receivedOrders.length;
+  const validatedCount = validatedOrders.length;
+  const dpCount = dpOrders.length;
   const distributedCount = (distributedRes?.orders || []).length;
   const totalPending = receivedCount + validatedCount;
+  const totalAll = allUndistributed.length;
+
+  // 현재 선택상태 정리 (목록에 없는 것 제거)
+  const currentIds = new Set(allUndistributed.map(o => o.order_id));
+  for (const id of distributeState.selected) {
+    if (!currentIds.has(id)) distributeState.selected.delete(id);
+  }
+  const selCount = distributeState.selected.size;
 
   el.innerHTML = `
     <div class="fade-in">
       <div class="flex items-center justify-between mb-6">
-        <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-share-nodes mr-2 text-indigo-600"></i>자동배분 관리</h2>
-        <button onclick="executeDistributeWithModal()" class="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 shadow-lg hover:shadow-xl transition-all ${totalPending === 0 ? 'opacity-50 cursor-not-allowed' : ''}">
-          <i class="fas fa-play mr-2"></i>자동 배분 실행 (${totalPending}건)
-        </button>
+        <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-share-nodes mr-2 text-indigo-600"></i>배분 관리</h2>
+        <div class="flex gap-2">
+          ${selCount > 0 ? `
+            <button onclick="showBatchDistributeModal()" class="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-semibold hover:from-amber-600 hover:to-orange-600 shadow-lg transition-all">
+              <i class="fas fa-hand-pointer mr-2"></i>선택 배분 (${selCount}건)
+            </button>
+          ` : ''}
+          <button onclick="executeDistributeWithModal()" class="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 shadow-lg hover:shadow-xl transition-all ${totalPending === 0 ? 'opacity-50 cursor-not-allowed' : ''}">
+            <i class="fas fa-play mr-2"></i>자동 배분 (${totalPending}건)
+          </button>
+        </div>
       </div>
 
       <div class="grid grid-cols-4 gap-4 mb-6">
@@ -473,7 +502,7 @@ async function renderDistribute(el) {
         <h3 class="font-semibold mb-4"><i class="fas fa-sitemap mr-2 text-indigo-500"></i>배분 프로세스 흐름</h3>
         <div class="flex items-center justify-center gap-3 py-4">
           <div class="text-center px-4 py-3 bg-gray-100 rounded-xl">
-            <div class="text-lg font-bold">${receivedCount + validatedCount}</div>
+            <div class="text-lg font-bold">${totalAll}</div>
             <div class="text-xs text-gray-500">미배분 주문</div>
           </div>
           <i class="fas fa-arrow-right text-2xl text-blue-400 animate-pulse"></i>
@@ -492,43 +521,102 @@ async function renderDistribute(el) {
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- 배분 대상 (RECEIVED + VALIDATED) -->
         <div class="bg-white rounded-xl p-5 border border-gray-100">
-          <h3 class="font-semibold mb-4"><i class="fas fa-hourglass-half mr-2 text-blue-500"></i>배분 대상 — ${totalPending}건</h3>
-          <div class="space-y-2 max-h-80 overflow-y-auto">
-            ${[...(receivedRes?.orders || []), ...(pendingRes?.orders || [])].map(o => `
-              <div class="ix-clickable flex items-center justify-between p-3 bg-blue-50 rounded-lg text-sm"
-                   onclick="showOrderDetailDrawer(${o.order_id})"
-                   data-preview="order" data-preview-id="${o.order_id}" data-preview-title="주문 #${o.order_id}">
-                <div>
-                  <span class="text-xs text-gray-500">#${o.order_id}</span>
-                  <span class="ml-2 font-medium">${o.customer_name || '-'}</span> ${statusBadge(o.status)}
-                  <div class="text-xs text-gray-500 mt-0.5">${o.address_text?.substring(0, 35) || '-'}</div>
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold"><i class="fas fa-hourglass-half mr-2 text-blue-500"></i>배분 대상 — ${totalPending}건</h3>
+            ${totalPending > 0 ? `
+              <label class="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+                <input type="checkbox" class="w-3.5 h-3.5 rounded" 
+                  ${selCount > 0 && receivedOrders.concat(validatedOrders).every(o => distributeState.selected.has(o.order_id)) ? 'checked' : ''}
+                  onchange="toggleDistSelectGroup(this.checked, 'pending')"> 전체 선택
+              </label>
+            ` : ''}
+          </div>
+          <div class="space-y-2 max-h-[400px] overflow-y-auto">
+            ${[...receivedOrders, ...validatedOrders].map(o => {
+              const sel = distributeState.selected.has(o.order_id);
+              return `
+              <div class="flex items-center gap-2 p-3 ${sel ? 'bg-blue-100 border-blue-300' : 'bg-blue-50'} rounded-lg text-sm border border-transparent hover:border-blue-200 transition-all">
+                <input type="checkbox" class="w-3.5 h-3.5 rounded flex-shrink-0" ${sel ? 'checked' : ''}
+                  onchange="toggleDistSelect(${o.order_id}, this.checked)">
+                <div class="ix-clickable flex-1 min-w-0" onclick="showOrderDetailDrawer(${o.order_id})">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-500 font-mono">#${o.order_id}</span>
+                    <span class="font-medium truncate">${o.customer_name || '-'}</span>
+                    ${statusBadge(o.status)}
+                  </div>
+                  <div class="text-xs text-gray-500 mt-0.5 truncate">${o.address_text || '-'}</div>
                 </div>
-                <span class="text-sm font-medium whitespace-nowrap">${formatAmount(o.base_amount)}</span>
-              </div>
-            `).join('')}
+                <span class="text-sm font-medium whitespace-nowrap text-gray-600">${formatAmount(o.base_amount)}</span>
+                <button onclick="event.stopPropagation();showManualDistributeModal(${o.order_id}, '${(o.customer_name||'').replace(/'/g, "\\'")}', '${(o.address_text||'').replace(/'/g, "\\'")}')" 
+                  class="px-2.5 py-1 bg-blue-200 text-blue-800 rounded text-xs hover:bg-blue-300 whitespace-nowrap flex-shrink-0 transition" data-tooltip="수동 배분">
+                  <i class="fas fa-share-nodes"></i>
+                </button>
+              </div>`;
+            }).join('')}
             ${totalPending === 0 ? '<p class="text-gray-400 text-sm text-center py-8">배분 대상 없음</p>' : ''}
           </div>
         </div>
         
+        <!-- 배분 보류 (DISTRIBUTION_PENDING) -->
         <div class="bg-white rounded-xl p-5 border border-gray-100">
-          <h3 class="font-semibold mb-4"><i class="fas fa-exclamation-triangle mr-2 text-amber-500"></i>배분 보류 (수동 필요) — ${dpCount}건</h3>
-          <div class="space-y-2 max-h-80 overflow-y-auto">
-            ${(dpRes?.orders || []).map(o => `
-              <div class="flex items-center justify-between p-3 bg-yellow-50 rounded-lg text-sm">
-                <div class="ix-clickable flex-1" onclick="showOrderDetailDrawer(${o.order_id})">
-                  <span class="text-xs text-gray-500">#${o.order_id}</span>
-                  <span class="ml-2 font-medium">${o.customer_name || '-'}</span>
-                  <div class="text-xs text-red-500 mt-0.5">행정동 매칭 실패 · ${o.address_text?.substring(0, 30) || ''}</div>
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold"><i class="fas fa-exclamation-triangle mr-2 text-amber-500"></i>배분 보류 (수동 필요) — ${dpCount}건</h3>
+            ${dpCount > 0 ? `
+              <label class="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+                <input type="checkbox" class="w-3.5 h-3.5 rounded"
+                  ${selCount > 0 && dpOrders.every(o => distributeState.selected.has(o.order_id)) ? 'checked' : ''}
+                  onchange="toggleDistSelectGroup(this.checked, 'dp')"> 전체 선택
+              </label>
+            ` : ''}
+          </div>
+          <div class="space-y-2 max-h-[400px] overflow-y-auto">
+            ${dpOrders.map(o => {
+              const sel = distributeState.selected.has(o.order_id);
+              return `
+              <div class="flex items-center gap-2 p-3 ${sel ? 'bg-yellow-100 border-yellow-300' : 'bg-yellow-50'} rounded-lg text-sm border border-transparent hover:border-yellow-200 transition-all">
+                <input type="checkbox" class="w-3.5 h-3.5 rounded flex-shrink-0" ${sel ? 'checked' : ''}
+                  onchange="toggleDistSelect(${o.order_id}, this.checked)">
+                <div class="ix-clickable flex-1 min-w-0" onclick="showOrderDetailDrawer(${o.order_id})">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-500 font-mono">#${o.order_id}</span>
+                    <span class="font-medium truncate">${o.customer_name || '-'}</span>
+                  </div>
+                  <div class="text-xs text-red-500 mt-0.5 truncate"><i class="fas fa-location-dot mr-1"></i>행정동 매칭 실패 · ${o.address_text || ''}</div>
                 </div>
-                <button onclick="showManualDistributeModal(${o.order_id})" class="px-3 py-1 bg-amber-100 text-amber-700 rounded text-xs hover:bg-amber-200 whitespace-nowrap">수동배분</button>
-              </div>
-            `).join('')}
+                <span class="text-sm font-medium whitespace-nowrap text-gray-600">${formatAmount(o.base_amount)}</span>
+                <button onclick="event.stopPropagation();showManualDistributeModal(${o.order_id}, '${(o.customer_name||'').replace(/'/g, "\\'")}', '${(o.address_text||'').replace(/'/g, "\\'")}')" 
+                  class="px-2.5 py-1 bg-amber-200 text-amber-800 rounded text-xs hover:bg-amber-300 whitespace-nowrap flex-shrink-0 transition" data-tooltip="수동 배분">
+                  <i class="fas fa-share-nodes"></i>
+                </button>
+              </div>`;
+            }).join('')}
             ${dpCount === 0 ? '<p class="text-gray-400 text-sm text-center py-8">보류 건 없음</p>' : ''}
           </div>
         </div>
       </div>
     </div>`;
+
+  // 저장된 주문 데이터를 window에 캐시 (선택배분용)
+  window._distOrders = { received: receivedOrders, validated: validatedOrders, dp: dpOrders };
+}
+
+// ─── 배분 체크박스 관리 ───
+function toggleDistSelect(orderId, checked) {
+  if (checked) distributeState.selected.add(orderId);
+  else distributeState.selected.delete(orderId);
+  renderContent();
+}
+function toggleDistSelectGroup(checked, group) {
+  const orders = group === 'pending'
+    ? [...(window._distOrders?.received || []), ...(window._distOrders?.validated || [])]
+    : (window._distOrders?.dp || []);
+  orders.forEach(o => {
+    if (checked) distributeState.selected.add(o.order_id);
+    else distributeState.selected.delete(o.order_id);
+  });
+  renderContent();
 }
 
 // ─── 자동배분 실행 + 결과 모달 ───
@@ -564,24 +652,156 @@ async function executeDistributeWithModal() {
     `<button onclick="closeModal();renderContent()" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium">확인</button>`, { large: true });
 }
 
-// ─── 수동 배분 모달 ───
-async function showManualDistributeModal(orderId) {
+// ─── 수동 배분 모달 (개별) ───
+async function showManualDistributeModal(orderId, customerName, addressText) {
   const orgsRes = await api('GET', '/auth/organizations');
   const regions = (orgsRes?.organizations || []).filter(o => o.org_type === 'REGION');
   const content = `
     <div class="space-y-4">
-      <p class="text-sm text-gray-600">행정동 자동매칭이 실패한 주문을 수동으로 지역법인에 배분합니다.</p>
-      <select id="manual-region" class="w-full border rounded-lg px-3 py-3 text-sm">
-        ${regions.map(r => `<option value="${r.org_id}">${r.name} (${r.code})</option>`).join('')}
-      </select>
+      ${customerName || addressText ? `
+      <div class="bg-gray-50 rounded-lg p-3 text-sm border border-gray-200">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="font-mono text-xs text-gray-400">#${orderId}</span>
+          <span class="font-semibold">${customerName || '-'}</span>
+        </div>
+        ${addressText ? `<div class="text-xs text-gray-500"><i class="fas fa-location-dot mr-1"></i>${addressText}</div>` : ''}
+      </div>` : ''}
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-building mr-1 text-indigo-500"></i>배분할 지역법인 선택</label>
+        <select id="manual-region" class="w-full border-2 border-gray-200 rounded-lg px-3 py-3 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 transition">
+          ${regions.map(r => `<option value="${r.org_id}">${r.name} (${r.code})</option>`).join('')}
+        </select>
+      </div>
+      <p class="text-xs text-gray-400"><i class="fas fa-info-circle mr-1"></i>행정동 자동매칭이 불가한 경우 수동으로 지역법인을 지정합니다.</p>
     </div>`;
-  showModal(`수동 배분 — 주문 #${orderId}`, content, `
-    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
-    <button onclick="submitManualDistribute(${orderId})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">배분 확정</button>`);
+  showModal(`<i class="fas fa-share-nodes mr-2 text-indigo-500"></i>수동 배분 — 주문 #${orderId}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 transition">취소</button>
+    <button onclick="submitManualDistribute(${orderId})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition"><i class="fas fa-check mr-1"></i>배분 확정</button>`);
 }
 async function submitManualDistribute(orderId) {
   const regionOrgId = Number(document.getElementById('manual-region').value);
   const res = await api('PATCH', `/orders/${orderId}/distribution`, { region_org_id: regionOrgId });
   if (res?.ok) { showToast('수동 배분 완료', 'success'); closeModal(); renderContent(); }
   else showToast(res?.error || '배분 실패', 'error');
+}
+
+// ─── 선택 일괄 배분 모달 (배분관리 페이지 — 여러 주문 → 지역법인) ───
+async function showBatchDistributeModal() {
+  const ids = [...distributeState.selected];
+  if (ids.length === 0) { showToast('배분할 주문을 선택하세요.', 'warning'); return; }
+  
+  const orgsRes = await api('GET', '/auth/organizations');
+  const regions = (orgsRes?.organizations || []).filter(o => o.org_type === 'REGION');
+  
+  // 선택된 주문 정보 수집
+  const allOrders = [...(window._distOrders?.received || []), ...(window._distOrders?.validated || []), ...(window._distOrders?.dp || [])];
+  const selectedOrders = allOrders.filter(o => ids.includes(o.order_id));
+  const totalAmount = selectedOrders.reduce((sum, o) => sum + Number(o.base_amount || 0), 0);
+
+  const content = `
+    <div class="space-y-4">
+      <div class="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
+        <div class="flex items-center gap-4">
+          <div class="text-center"><div class="text-2xl font-bold text-indigo-700">${ids.length}</div><div class="text-xs text-indigo-500">선택 주문</div></div>
+          <div class="border-l border-indigo-200 h-10"></div>
+          <div class="text-center"><div class="text-2xl font-bold text-indigo-700">${formatAmount(totalAmount)}</div><div class="text-xs text-indigo-500">총 금액</div></div>
+        </div>
+      </div>
+      <div class="max-h-40 overflow-y-auto space-y-1">
+        ${selectedOrders.map(o => `
+          <div class="flex items-center justify-between text-xs bg-gray-50 rounded px-3 py-2">
+            <span><span class="font-mono text-gray-400">#${o.order_id}</span> <span class="font-medium ml-1">${o.customer_name || '-'}</span></span>
+            <span class="text-gray-500">${o.address_text ? o.address_text.substring(0, 20) + '...' : '-'}</span>
+          </div>`).join('')}
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-building mr-1 text-indigo-500"></i>배분할 지역법인 선택</label>
+        <select id="batch-dist-region" class="w-full border-2 border-gray-200 rounded-lg px-3 py-3 text-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200 transition">
+          ${regions.map(r => `<option value="${r.org_id}">${r.name} (${r.code})</option>`).join('')}
+        </select>
+      </div>
+    </div>`;
+  showModal(`<i class="fas fa-hand-pointer mr-2 text-amber-500"></i>선택 일괄 배분 (${ids.length}건)`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 transition">취소</button>
+    <button onclick="submitBatchDistribute()" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg text-sm hover:from-amber-600 hover:to-orange-600 transition"><i class="fas fa-check mr-1"></i>일괄 배분 실행</button>`, { large: true });
+}
+async function submitBatchDistribute() {
+  const ids = [...distributeState.selected];
+  const regionOrgId = Number(document.getElementById('batch-dist-region').value);
+  closeModal();
+  showModal('일괄 배분 처리 중...', `
+    <div class="text-center py-6">
+      <div class="animate-spin w-12 h-12 mx-auto mb-3"><i class="fas fa-cogs text-3xl text-amber-500"></i></div>
+      <p class="text-gray-600">${ids.length}건의 주문을 배분하고 있습니다...</p>
+    </div>`, '');
+  const res = await api('POST', '/orders/batch-distribute', { order_ids: ids, region_org_id: regionOrgId });
+  closeModal();
+  if (!res) return;
+  distributeState.selected.clear();
+  showModal(`<i class="fas fa-check-circle text-green-500 mr-2"></i>일괄 배분 완료`, `
+    <div class="space-y-4">
+      <div class="grid grid-cols-3 gap-3">
+        <div class="bg-blue-50 rounded-xl p-3 text-center border border-blue-200"><div class="text-2xl font-bold text-blue-600">${res.total || 0}</div><div class="text-xs text-blue-500">처리 대상</div></div>
+        <div class="bg-green-50 rounded-xl p-3 text-center border border-green-200"><div class="text-2xl font-bold text-green-600">${res.success || 0}</div><div class="text-xs text-green-500">배분 성공</div></div>
+        <div class="bg-red-50 rounded-xl p-3 text-center border border-red-200"><div class="text-2xl font-bold text-red-600">${res.fail || 0}</div><div class="text-xs text-red-500">실패</div></div>
+      </div>
+      <div class="text-sm text-gray-600"><i class="fas fa-building mr-1 text-indigo-500"></i>배분 법인: <span class="font-semibold">${res.region_name || ''}</span></div>
+    </div>`,
+    `<button onclick="closeModal();renderContent()" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">확인</button>`, { large: true });
+}
+
+// ─── 주문관리 페이지에서 일괄 배분 (체크박스 선택 → 배분) ───
+async function showOrderBatchDistributeModal() {
+  const ids = [...orderListState.selected];
+  if (ids.length === 0) { showToast('배분할 주문을 선택하세요.', 'warning'); return; }
+
+  const orgsRes = await api('GET', '/auth/organizations');
+  const regions = (orgsRes?.organizations || []).filter(o => o.org_type === 'REGION');
+
+  const content = `
+    <div class="space-y-4">
+      <div class="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
+        <div class="text-center">
+          <div class="text-3xl font-bold text-indigo-700">${ids.length}</div>
+          <div class="text-xs text-indigo-500 mt-1">선택된 주문</div>
+        </div>
+      </div>
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+        <i class="fas fa-info-circle mr-1"></i>
+        RECEIVED/VALIDATED/DISTRIBUTION_PENDING 상태의 주문만 배분됩니다. 이미 배분된 주문은 재배분됩니다.
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-building mr-1 text-indigo-500"></i>배분할 지역법인 선택</label>
+        <select id="order-batch-dist-region" class="w-full border-2 border-gray-200 rounded-lg px-3 py-3 text-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200 transition">
+          ${regions.map(r => `<option value="${r.org_id}">${r.name} (${r.code})</option>`).join('')}
+        </select>
+      </div>
+    </div>`;
+  showModal(`<i class="fas fa-share-nodes mr-2 text-indigo-500"></i>일괄 배분 (${ids.length}건)`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 transition">취소</button>
+    <button onclick="submitOrderBatchDistribute()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition"><i class="fas fa-check mr-1"></i>배분 실행</button>`, { large: true });
+}
+async function submitOrderBatchDistribute() {
+  const ids = [...orderListState.selected];
+  const regionOrgId = Number(document.getElementById('order-batch-dist-region').value);
+  closeModal();
+  showModal('일괄 배분 처리 중...', `
+    <div class="text-center py-6">
+      <div class="animate-spin w-12 h-12 mx-auto mb-3"><i class="fas fa-cogs text-3xl text-indigo-500"></i></div>
+      <p class="text-gray-600">${ids.length}건의 주문을 배분하고 있습니다...</p>
+    </div>`, '');
+  const res = await api('POST', '/orders/batch-distribute', { order_ids: ids, region_org_id: regionOrgId });
+  closeModal();
+  if (!res) return;
+  orderListState.selected.clear();
+  showModal(`<i class="fas fa-check-circle text-green-500 mr-2"></i>일괄 배분 완료`, `
+    <div class="space-y-4">
+      <div class="grid grid-cols-3 gap-3">
+        <div class="bg-blue-50 rounded-xl p-3 text-center border border-blue-200"><div class="text-2xl font-bold text-blue-600">${res.total || 0}</div><div class="text-xs text-blue-500">처리 대상</div></div>
+        <div class="bg-green-50 rounded-xl p-3 text-center border border-green-200"><div class="text-2xl font-bold text-green-600">${res.success || 0}</div><div class="text-xs text-green-500">배분 성공</div></div>
+        <div class="bg-red-50 rounded-xl p-3 text-center border border-red-200"><div class="text-2xl font-bold text-red-600">${res.fail || 0}</div><div class="text-xs text-red-500">실패</div></div>
+      </div>
+      <div class="text-sm text-gray-600"><i class="fas fa-building mr-1 text-indigo-500"></i>배분 법인: <span class="font-semibold">${res.region_name || ''}</span></div>
+    </div>`,
+    `<button onclick="closeModal();renderContent()" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">확인</button>`, { large: true });
 }
