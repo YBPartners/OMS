@@ -55,9 +55,10 @@ export function mountReport(router: Hono<Env>) {
         // 사진 첨부
         if (body.photos && Array.isArray(body.photos)) {
           for (const photo of body.photos) {
+            const photoUrl = photo.file_url || photo.url || '';
             await db.prepare(`
               INSERT INTO work_report_photos (report_id, category, file_url, file_hash) VALUES (?, ?, ?, ?)
-            `).bind(reportId, photo.category, photo.file_url, photo.file_hash || null).run();
+            `).bind(reportId, photo.category, photoUrl, photo.file_hash || null).run();
           }
         }
 

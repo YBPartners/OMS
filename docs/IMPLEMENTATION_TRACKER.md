@@ -1,7 +1,7 @@
 # 와이비 OMS — 구현 추적 문서 (Implementation Tracker)
 
 > **최종 업데이트**: 2026-03-05
-> **버전**: v13.0.0
+> **버전**: v16.0.0
 > **이 문서는 대화 압축/토큰 초과 시 컨텍스트 복구용입니다.**
 > **항상 이 파일 + ARCHITECTURE.md + PROGRESS.md 를 먼저 읽어 현재 진행 상황을 파악하세요.**
 
@@ -165,6 +165,31 @@
 - [x] my-orders.js: renderMyProfile 탭 리디자인 (계정/비밀번호/알림)
 - [x] switchProfileTab(), updateNotifPref(), toggleAllNotifPrefs()
 - [x] 토글 스위치 CSS 애니메이션 + optimistic update + 실패 롤백
+
+### ✅ Phase 11~14: (상세는 PROGRESS.md 참조)
+- [x] Phase 11: 정산 보고서 인쇄 + CSV + 대리점 내역서
+- [x] Phase 12: 실시간 폴링 + 대리점 온보딩 + 채널수수료 + xlsx
+- [x] Phase 13: 시스템 관리 + 보안 강화 + 글로벌 검색 + 타임라인
+- [x] Phase 14: 웹 푸시 + 데이터 관리 + 매출/정산 차트
+
+### ✅ Phase 15: GAP 패치 + 상태전이 정규화 + 정책 CRUD
+- [x] READY_DONE 상태 추가 (types, state-machine, assign.ts)
+- [x] DONE 상태 + 영수증 첨부 (report.ts, POST /:id/complete)
+- [x] 알림 트리거 (배정→팀장, 완료→지역, 검수→팀장)
+- [x] 정책관리 CRUD 7개 엔드포인트 (stats/policies.ts)
+- [x] 프론트엔드 5개 파일 상태 업데이트 (constants, my-orders, kanban, review, interactions)
+- [x] statistics.js 정책관리 4탭 CRUD UI
+- [x] 0010_ready_done_status.sql 마이그레이션
+- [x] 커밋 e32d798, 12파일, +788/-55
+
+### 🔄 Phase 16: 품질 강화 + 문서 정비 + E2E 테스트 (진행중)
+- [x] 프로덕션 DB 마이그레이션 0006~0010 적용 완료
+- [x] ARCHITECTURE.md v15.0 전면 갱신
+- [x] PROGRESS.md Phase 15/16 추가
+- [x] IMPLEMENTATION_TRACKER.md Phase 15/16 추가
+- [ ] E2E 워크플로 테스트 스크립트
+- [ ] 프론트엔드 에러 핸들링 강화
+- [ ] 백엔드 에러 핸들링 표준화
 
 ---
 

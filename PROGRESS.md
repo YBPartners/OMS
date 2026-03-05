@@ -1,8 +1,8 @@
 # 와이비 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-05
-> **현재 버전**: v14.0.0
-> **총 코드량**: Backend 8,800줄 (49 TS) + Frontend 10,800줄 (24 JS + SW) + CSS 419줄 + SQL 1,041줄 = **20,190줄**
+> **현재 버전**: v15.0.0
+> **총 코드량**: Backend 8,860줄 (47 TS) + Frontend 10,643줄 (23 JS) + SW 143줄 + CSS 419줄 + SQL 1,169줄 = **21,234줄**
 
 ---
 
@@ -27,6 +27,77 @@
 | **12.0** | **실시간 폴링 + 온보딩 + 채널수수료 + 엑셀** | **✅ 완료** | **2026-03-05** | **대시보드 자동갱신, 대리점 온보딩 워크플로, 채널별 수수료, xlsx 내보내기** |
 | **13.0** | **시스템 관리 + 보안 강화 + 글로벌 검색 + 타임라인** | **✅ 완료** | **2026-03-05** | **시스템 관리 페이지, 로그인 잠금, 비밀번호 정책, Cmd+K 검색, 주문 타임라인** |
 | **14.0** | **웹 푸시 + 데이터 관리 + 매출/정산 차트** | **✅ 완료** | **2026-03-05** | **Service Worker, 임포트/백업/복원, 매출 추이, 정산 현황 차트** |
+| **15.0** | **GAP 패치 + 상태전이 정규화 + 정책 CRUD** | **✅ 완료** | **2026-03-05** | **READY_DONE/DONE 상태, 알림 트리거, 정책관리 CRUD, 프론트엔드 상태 업데이트** |
+| **16.0** | **품질 강화 + 문서 정비 + E2E 테스트** | **🔄 진행중** | **2026-03-05** | **프로덕션 DB 마이그레이션, 문서 정합성, 에러 핸들링 강화** |
+
+---
+
+## Phase 16.0 — 품질 강화 + 문서 정비 + E2E 테스트 🔄 (최신)
+
+> **목적**: 프로덕션 안정성 확보, 문서 정합성, 에러 핸들링, 통합 테스트
+
+### 16-1: 프로덕션 DB 마이그레이션 ✅
+- 0006~0009 마이그레이션 프로덕션 적용 완료
+- 0010_ready_done_status.sql FK 제약 이슈 → PRAGMA foreign_keys=OFF 포함 수동 적용
+- 프로덕션 orders/order_assignments 테이블에 READY_DONE/DONE CHECK 제약 확인
+- 데이터 무결성 검증 (주문 10건, 배정 7건 보존)
+
+### 16-2: 문서 3종 정합성 업데이트 🔄
+- ARCHITECTURE.md → v15.0 (기술스택, 디렉토리, 상태전이, API 맵 전면 갱신)
+- PROGRESS.md → Phase 15.0/16.0 추가
+- IMPLEMENTATION_TRACKER.md → Phase 15.0 체크리스트 추가
+
+### 16-3: E2E 워크플로 테스트 ⏳
+- 주문 전체 라이프사이클 (RECEIVED → PAID)
+- 팀장 가입 워크플로
+- 정산 산출/확정 워크플로
+
+### 16-4: 에러 핸들링 강화 ⏳
+- 프론트엔드: 글로벌 에러 경계, API retry, 오프라인 감지
+- 백엔드: 에러 응답 표준화, 입력 검증 강화
+
+---
+
+## Phase 15.0 — GAP 패치 + 상태전이 정규화 + 정책 CRUD ✅
+
+> **목적**: 백엔드-프론트엔드 GAP 해소, 팀장 수행 플로우 정규화, 정책 관리 CRUD
+
+### 15-1: READY_DONE 상태 추가 (GAP-1) ✅
+- types/index.ts: OrderStatus에 READY_DONE 추가
+- state-machine.ts: ASSIGNED→READY_DONE 전이 규칙
+- assign.ts: POST /:order_id/ready-done 엔드포인트 (scheduled_date)
+- assign.ts: POST /:order_id/start (READY_DONE→IN_PROGRESS)
+
+### 15-2: DONE 상태 + 영수증 첨부 (GAP-2) ✅
+- types/index.ts: OrderStatus에 DONE 추가
+- state-machine.ts: SUBMITTED→DONE 전이 규칙
+- report.ts: POST /:order_id/complete (영수증 URL 첨부)
+
+### 15-3: 알림 트리거 (GAP-3) ✅
+- assign.ts: 배정 시 팀장에게 ASSIGNMENT 알림
+- report.ts: 최종완료 시 지역관리자에게 ORDER_COMPLETED 알림
+- review.ts: 검수 결과 팀장에게 REGION_APPROVED/HQ_APPROVED/REJECTED 알림
+
+### 15-4: 정책관리 CRUD (GAP-5) ✅
+- stats/policies.ts: 7개 CRUD 엔드포인트 추가
+  - 배분정책: POST/PUT /policies/distribution
+  - 보고서정책: POST/PUT /policies/report
+  - 수수료정책: POST/PUT /policies/commission
+- statistics.js: 4탭 정책관리 UI (배분/보고서/수수료/지역매핑) + CRUD 폼
+
+### 15-5: 프론트엔드 상태 업데이트 (GAP-6) ✅
+- constants.js: READY_DONE/DONE 상태 정의 (label, color, icon, step)
+- my-orders.js: 준비완료/작업시작 버튼 + 영수증 첨부 완료 버튼
+- kanban.js: READY_DONE 상태 칸반 카드
+- review.js: DONE 상태 지역검수 큐
+- interactions.js: 상태 플로우 바에 READY_DONE/DONE 추가
+
+### 15-6: DB 마이그레이션 ✅
+- 0010_ready_done_status.sql: orders/order_assignments CHECK 제약 갱신
+
+### 변경 통계
+- 12 files changed, +788 insertions, -55 deletions
+- 커밋: e32d798
 
 ---
 

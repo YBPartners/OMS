@@ -18,12 +18,44 @@ const app = new Hono<Env>();
 
 // ─── 글로벌 에러 핸들러 ───
 app.onError((err, c) => {
-  console.error(`[OMS ERROR] ${c.req.method} ${c.req.path}:`, err.message);
-  const isDbError = err.message?.includes('D1') || err.message?.includes('SQL');
+  const method = c.req.method;
+  const path = c.req.path;
+  const msg = err.message || '';
+  console.error(`[OMS ERROR] ${method} ${path}:`, msg);
+
+  // 에러 분류
+  const isDbError = msg.includes('D1') || msg.includes('SQL') || msg.includes('SQLITE');
+  const isValidation = msg.includes('validation') || msg.includes('required') || msg.includes('invalid');
+  const isTimeout = msg.includes('timeout') || msg.includes('Timeout');
+  const isNotFound = msg.includes('not found') || msg.includes('NOT_FOUND');
+
+  let userMessage = '서버 오류가 발생했습니다.';
+  let status = 500;
+  let code = 'INTERNAL_ERROR';
+
+  if (isDbError) {
+    const isTypeError = msg.includes('TYPE_ERROR');
+    userMessage = isTypeError ? '데이터 형식 오류입니다. 입력값을 확인해 주세요.' : '데이터 처리 중 오류가 발생했습니다.';
+    code = 'DB_ERROR';
+  } else if (isValidation) {
+    userMessage = '입력값이 올바르지 않습니다.';
+    status = 400;
+    code = 'VALIDATION_ERROR';
+  } else if (isTimeout) {
+    userMessage = '요청 처리 시간이 초과되었습니다.';
+    status = 504;
+    code = 'TIMEOUT';
+  } else if (isNotFound) {
+    userMessage = '요청한 리소스를 찾을 수 없습니다.';
+    status = 404;
+    code = 'NOT_FOUND';
+  }
+
   return c.json({
-    error: isDbError ? '데이터 처리 중 오류가 발생했습니다.' : (err.message || '서버 오류가 발생했습니다.'),
-    _debug: (c.env as any).DEV_MODE === 'true' ? err.message : undefined,
-  }, 500);
+    error: userMessage,
+    code,
+    _debug: msg.substring(0, 200),
+  }, status);
 });
 
 // ─── 미들웨어 ───
@@ -48,7 +80,7 @@ app.route('/api/audit', auditRoutes);
 app.route('/api/system', systemRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '14.0.0', system: '와이비 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '16.0.0', system: '와이비 OMS' }));
 
 // ─── SPA 라우팅: 모든 페이지 요청에 index.html 반환 ───
 app.get('*', async (c) => {

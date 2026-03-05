@@ -119,13 +119,22 @@ auth.post('/logout', async (c) => {
   const user = c.get('user');
   if (!user) return c.json({ ok: true });
 
-  const sessionId = c.req.header('X-Session-Id') || '';
+  // X-Session-Id 헤더 또는 Cookie에서 session_id 추출
+  const sessionId = c.req.header('X-Session-Id') || getSessionCookie(c);
   if (sessionId) {
     // ★ Session Service를 통한 세션 삭제 (도메인 분리)
     await deleteSession(c.env.DB, sessionId);
   }
   return c.json({ ok: true }, 200, { 'Set-Cookie': 'session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' });
 });
+
+// ─── 쿠키에서 session_id 추출 헬퍼 ───
+function getSessionCookie(c: any): string {
+  const cookie = c.req.header('Cookie');
+  if (!cookie) return '';
+  const match = cookie.match(/(^| )session_id=([^;]+)/);
+  return match ? match[2] : '';
+}
 
 // 현재 사용자 정보
 auth.get('/me', async (c) => {
