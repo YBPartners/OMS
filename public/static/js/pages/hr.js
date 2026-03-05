@@ -1,5 +1,7 @@
 // ============================================================
-// 다하다 OMS - 인사관리(HR) + 수수료 설정 페이지
+// 다하다 OMS - 인사관리(HR) + 수수료 설정 페이지 v7.0
+// Interaction Design: 컨텍스트메뉴, 호버프리뷰, 인라인토글,
+// 탭 트랜지션, 유저행 드릴다운
 // ============================================================
 
 async function renderHRManagement(el) {
@@ -64,7 +66,9 @@ async function renderHRUsers(el) {
           <th class="px-3 py-2 text-center">관리</th>
         </tr></thead>
         <tbody class="divide-y">${users.map(u => `
-          <tr class="hover:bg-gray-50">
+          <tr class="ix-table-row"
+              oncontextmenu="showHRUserContextMenu(event, ${JSON.stringify(u).replace(/"/g, '&quot;')})"
+              data-preview="user" data-preview-id="${u.user_id}" data-preview-title="${u.name}">
             <td class="px-3 py-2 font-mono text-xs text-gray-500">${u.user_id}</td>
             <td class="px-3 py-2 font-medium">${u.name}</td>
             <td class="px-3 py-2 font-mono text-xs">${u.login_id}</td>
@@ -73,12 +77,12 @@ async function renderHRUsers(el) {
             <td class="px-3 py-2 text-xs">${formatPhone(u.phone)}</td>
             <td class="px-3 py-2 text-center">${u.phone_verified ? '<i class="fas fa-check-circle text-green-500"></i>' : '<i class="fas fa-times-circle text-gray-300"></i>'}</td>
             <td class="px-3 py-2 text-center"><span class="status-badge ${u.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">${u.status}</span></td>
-            <td class="px-3 py-2 text-center">
+            <td class="px-3 py-2 text-center" onclick="event.stopPropagation()">
               <div class="flex gap-1 justify-center">
-                <button onclick="showEditUserModal(${u.user_id})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200" title="수정"><i class="fas fa-edit"></i></button>
-                <button onclick="showCredentialModal(${u.user_id}, '${u.name}')" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200" title="ID/PW 설정"><i class="fas fa-key"></i></button>
-                <button onclick="resetUserPw(${u.user_id}, '${u.name}')" class="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs hover:bg-amber-200" title="PW 초기화"><i class="fas fa-undo"></i></button>
-                <button onclick="toggleUserStatus(${u.user_id}, '${u.status}', '${u.name}')" class="px-2 py-1 ${u.status === 'ACTIVE' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'} rounded text-xs hover:opacity-80" title="${u.status === 'ACTIVE' ? '비활성화' : '활성화'}"><i class="fas ${u.status === 'ACTIVE' ? 'fa-ban' : 'fa-check'}"></i></button>
+                <button onclick="showEditUserModal(${u.user_id})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200" data-tooltip="수정"><i class="fas fa-edit"></i></button>
+                <button onclick="showCredentialModal(${u.user_id}, '${u.name}')" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200" data-tooltip="ID/PW 설정"><i class="fas fa-key"></i></button>
+                <button onclick="resetUserPw(${u.user_id}, '${u.name}')" class="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs hover:bg-amber-200" data-tooltip="PW 초기화"><i class="fas fa-undo"></i></button>
+                <button onclick="toggleUserStatus(${u.user_id}, '${u.status}', '${u.name}')" class="px-2 py-1 ${u.status === 'ACTIVE' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'} rounded text-xs hover:opacity-80" data-tooltip="${u.status === 'ACTIVE' ? '비활성화' : '활성화'}"><i class="fas ${u.status === 'ACTIVE' ? 'fa-ban' : 'fa-check'}"></i></button>
               </div>
             </td>
           </tr>`).join('')}
@@ -550,4 +554,26 @@ async function checkPhoneStatus() {
         ${res.registered_user ? `<div><span class="text-gray-500">등록사용자:</span> ${res.registered_user.name} (ID:${res.registered_user.user_id}) · 폰인증: ${res.registered_user.phone_verified ? 'Y' : 'N'}</div>` : `<div class="text-gray-400">미등록 번호</div>`}
       </div>`;
   }
+}
+
+// ─── HR 사용자 컨텍스트 메뉴 ───
+function showHRUserContextMenu(event, user) {
+  event.preventDefault();
+  const u = typeof user === 'string' ? JSON.parse(user) : user;
+
+  const items = [
+    { icon: 'fa-edit', label: '사용자 수정', action: () => showEditUserModal(u.user_id) },
+    { icon: 'fa-key', label: 'ID/PW 설정', action: () => showCredentialModal(u.user_id, u.name) },
+    { icon: 'fa-undo', label: '비밀번호 초기화', action: () => resetUserPw(u.user_id, u.name) },
+    { divider: true },
+    { icon: u.status === 'ACTIVE' ? 'fa-ban' : 'fa-check', 
+      label: u.status === 'ACTIVE' ? '비활성화' : '활성화',
+      danger: u.status === 'ACTIVE',
+      action: () => toggleUserStatus(u.user_id, u.status, u.name) },
+    { divider: true },
+    { icon: 'fa-list', label: '이 사용자의 주문 보기', action: () => { window._orderFilters = { search: u.name }; navigateTo('orders'); } },
+    { icon: 'fa-chart-bar', label: '통계에서 확인', action: () => navigateTo('statistics') },
+  ];
+
+  showContextMenu(event.clientX, event.clientY, items, { title: `${u.name} (${u.login_id})` });
 }

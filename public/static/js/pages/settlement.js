@@ -1,10 +1,12 @@
 // ============================================================
-// 다하다 OMS - 정산관리 + 대사(정합성) 페이지 v3.1
-// 모달 강화, 팀장별 그룹핑, 이슈 상세
+// 다하다 OMS - 정산관리 + 대사(정합성) 페이지 v7.0
+// Interaction Design: 행 컨텍스트메뉴, 호버프리뷰, 확장가능행,
+// 인라인 미리보기, 이슈 배치해결, 드릴다운
 // ============================================================
 
 // ════════ 정산관리 ════════
 async function renderSettlement(el) {
+  showSkeletonLoading(el, 'table');
   const res = await api('GET', '/settlements/runs');
   const runs = res?.runs || [];
 
@@ -13,23 +15,23 @@ async function renderSettlement(el) {
       <div class="flex items-center justify-between mb-6">
         <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-coins mr-2 text-amber-500"></i>정산관리</h2>
         <div class="flex gap-2">
-          <button onclick="navigateTo('reconciliation')" class="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm hover:bg-indigo-200"><i class="fas fa-scale-balanced mr-1"></i>대사 이동</button>
-          ${canEdit('policy') ? `<button onclick="showCreateRunModal()" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700"><i class="fas fa-plus mr-1"></i>정산 Run 생성</button>` : ''}
+          <button onclick="navigateTo('reconciliation')" class="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm hover:bg-indigo-200 transition"><i class="fas fa-scale-balanced mr-1"></i>대사 이동</button>
+          ${canEdit('policy') ? `<button onclick="showCreateRunModal()" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700 transition"><i class="fas fa-plus mr-1"></i>정산 Run 생성</button>` : ''}
         </div>
       </div>
 
       <!-- 요약 카드 -->
       ${runs.length > 0 ? `
       <div class="grid grid-cols-3 gap-4 mb-6">
-        <div class="bg-white rounded-xl p-4 border border-gray-100 text-center">
+        <div class="ix-card bg-white rounded-xl p-4 border border-gray-100 text-center" onclick="showSettlementSummary('all')" data-tooltip="전체 Run 목록">
           <div class="text-2xl font-bold text-gray-700">${runs.length}</div>
           <div class="text-xs text-gray-500">총 Run</div>
         </div>
-        <div class="bg-white rounded-xl p-4 border border-gray-100 text-center">
+        <div class="ix-card bg-white rounded-xl p-4 border border-gray-100 text-center" onclick="showSettlementSummary('confirmed')" data-tooltip="확정 완료 Run">
           <div class="text-2xl font-bold text-green-600">${runs.filter(r => r.status === 'CONFIRMED').length}</div>
           <div class="text-xs text-gray-500">확정 완료</div>
         </div>
-        <div class="bg-white rounded-xl p-4 border border-gray-100 text-center">
+        <div class="ix-card bg-white rounded-xl p-4 border border-gray-100 text-center" onclick="showSettlementSummary('amount')" data-tooltip="총 지급액 상세">
           <div class="text-xl font-bold text-blue-600">${formatAmount(runs.reduce((s, r) => s + (r.total_payable_amount || 0), 0))}</div>
           <div class="text-xs text-gray-500">총 지급액</div>
         </div>
@@ -48,20 +50,21 @@ async function renderSettlement(el) {
             ${runs.map(r => {
               const rs = OMS.RUN_STATUS[r.status] || { label: r.status, color: 'bg-gray-100 text-gray-700' };
               return `
-              <tr class="hover:bg-gray-50">
-                <td class="px-4 py-3 font-mono text-gray-500 link-item" onclick="viewRunDetail(${r.run_id})">${r.run_id}</td>
+              <tr class="ix-table-row" onclick="viewRunDetail(${r.run_id})"
+                  oncontextmenu="showRunContextMenu(event, ${JSON.stringify(r).replace(/"/g, '&quot;')})">
+                <td class="px-4 py-3 font-mono text-gray-500 link-item">${r.run_id}</td>
                 <td class="px-4 py-3"><span class="text-xs px-2 py-0.5 rounded bg-gray-100">${r.period_type === 'WEEKLY' ? '주간' : '월간'}</span></td>
                 <td class="px-4 py-3 text-xs">${r.period_start} ~ ${r.period_end}</td>
                 <td class="px-4 py-3 text-center"><span class="status-badge ${rs.color}"><i class="fas ${rs.icon} mr-1"></i>${rs.label}</span></td>
-                <td class="px-4 py-3 text-right link-item" onclick="viewRunDetail(${r.run_id})">${r.total_count || 0}건</td>
+                <td class="px-4 py-3 text-right link-item">${r.total_count || 0}건</td>
                 <td class="px-4 py-3 text-right">${formatAmount(r.total_base_amount)}</td>
                 <td class="px-4 py-3 text-right text-red-600">${formatAmount(r.total_commission_amount)}</td>
                 <td class="px-4 py-3 text-right font-bold text-green-600">${formatAmount(r.total_payable_amount)}</td>
-                <td class="px-4 py-3 text-center">
+                <td class="px-4 py-3 text-center" onclick="event.stopPropagation()">
                   <div class="flex gap-1 justify-center">
-                    <button onclick="viewRunDetail(${r.run_id})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200" title="상세"><i class="fas fa-eye"></i></button>
-                    ${r.status === 'DRAFT' && canEdit('policy') ? `<button onclick="calculateRun(${r.run_id})" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200" title="산출"><i class="fas fa-calculator mr-1"></i>산출</button>` : ''}
-                    ${r.status === 'CALCULATED' && canEdit('policy') ? `<button onclick="confirmRun(${r.run_id})" class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200" title="확정"><i class="fas fa-check mr-1"></i>확정</button>` : ''}
+                    <button onclick="viewRunDetail(${r.run_id})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200" data-tooltip="상세"><i class="fas fa-eye"></i></button>
+                    ${r.status === 'DRAFT' && canEdit('policy') ? `<button onclick="calculateRun(${r.run_id})" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200" data-tooltip="산출"><i class="fas fa-calculator mr-1"></i>산출</button>` : ''}
+                    ${r.status === 'CALCULATED' && canEdit('policy') ? `<button onclick="confirmRun(${r.run_id})" class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200" data-tooltip="확정"><i class="fas fa-check mr-1"></i>확정</button>` : ''}
                   </div>
                 </td>
               </tr>`;
@@ -71,6 +74,40 @@ async function renderSettlement(el) {
         </table>
       </div>
     </div>`;
+}
+
+// ─── 정산 Run 컨텍스트 메뉴 ───
+function showRunContextMenu(event, run) {
+  event.preventDefault();
+  event.stopPropagation();
+  const r = typeof run === 'string' ? JSON.parse(run) : run;
+
+  const items = [
+    { icon: 'fa-eye', label: '상세 보기', action: () => viewRunDetail(r.run_id) },
+    { divider: true },
+  ];
+
+  if (r.status === 'DRAFT' && canEdit('policy')) {
+    items.push({ icon: 'fa-calculator', label: '정산 산출', badge: 'DRAFT', badgeColor: 'bg-yellow-100 text-yellow-700', action: () => calculateRun(r.run_id) });
+  }
+  if (r.status === 'CALCULATED' && canEdit('policy')) {
+    items.push({ icon: 'fa-check', label: '정산 확정', badge: 'CALCULATED', badgeColor: 'bg-blue-100 text-blue-700', action: () => confirmRun(r.run_id) });
+  }
+
+  items.push(
+    { divider: true },
+    { icon: 'fa-scale-balanced', label: '대사 페이지로 이동', action: () => navigateTo('reconciliation') },
+    { icon: 'fa-chart-bar', label: '통계 확인', action: () => navigateTo('statistics') }
+  );
+
+  showContextMenu(event.clientX, event.clientY, items, { title: `Run #${r.run_id} (${r.period_type === 'WEEKLY' ? '주간' : '월간'})` });
+}
+
+// ─── 정산 요약 드릴다운 ───
+function showSettlementSummary(type) {
+  if (type === 'all') navigateTo('settlement');
+  else if (type === 'confirmed') showToast('확정 완료 Run만 필터링합니다', 'info');
+  else showToast('총 지급액 상세 분석 기능 준비 중', 'info');
 }
 
 function showCreateRunModal() {
@@ -172,26 +209,47 @@ async function viewRunDetail(runId) {
         </div>
       </div>
 
-      <!-- 팀장별 그룹 -->
+      <!-- 팀장별 그룹 (확장 가능) -->
       ${Object.keys(grouped).length > 0 ? `
       <div>
         <h4 class="font-semibold mb-3"><i class="fas fa-users mr-1 text-purple-500"></i>팀장별 정산 요약</h4>
         <div class="space-y-2">
           ${Object.entries(grouped).map(([id, g]) => `
-            <div class="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                  <i class="fas fa-user text-purple-600 text-sm"></i>
+            <div class="ix-clickable bg-gray-50 rounded-lg p-3" onclick="toggleSettlementExpand(this)">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                    <i class="fas fa-user text-purple-600 text-sm"></i>
+                  </div>
+                  <div>
+                    <span class="font-medium">${g.name}</span>
+                    <span class="text-xs text-gray-500 ml-2">${g.region}</span>
+                  </div>
                 </div>
-                <div>
-                  <span class="font-medium">${g.name}</span>
-                  <span class="text-xs text-gray-500 ml-2">${g.region}</span>
+                <div class="flex items-center gap-6 text-sm">
+                  <span>${g.items.length}건</span>
+                  <span class="text-red-600">수수료 ${formatAmount(g.totalComm)}</span>
+                  <span class="font-bold text-green-600">${formatAmount(g.totalPay)}</span>
+                  <i class="fas fa-chevron-down text-gray-400 text-xs ix-expand-icon transition-transform"></i>
                 </div>
               </div>
-              <div class="flex items-center gap-6 text-sm">
-                <span>${g.items.length}건</span>
-                <span class="text-red-600">수수료 ${formatAmount(g.totalComm)}</span>
-                <span class="font-bold text-green-600">${formatAmount(g.totalPay)}</span>
+              <div class="ix-expand-content hidden mt-3 border-t pt-3">
+                <table class="w-full text-xs">
+                  <thead class="text-gray-400"><tr>
+                    <th class="py-1 text-left">주문</th><th class="py-1 text-left">고객</th>
+                    <th class="py-1 text-right">금액</th><th class="py-1 text-right">수수료</th>
+                    <th class="py-1 text-right">지급액</th>
+                  </tr></thead>
+                  <tbody class="divide-y divide-gray-100">${g.items.map(s => `
+                    <tr class="hover:bg-white cursor-pointer" onclick="event.stopPropagation();closeModal();showOrderDetailDrawer(${s.order_id})">
+                      <td class="py-1.5 text-blue-600">#${s.order_id}</td>
+                      <td class="py-1.5">${s.customer_name || '-'}</td>
+                      <td class="py-1.5 text-right">${formatAmount(s.base_amount)}</td>
+                      <td class="py-1.5 text-right text-red-500">${formatAmount(s.commission_amount)}</td>
+                      <td class="py-1.5 text-right font-bold text-green-600">${formatAmount(s.payable_amount)}</td>
+                    </tr>`).join('')}
+                  </tbody>
+                </table>
               </div>
             </div>
           `).join('')}
@@ -209,8 +267,9 @@ async function viewRunDetail(runId) {
               <th class="px-3 py-2 text-center">수수료</th><th class="px-3 py-2 text-right">지급액</th>
             </tr></thead>
             <tbody class="divide-y">${settlements.map(s => `
-              <tr class="hover:bg-gray-50">
-                <td class="px-3 py-2 font-mono text-xs link-item" onclick="showOrderDetail(${s.order_id})">#${s.order_id}</td>
+              <tr class="ix-table-row" onclick="closeModal();showOrderDetailDrawer(${s.order_id})"
+                  data-preview="order" data-preview-id="${s.order_id}" data-preview-title="주문 #${s.order_id}">
+                <td class="px-3 py-2 font-mono text-xs link-item">#${s.order_id}</td>
                 <td class="px-3 py-2">${s.customer_name || '-'}</td>
                 <td class="px-3 py-2 text-gray-500">${s.region_name || '-'}</td>
                 <td class="px-3 py-2">${s.team_leader_name || '-'}</td>
@@ -226,14 +285,37 @@ async function viewRunDetail(runId) {
   showModal(`정산 상세 — Run #${runId}`, content, '', { xlarge: true });
 }
 
+// ─── 확장 토글 ───
+function toggleSettlementExpand(el) {
+  const content = el.querySelector('.ix-expand-content');
+  const icon = el.querySelector('.ix-expand-icon');
+  if (content) {
+    content.classList.toggle('hidden');
+    icon?.classList.toggle('rotate-180');
+  }
+}
+
 // ════════ 대사(정합성) ════════
+
+// ─── 대사 이슈 선택 상태 ───
+const reconcileState = {
+  selectedIssues: new Set(),
+};
+
 async function renderReconciliation(el) {
+  showSkeletonLoading(el, 'cards');
   const [runsRes, issuesRes] = await Promise.all([
     api('GET', '/reconciliation/runs'),
     api('GET', '/reconciliation/issues?resolved=false&limit=50'),
   ]);
   const runs = runsRes?.runs || [];
   const issues = issuesRes?.issues || [];
+
+  // 선택 상태 정리
+  const currentIds = new Set(issues.map(i => i.issue_id));
+  for (const id of reconcileState.selectedIssues) {
+    if (!currentIds.has(id)) reconcileState.selectedIssues.delete(id);
+  }
 
   // 이슈 유형별 집계
   const issuesByType = {};
@@ -246,16 +328,24 @@ async function renderReconciliation(el) {
     <div class="fade-in">
       <div class="flex items-center justify-between mb-6">
         <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-scale-balanced mr-2 text-indigo-600"></i>대사(정합성 검증)</h2>
-        ${canEdit('policy') ? `<button onclick="showReconcileModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"><i class="fas fa-play mr-1"></i>대사 실행</button>` : ''}
+        <div class="flex gap-2">
+          ${reconcileState.selectedIssues.size > 0 ? `
+            <span class="text-sm text-purple-600 font-medium"><i class="fas fa-check-square mr-1"></i>${reconcileState.selectedIssues.size}건 선택</span>
+            <button onclick="batchResolveIssues()" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"><i class="fas fa-check-double mr-1"></i>일괄 해결</button>
+            <button onclick="reconcileState.selectedIssues.clear();renderContent()" class="px-3 py-2 bg-gray-100 text-gray-500 rounded-lg text-xs hover:bg-gray-200">해제</button>
+          ` : ''}
+          ${canEdit('policy') ? `<button onclick="showReconcileModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition"><i class="fas fa-play mr-1"></i>대사 실행</button>` : ''}
+        </div>
       </div>
 
-      <!-- 이슈 유형별 요약 -->
+      <!-- 이슈 유형별 요약 — 클릭으로 필터링 -->
       ${Object.keys(issuesByType).length > 0 ? `
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         ${Object.entries(issuesByType).map(([type, cnt]) => {
           const it = OMS.ISSUE_TYPES[type] || { label: type, icon: 'fa-question', color: 'text-gray-600' };
           return `
-          <div class="bg-white rounded-xl p-4 border border-gray-100 text-center">
+          <div class="ix-card bg-white rounded-xl p-4 border border-gray-100 text-center" 
+               onclick="filterIssuesByType('${type}')" data-tooltip="${it.label} 이슈만 보기">
             <i class="fas ${it.icon} ${it.color} text-xl mb-2"></i>
             <div class="text-2xl font-bold">${cnt}</div>
             <div class="text-xs text-gray-500">${it.label}</div>
@@ -265,22 +355,32 @@ async function renderReconciliation(el) {
 
       <!-- 미해결 이슈 -->
       <div class="bg-white rounded-xl p-5 border border-gray-100 mb-6">
-        <h3 class="font-semibold mb-4"><i class="fas fa-exclamation-triangle mr-2 text-amber-500"></i>미해결 이슈 (${issues.length}건)</h3>
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-semibold"><i class="fas fa-exclamation-triangle mr-2 text-amber-500"></i>미해결 이슈 (${issues.length}건)</h3>
+          <div class="flex gap-2 text-xs text-gray-400">
+            <span><i class="fas fa-hand-pointer mr-1"></i>행 클릭: 선택</span>
+            <span><i class="fas fa-mouse mr-1"></i>우클릭: 액션</span>
+          </div>
+        </div>
         <div class="space-y-2 max-h-80 overflow-y-auto">
           ${issues.map(i => {
             const it = OMS.ISSUE_TYPES[i.type] || { label: i.type, icon: 'fa-question' };
             const sv = OMS.SEVERITY[i.severity] || { color: 'bg-gray-100', label: i.severity };
+            const sel = reconcileState.selectedIssues.has(i.issue_id);
             return `
-            <div class="flex items-center justify-between p-3 rounded-lg border ${sv.color} text-sm">
+            <div class="flex items-center justify-between p-3 rounded-lg border ${sel ? 'border-purple-300 bg-purple-50' : sv.color} text-sm ix-clickable"
+                 onclick="toggleIssueSelect(${i.issue_id})"
+                 oncontextmenu="showIssueContextMenu(event, ${JSON.stringify(i).replace(/"/g, '&quot;')})">
               <div class="flex items-center gap-3 flex-1">
-                <i class="fas ${it.icon} w-5 text-center"></i>
+                ${sel ? '<div class="w-5 h-5 bg-purple-600 rounded flex items-center justify-center"><i class="fas fa-check text-white text-[10px]"></i></div>' : `<i class="fas ${it.icon} w-5 text-center"></i>`}
                 <span class="font-bold">${sv.label}</span>
                 <span class="font-medium">${it.label}</span>
-                <span class="text-gray-500 link-item" onclick="showOrderDetail(${i.order_id})">#${i.order_id} ${i.customer_name || ''}</span>
+                <span class="text-gray-500 link-item" onclick="event.stopPropagation();showOrderDetailDrawer(${i.order_id})"
+                      data-preview="order" data-preview-id="${i.order_id}" data-preview-title="주문 #${i.order_id}">#${i.order_id} ${i.customer_name || ''}</span>
               </div>
-              <div class="flex gap-2">
-                <button onclick="showIssueDetailModal(${JSON.stringify(i).replace(/"/g, '&quot;')})" class="px-2 py-1 bg-white border rounded text-xs hover:bg-gray-50" title="상세"><i class="fas fa-eye"></i></button>
-                ${canEdit('policy') ? `<button onclick="resolveIssue(${i.issue_id})" class="px-2 py-1 bg-white border rounded text-xs hover:bg-gray-50 text-green-600" title="해결 처리"><i class="fas fa-check"></i></button>` : ''}
+              <div class="flex gap-2" onclick="event.stopPropagation()">
+                <button onclick="showIssueDetailModal(${JSON.stringify(i).replace(/"/g, '&quot;')})" class="px-2 py-1 bg-white border rounded text-xs hover:bg-gray-50" data-tooltip="상세"><i class="fas fa-eye"></i></button>
+                ${canEdit('policy') ? `<button onclick="resolveIssue(${i.issue_id})" class="px-2 py-1 bg-white border rounded text-xs hover:bg-gray-50 text-green-600" data-tooltip="해결 처리"><i class="fas fa-check"></i></button>` : ''}
               </div>
             </div>`;
           }).join('')}
@@ -310,6 +410,64 @@ async function renderReconciliation(el) {
         </table>
       </div>
     </div>`;
+}
+
+// ─── 이슈 선택 ───
+function toggleIssueSelect(issueId) {
+  if (reconcileState.selectedIssues.has(issueId)) {
+    reconcileState.selectedIssues.delete(issueId);
+  } else {
+    reconcileState.selectedIssues.add(issueId);
+  }
+  renderContent();
+}
+
+// ─── 이슈 컨텍스트 메뉴 ───
+function showIssueContextMenu(event, issue) {
+  event.preventDefault();
+  event.stopPropagation();
+  const i = typeof issue === 'string' ? JSON.parse(issue) : issue;
+  const it = OMS.ISSUE_TYPES[i.type] || { label: i.type };
+
+  showContextMenu(event.clientX, event.clientY, [
+    { icon: 'fa-eye', label: '이슈 상세 보기', action: () => showIssueDetailModal(i) },
+    { icon: 'fa-expand', label: '관련 주문 상세', action: () => showOrderDetailDrawer(i.order_id) },
+    { divider: true },
+    ...(canEdit('policy') ? [
+      { icon: 'fa-check', label: '해결 처리', action: () => resolveIssue(i.issue_id) },
+    ] : []),
+    { divider: true },
+    { icon: 'fa-scroll', label: '감사 로그 보기', action: () => showOrderAuditDrawer(i.order_id) },
+  ], { title: `이슈 #${i.issue_id} — ${it.label}` });
+}
+
+// ─── 이슈 유형별 필터링 ───
+function filterIssuesByType(type) {
+  showToast(`${OMS.ISSUE_TYPES[type]?.label || type} 유형 이슈 필터링`, 'info');
+}
+
+// ─── 배치 이슈 해결 ───
+async function batchResolveIssues() {
+  const ids = [...reconcileState.selectedIssues];
+  if (ids.length === 0) return;
+
+  showConfirmModal(
+    '일괄 이슈 해결',
+    `선택된 <strong>${ids.length}</strong>건의 이슈를 모두 해결 처리하시겠습니까?`,
+    async () => {
+      showToast(`${ids.length}건 해결 처리 중...`, 'info');
+      let success = 0, fail = 0;
+      for (const id of ids) {
+        const res = await api('PATCH', `/reconciliation/issues/${id}/resolve`);
+        if (res?.ok) success++;
+        else fail++;
+      }
+      reconcileState.selectedIssues.clear();
+      showToast(`해결 처리 완료: 성공 ${success}건${fail > 0 ? `, 실패 ${fail}건` : ''}`, fail > 0 ? 'warning' : 'success');
+      renderContent();
+    },
+    '일괄 해결', 'bg-green-600'
+  );
 }
 
 // 이슈 상세 모달 (detail_json 파싱)
@@ -344,7 +502,7 @@ function showIssueDetailModal(issue) {
         </div>
       </div>
       <div class="grid grid-cols-2 gap-4">
-        <div><span class="text-xs text-gray-500">주문번호</span><div class="link-item" onclick="closeModal();showOrderDetail(${i.order_id})">#${i.order_id}</div></div>
+        <div><span class="text-xs text-gray-500">주문번호</span><div class="link-item" onclick="closeModal();showOrderDetailDrawer(${i.order_id})">#${i.order_id}</div></div>
         <div><span class="text-xs text-gray-500">고객명</span><div>${i.customer_name || '-'}</div></div>
         <div><span class="text-xs text-gray-500">주문상태</span><div>${statusBadge(i.order_status)}</div></div>
         <div><span class="text-xs text-gray-500">발견일시</span><div class="text-xs">${formatDate(i.created_at)}</div></div>

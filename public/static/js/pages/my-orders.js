@@ -1,9 +1,12 @@
 // ============================================================
-// 다하다 OMS - 팀장 뷰 (내 주문 + 내 현황)
+// 다하다 OMS - 팀장 뷰 (내 주문 + 내 현황) v7.0
+// Interaction Design: 카드 드릴다운, 컨텍스트메뉴, 호버프리뷰,
+// 드로어 상세, 보고서 위자드 스텝
 // ============================================================
 
 // ════════ 내 주문 ════════
 async function renderMyOrders(el) {
+  showSkeletonLoading(el, 'cards');
   const params = new URLSearchParams(window._myOrderFilters || {});
   if (!params.has('limit')) params.set('limit', '20');
   const res = await api('GET', `/orders?${params.toString()}`);
@@ -13,7 +16,7 @@ async function renderMyOrders(el) {
     <div class="fade-in">
       <h2 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-list mr-2 text-green-600"></i>내 주문</h2>
 
-      <!-- 상태별 카드 -->
+      <!-- 상태별 카드 (드릴다운) -->
       <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
         ${[
           { status: '', label: '전체', icon: 'fa-list', color: 'gray', count: res?.total || 0 },
@@ -25,19 +28,23 @@ async function renderMyOrders(el) {
           const count = c.count !== undefined ? c.count : orders.filter(o => c.status.split(',').includes(o.status)).length;
           const active = params.get('status') === c.status;
           return `
-          <button onclick="window._myOrderFilters={status:'${c.status}',page:1};renderContent()" 
-            class="card bg-white rounded-xl p-4 border ${active ? 'border-blue-400 ring-2 ring-blue-200' : 'border-gray-100'} text-center">
+          <div class="ix-card card bg-white rounded-xl p-4 border ${active ? 'border-blue-400 ring-2 ring-blue-200' : 'border-gray-100'} text-center"
+               onclick="window._myOrderFilters={status:'${c.status}',page:1};renderContent()"
+               data-tooltip="${c.label} 주문 목록 보기">
             <i class="fas ${c.icon} text-${c.color}-500 text-lg mb-1"></i>
-            <div class="text-2xl font-bold">${count}</div>
+            <div class="text-2xl font-bold ix-count-animate">${count}</div>
             <div class="text-xs text-gray-500">${c.label}</div>
-          </button>`;
+          </div>`;
         }).join('')}
       </div>
 
       <!-- 주문 목록 -->
       <div class="space-y-3">
         ${orders.map(o => `
-          <div class="bg-white rounded-xl p-4 border border-gray-100 hover:shadow-md transition">
+          <div class="ix-card bg-white rounded-xl p-4 border border-gray-100 hover:shadow-md transition"
+               onclick="showOrderDetailDrawer(${o.order_id})"
+               oncontextmenu="showMyOrderContextMenu(event, ${JSON.stringify(o).replace(/"/g, '&quot;')})"
+               data-preview="order" data-preview-id="${o.order_id}" data-preview-title="주문 #${o.order_id}">
             <div class="flex items-center justify-between mb-2">
               <div class="flex items-center gap-3">
                 <span class="font-mono text-gray-400 text-xs">#${o.order_id}</span>
@@ -46,17 +53,58 @@ async function renderMyOrders(el) {
               </div>
               <span class="font-medium text-blue-600">${formatAmount(o.base_amount)}</span>
             </div>
-            <div class="text-sm text-gray-500 mb-3">${o.address_text || '-'}</div>
-            <div class="flex flex-wrap gap-2">
-              <button onclick="showOrderDetail(${o.order_id})" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs"><i class="fas fa-eye mr-1"></i>상세</button>
-              ${o.status === 'ASSIGNED' ? `<button onclick="startWork(${o.order_id})" class="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-xs"><i class="fas fa-play mr-1"></i>작업시작</button>` : ''}
-              ${['IN_PROGRESS', 'REGION_REJECTED', 'HQ_REJECTED'].includes(o.status) ? `<button onclick="showReportModal(${o.order_id})" class="px-3 py-1.5 bg-cyan-600 text-white rounded-lg text-xs"><i class="fas fa-file-pen mr-1"></i>보고서 제출</button>` : ''}
+            <div class="text-sm text-gray-500 mb-2">${o.address_text || '-'}</div>
+            ${_renderStatusProgress(o.status)}
+            <div class="flex flex-wrap gap-2 mt-3" onclick="event.stopPropagation()">
+              <button onclick="showOrderDetailDrawer(${o.order_id})" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200 transition" data-tooltip="드로어에서 상세 보기">
+                <i class="fas fa-eye mr-1"></i>상세
+              </button>
+              ${o.status === 'ASSIGNED' ? `
+                <button onclick="startWork(${o.order_id})" class="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-xs hover:bg-orange-700 transition" data-tooltip="작업을 시작합니다">
+                  <i class="fas fa-play mr-1"></i>작업시작
+                </button>` : ''}
+              ${['IN_PROGRESS', 'REGION_REJECTED', 'HQ_REJECTED'].includes(o.status) ? `
+                <button onclick="showReportModal(${o.order_id})" class="px-3 py-1.5 bg-cyan-600 text-white rounded-lg text-xs hover:bg-cyan-700 transition" data-tooltip="보고서를 제출합니다">
+                  <i class="fas fa-file-pen mr-1"></i>보고서 제출
+                </button>` : ''}
+              <button onclick="event.stopPropagation();showMyOrderContextMenu(event, ${JSON.stringify(o).replace(/"/g, '&quot;')})" 
+                class="ml-auto w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" data-tooltip="더보기">
+                <i class="fas fa-ellipsis-vertical"></i>
+              </button>
             </div>
           </div>
         `).join('')}
         ${orders.length === 0 ? '<div class="bg-white rounded-xl p-8 text-center text-gray-400 border"><i class="fas fa-inbox text-4xl mb-3"></i><p>주문이 없습니다.</p></div>' : ''}
       </div>
     </div>`;
+}
+
+// ─── 내 주문 컨텍스트 메뉴 ───
+function showMyOrderContextMenu(event, order) {
+  event.preventDefault();
+  event.stopPropagation();
+  const o = typeof order === 'string' ? JSON.parse(order) : order;
+
+  const items = [
+    { icon: 'fa-eye', label: '드로어에서 상세 보기', action: () => showOrderDetailDrawer(o.order_id) },
+    { icon: 'fa-expand', label: '모달에서 상세 보기', action: () => showOrderDetail(o.order_id) },
+    { divider: true },
+  ];
+
+  if (o.status === 'ASSIGNED') {
+    items.push({ icon: 'fa-play', label: '작업 시작', action: () => startWork(o.order_id) });
+  }
+  if (['IN_PROGRESS', 'REGION_REJECTED', 'HQ_REJECTED'].includes(o.status)) {
+    items.push({ icon: 'fa-file-pen', label: '보고서 제출', action: () => showReportModal(o.order_id) });
+  }
+
+  items.push(
+    { divider: true },
+    { icon: 'fa-clock-rotate-left', label: '상태 이력', action: () => showOrderHistoryDrawer(o.order_id) },
+    { icon: 'fa-scroll', label: '감사 로그', action: () => showOrderAuditDrawer(o.order_id) }
+  );
+
+  showContextMenu(event.clientX, event.clientY, items, { title: `주문 #${o.order_id} — ${o.customer_name || ''}` });
 }
 
 async function startWork(orderId) {
@@ -72,12 +120,14 @@ function showReportModal(orderId) {
   const content = `
     <form id="report-form" class="space-y-4">
       <div>
-        <h4 class="font-semibold mb-2">체크리스트</h4>
+        <h4 class="font-semibold mb-2"><i class="fas fa-clipboard-list mr-1 text-cyan-500"></i>체크리스트</h4>
         <div class="space-y-2">
-          ${['외부촬영', '내부촬영', '세척전', '세척후', '영수증', '고객확인'].map(item => `
-            <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-              <input type="checkbox" name="checklist" value="${item}" class="w-4 h-4 rounded">
-              <span class="text-sm">${item}</span>
+          ${OMS.REPORT_CHECKLIST.map(item => `
+            <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition">
+              <input type="checkbox" name="checklist" value="${item.key || item.label}" class="w-4 h-4 rounded text-cyan-600">
+              <i class="fas ${item.icon || 'fa-check'} text-gray-400 text-sm w-5 text-center"></i>
+              <span class="text-sm">${item.label}</span>
+              ${item.required ? '<span class="text-red-400 text-[10px] ml-auto">필수</span>' : ''}
             </label>
           `).join('')}
         </div>
@@ -139,7 +189,7 @@ async function renderMyProfile(el) {
             <input id="pw-new" type="password" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="새 비밀번호 (6자 이상)" minlength="6"></div>
           <div><label class="block text-xs text-gray-500 mb-1">새 비밀번호 확인</label>
             <input id="pw-confirm" type="password" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="새 비밀번호 재입력"></div>
-          <button type="button" onclick="submitPasswordChange()" class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+          <button type="button" onclick="submitPasswordChange()" class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">
             <i class="fas fa-save mr-1"></i>비밀번호 변경
           </button>
         </form>
@@ -166,6 +216,7 @@ async function submitPasswordChange() {
 
 // ════════ 내 현황 ════════
 async function renderMyStats(el) {
+  showSkeletonLoading(el, 'cards');
   const today = new Date().toISOString().split('T')[0];
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
 
@@ -192,32 +243,26 @@ async function renderMyStats(el) {
     <div class="fade-in">
       <h2 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-chart-line mr-2 text-green-600"></i>내 현황</h2>
 
-      <!-- 요약 카드 -->
+      <!-- 요약 카드 — 클릭 시 필터링 -->
       <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <div class="card bg-white rounded-xl p-4 border border-gray-100 text-center">
-          <div class="text-2xl font-bold text-blue-600">${totals.intake}</div>
-          <div class="text-xs text-gray-500">수임 건수</div>
-        </div>
-        <div class="card bg-white rounded-xl p-4 border border-gray-100 text-center">
-          <div class="text-2xl font-bold text-cyan-600">${totals.submitted}</div>
-          <div class="text-xs text-gray-500">제출 건수</div>
-        </div>
-        <div class="card bg-white rounded-xl p-4 border border-gray-100 text-center">
-          <div class="text-2xl font-bold text-green-600">${totals.approved}</div>
-          <div class="text-xs text-gray-500">HQ승인</div>
-        </div>
-        <div class="card bg-white rounded-xl p-4 border border-gray-100 text-center">
-          <div class="text-2xl font-bold text-emerald-600">${totals.settled}</div>
-          <div class="text-xs text-gray-500">정산확정</div>
-        </div>
-        <div class="card bg-white rounded-xl p-4 border border-gray-100 text-center">
-          <div class="text-xl font-bold text-purple-600">${formatAmount(totals.payable)}</div>
-          <div class="text-xs text-gray-500">예상지급액</div>
-        </div>
+        ${[
+          { label: '수임 건수', value: totals.intake, icon: 'fa-inbox', color: 'blue', filter: '' },
+          { label: '제출 건수', value: totals.submitted, icon: 'fa-file-lines', color: 'cyan', filter: 'SUBMITTED' },
+          { label: 'HQ승인', value: totals.approved, icon: 'fa-check-double', color: 'green', filter: 'HQ_APPROVED' },
+          { label: '정산확정', value: totals.settled, icon: 'fa-coins', color: 'emerald', filter: 'SETTLEMENT_CONFIRMED' },
+          { label: '예상지급액', value: formatAmount(totals.payable), icon: 'fa-won-sign', color: 'purple', isText: true, filter: '' },
+        ].map(c => `
+          <div class="ix-card card bg-white rounded-xl p-4 border border-gray-100 text-center"
+               onclick="${c.filter ? `window._myOrderFilters={status:'${c.filter}'};navigateTo('my-orders')` : ''}"
+               data-tooltip="${c.filter ? c.label + ' 주문 보기' : ''}">
+            <div class="text-${c.isText ? 'xl' : '2xl'} font-bold text-${c.color}-600 ix-count-animate">${c.value}</div>
+            <div class="text-xs text-gray-500">${c.label}</div>
+          </div>
+        `).join('')}
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <!-- 내 주문 퍼널 -->
+        <!-- 내 주문 퍼널 — 클릭 시 주문목록으로 이동 -->
         <div class="bg-white rounded-xl p-5 border border-gray-100">
           <h3 class="font-semibold mb-4"><i class="fas fa-filter mr-2 text-blue-500"></i>내 주문 상태 분포</h3>
           <div class="space-y-2">
@@ -226,10 +271,12 @@ async function renderMyStats(el) {
               const pct = (f.count / max * 100);
               const s = STATUS[f.status] || { label: f.status, color: 'bg-gray-100 text-gray-600' };
               return `
-                <div class="flex items-center gap-3">
+                <div class="ix-clickable flex items-center gap-3 rounded-lg p-1 -mx-1" 
+                     onclick="window._myOrderFilters={status:'${f.status}'};navigateTo('my-orders')"
+                     data-tooltip="${s.label}: ${f.count}건">
                   <div class="w-20 text-xs text-right text-gray-500">${s.label}</div>
                   <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
-                    <div class="h-full bg-blue-400 rounded-full flex items-center justify-end pr-2" style="width:${Math.max(pct, 10)}%">
+                    <div class="h-full bg-blue-400 rounded-full flex items-center justify-end pr-2 transition-all duration-500" style="width:${Math.max(pct, 10)}%">
                       <span class="text-[10px] font-bold text-white">${f.count}</span>
                     </div>
                   </div>

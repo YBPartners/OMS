@@ -1,7 +1,7 @@
 // ============================================================
-// 다하다 OMS - 칸반보드 (파트장 → 팀장 배정) v5.5
-// Phase 5-1: 다중선택·배치배정, 드래그 애니메이션, 배정해제,
-//            필터링, 통계 요약, 키보드 지원
+// 다하다 OMS - 칸반보드 (파트장 → 팀장 배정) v7.0
+// Interaction Design: 컨텍스트메뉴, 호버프리뷰, 상태플로우,
+// 드래그앤드롭, 다중선택·배치배정, 키보드 지원
 // ============================================================
 
 // ─── 칸반 상태 ───
@@ -294,20 +294,28 @@ function kanbanCardV2(order, leader, isSelected) {
          data-order-id="${order.order_id}"
          data-status="${order.status}"
          onclick="kanbanToggleSelect(${order.order_id}, event)"
+         oncontextmenu="showKanbanCardContextMenu(event, ${JSON.stringify(order).replace(/"/g, '&quot;')})"
          ondragstart="kanbanDragStart(event, ${order.order_id})"
-         ondragend="kanbanDragEnd(event)">
+         ondragend="kanbanDragEnd(event)"
+         data-preview="order" data-preview-id="${order.order_id}" data-preview-title="주문 #${order.order_id}">
       ${isSelected ? '<div class="absolute top-2 right-2 w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center"><i class="fas fa-check text-white text-[10px]"></i></div>' : ''}
       <div class="flex items-center justify-between mb-1.5">
         <div class="flex items-center gap-1.5">
           <span class="text-xs font-mono text-gray-400">#${order.order_id}</span>
           ${statusBadge(order.status)}
         </div>
-        ${canUnassign ? `
-          <button onclick="event.stopPropagation();kanbanUnassign(${order.order_id})" 
-            class="unassign-btn w-6 h-6 flex items-center justify-center rounded-full bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 text-[10px]" title="배정 해제">
-            <i class="fas fa-times"></i>
+        <div class="flex items-center gap-1">
+          ${canUnassign ? `
+            <button onclick="event.stopPropagation();kanbanUnassign(${order.order_id})" 
+              class="unassign-btn w-6 h-6 flex items-center justify-center rounded-full bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 text-[10px]" title="배정 해제">
+              <i class="fas fa-times"></i>
+            </button>
+          ` : ''}
+          <button onclick="event.stopPropagation();showKanbanCardContextMenu(event, ${JSON.stringify(order).replace(/"/g, '&quot;')})" 
+            class="unassign-btn w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 text-[10px]" data-tooltip="더보기">
+            <i class="fas fa-ellipsis-vertical"></i>
           </button>
-        ` : ''}
+        </div>
       </div>
       <div class="font-medium text-sm mb-0.5">${order.customer_name || '이름없음'}</div>
       <div class="text-xs text-gray-500 truncate mb-1.5" title="${order.address_text || ''}">${order.address_text?.substring(0, 35) || '-'}</div>
@@ -315,23 +323,67 @@ function kanbanCardV2(order, leader, isSelected) {
         <span class="text-sm font-bold text-blue-600">${formatAmount(order.base_amount)}</span>
         <span class="text-[10px] text-gray-400">${order.requested_date || '-'}</span>
       </div>
+      ${_renderStatusProgress(order.status)}
       ${!isAssigned ? `
         <div class="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between">
           <button onclick="event.stopPropagation();showAssignModal(${order.order_id})" class="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200">
             <i class="fas fa-user-plus mr-1"></i>배정
           </button>
-          <button onclick="event.stopPropagation();showOrderDetail(${order.order_id})" class="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">
+          <button onclick="event.stopPropagation();showOrderDetailDrawer(${order.order_id})" class="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">
             <i class="fas fa-eye mr-1"></i>상세
           </button>
         </div>
       ` : `
         <div class="mt-2 pt-2 border-t border-gray-100">
-          <button onclick="event.stopPropagation();showOrderDetail(${order.order_id})" class="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">
+          <button onclick="event.stopPropagation();showOrderDetailDrawer(${order.order_id})" class="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">
             <i class="fas fa-eye mr-1"></i>상세
           </button>
         </div>
       `}
     </div>`;
+}
+
+// ─── 칸반 카드 컨텍스트 메뉴 ───
+function showKanbanCardContextMenu(event, order) {
+  event.preventDefault();
+  event.stopPropagation();
+  const o = typeof order === 'string' ? JSON.parse(order) : order;
+  const isAssigned = !!o.team_leader_id;
+  const isInProgress = o.status === 'IN_PROGRESS';
+
+  const items = [
+    { icon: 'fa-eye', label: '드로어에서 상세 보기', action: () => showOrderDetailDrawer(o.order_id) },
+    { icon: 'fa-expand', label: '모달에서 상세 보기', action: () => showOrderDetail(o.order_id) },
+    { divider: true },
+  ];
+
+  if (!isAssigned) {
+    items.push({ icon: 'fa-user-plus', label: '팀장 배정', badge: '가능', badgeColor: 'bg-purple-100 text-purple-700', action: () => showAssignModal(o.order_id) });
+  }
+  if (isAssigned && !isInProgress) {
+    items.push({ icon: 'fa-user-minus', label: '배정 해제', danger: true, action: () => kanbanUnassign(o.order_id) });
+  }
+  if (o.status === 'ASSIGNED') {
+    items.push({ icon: 'fa-play', label: '작업 시작', action: () => startWork(o.order_id) });
+  }
+  if (['IN_PROGRESS', 'REGION_REJECTED', 'HQ_REJECTED'].includes(o.status)) {
+    items.push({ icon: 'fa-file-pen', label: '보고서 제출', action: () => showReportModal(o.order_id) });
+  }
+
+  items.push(
+    { divider: true },
+    { icon: 'fa-clock-rotate-left', label: '상태 이력', action: () => showOrderHistoryDrawer(o.order_id) },
+    { icon: 'fa-scroll', label: '감사 로그', action: () => showOrderAuditDrawer(o.order_id) }
+  );
+
+  // 선택 관련 메뉴
+  const isSelected = kanbanState.selected.has(o.order_id);
+  items.push(
+    { divider: true },
+    { icon: isSelected ? 'fa-square-minus' : 'fa-square-check', label: isSelected ? '선택 해제' : '선택', action: () => { if (isSelected) kanbanState.selected.delete(o.order_id); else kanbanState.selected.add(o.order_id); renderContent(); } }
+  );
+
+  showContextMenu(event.clientX, event.clientY, items, { title: `#${o.order_id} ${o.customer_name || ''}` });
 }
 
 // ─── 선택 토글 ───

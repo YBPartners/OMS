@@ -1,9 +1,12 @@
 // ============================================================
-// 다하다 OMS - 통계 + 정책관리 페이지
+// 다하다 OMS - 통계 + 정책관리 페이지 v7.0
+// Interaction Design: 행 호버프리뷰, 컨텍스트메뉴,
+// 드릴다운 행, CSV 다운로드, 인터랙티브 테이블
 // ============================================================
 
 // ════════ 통계 ════════
 async function renderStatistics(el) {
+  showSkeletonLoading(el, 'table');
   const today = new Date().toISOString().split('T')[0];
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
   
@@ -17,8 +20,12 @@ async function renderStatistics(el) {
       <div class="flex items-center justify-between mb-6">
         <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-chart-bar mr-2 text-purple-600"></i>통계</h2>
         <div class="flex gap-2">
-          <button onclick="exportCSV('region')" class="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm hover:bg-green-200"><i class="fas fa-download mr-1"></i>지역별 CSV</button>
-          <button onclick="exportCSV('team_leader')" class="px-3 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm hover:bg-purple-200"><i class="fas fa-download mr-1"></i>팀장별 CSV</button>
+          <button onclick="exportCSV('region')" class="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm hover:bg-green-200 transition" data-tooltip="지역별 통계 CSV 다운로드">
+            <i class="fas fa-download mr-1"></i>지역별 CSV
+          </button>
+          <button onclick="exportCSV('team_leader')" class="px-3 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm hover:bg-purple-200 transition" data-tooltip="팀장별 통계 CSV 다운로드">
+            <i class="fas fa-download mr-1"></i>팀장별 CSV
+          </button>
         </div>
       </div>
 
@@ -28,7 +35,7 @@ async function renderStatistics(el) {
           <input id="stat-from" type="date" class="border rounded-lg px-3 py-2 text-sm" value="${weekAgo}"></div>
         <div><label class="block text-xs text-gray-500 mb-1">종료일</label>
           <input id="stat-to" type="date" class="border rounded-lg px-3 py-2 text-sm" value="${today}"></div>
-        <button onclick="refreshStats()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm"><i class="fas fa-search mr-1"></i>조회</button>
+        <button onclick="refreshStats()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition"><i class="fas fa-search mr-1"></i>조회</button>
       </div>
 
       <!-- 지역법인별 통계 -->
@@ -44,9 +51,11 @@ async function renderStatistics(el) {
             </tr></thead>
             <tbody class="divide-y" id="region-stats-body">
               ${(regionRes?.stats || []).map(s => `
-                <tr class="hover:bg-gray-50">
+                <tr class="ix-table-row" 
+                    onclick="drilldownRegionStat('${s.region_name}', '${s.region_org_id || ''}')"
+                    oncontextmenu="showStatRowContextMenu(event, 'region', '${s.region_name}', '${s.region_org_id || ''}')">
                   <td class="px-3 py-2 text-xs">${s.date}</td>
-                  <td class="px-3 py-2 font-medium">${s.region_name}</td>
+                  <td class="px-3 py-2 font-medium text-blue-700"><i class="fas fa-building text-[10px] mr-1 text-blue-400"></i>${s.region_name}</td>
                   <td class="px-3 py-2 text-right">${s.intake_count || 0}</td>
                   <td class="px-3 py-2 text-right">${s.assigned_to_team_count || 0}</td>
                   <td class="px-3 py-2 text-right">${s.completed_count || 0}</td>
@@ -73,7 +82,10 @@ async function renderStatistics(el) {
             </tr></thead>
             <tbody class="divide-y" id="tl-stats-body">
               ${(tlRes?.stats || []).map(s => `
-                <tr class="hover:bg-gray-50">
+                <tr class="ix-table-row"
+                    onclick="drilldownTeamLeaderStat('${s.team_leader_name}', '${s.team_leader_id || ''}')"
+                    oncontextmenu="showStatRowContextMenu(event, 'leader', '${s.team_leader_name}', '${s.team_leader_id || ''}')"
+                    data-preview="user" data-preview-id="${s.team_leader_id || ''}" data-preview-title="${s.team_leader_name}">
                   <td class="px-3 py-2 text-xs">${s.date}</td>
                   <td class="px-3 py-2 font-medium">${s.team_leader_name}</td>
                   <td class="px-3 py-2 text-gray-500">${s.org_name || '-'}</td>
@@ -91,8 +103,53 @@ async function renderStatistics(el) {
     </div>`;
 }
 
+// ─── 통계 행 드릴다운 ───
+function drilldownRegionStat(regionName, orgId) {
+  if (orgId) {
+    window._orderFilters = { region_org_id: orgId };
+    navigateTo('orders');
+  } else {
+    showToast(`${regionName} 주문 목록으로 이동`, 'info');
+  }
+}
+
+function drilldownTeamLeaderStat(leaderName, leaderId) {
+  if (leaderId) {
+    window._orderFilters = { search: leaderName };
+    navigateTo('orders');
+  } else {
+    showToast(`${leaderName} 관련 주문 보기`, 'info');
+  }
+}
+
+// ─── 통계 행 컨텍스트 메뉴 ───
+function showStatRowContextMenu(event, type, name, id) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  const items = [];
+  if (type === 'region') {
+    items.push(
+      { icon: 'fa-list', label: `${name} 주문 목록`, action: () => { window._orderFilters = { region_org_id: id }; navigateTo('orders'); } },
+      { icon: 'fa-building', label: `${name} 상세 보기`, action: () => showRegionDetailModal(Number(id), name) },
+      { divider: true },
+      { icon: 'fa-users-gear', label: '인사관리에서 확인', action: () => navigateTo('hr-management') },
+      { icon: 'fa-coins', label: '정산에서 확인', action: () => navigateTo('settlement') }
+    );
+  } else {
+    items.push(
+      { icon: 'fa-list', label: `${name} 주문 목록`, action: () => { window._orderFilters = { search: name }; navigateTo('orders'); } },
+      { divider: true },
+      { icon: 'fa-users-gear', label: '인사관리에서 확인', action: () => navigateTo('hr-management') },
+      { icon: 'fa-coins', label: '정산에서 확인', action: () => navigateTo('settlement') }
+    );
+  }
+
+  showContextMenu(event.clientX, event.clientY, items, { title: name });
+}
+
 async function refreshStats() {
-  renderContent(); // 간단히 전체 렌더
+  renderContent();
 }
 
 async function exportCSV(groupBy) {
@@ -113,6 +170,7 @@ async function exportCSV(groupBy) {
 
 // ════════ 정책관리 ════════
 async function renderPolicies(el) {
+  showSkeletonLoading(el, 'table');
   const [distRes, reportRes, commRes, terRes] = await Promise.all([
     api('GET', '/stats/policies/distribution'),
     api('GET', '/stats/policies/report'),
@@ -131,7 +189,7 @@ async function renderPolicies(el) {
         ${['distribution', 'report', 'commission', 'territory'].map(tab => {
           const labels = { distribution: '배분 정책', report: '보고서 정책', commission: '수수료 정책', territory: '지역권 매핑' };
           const icons = { distribution: 'fa-share-nodes', report: 'fa-file-lines', commission: 'fa-percent', territory: 'fa-map-location-dot' };
-          return `<button onclick="window._policyTab='${tab}';renderContent()" class="px-4 py-2 text-sm ${activeTab === tab ? 'tab-active' : 'text-gray-500 hover:text-gray-700'}"><i class="fas ${icons[tab]} mr-1"></i>${labels[tab]}</button>`;
+          return `<button onclick="window._policyTab='${tab}';renderContent()" class="px-4 py-2 text-sm ${activeTab === tab ? 'tab-active' : 'text-gray-500 hover:text-gray-700'} transition"><i class="fas ${icons[tab]} mr-1"></i>${labels[tab]}</button>`;
         }).join('')}
       </div>
 
