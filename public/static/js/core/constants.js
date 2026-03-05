@@ -26,11 +26,11 @@ const STATUS = OMS.STATUS;
 
 // 권한별 접근 가능 페이지
 OMS.PERMISSIONS = {
-  SUPER_ADMIN: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'notifications', 'my-profile'],
-  HQ_OPERATOR: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'notifications', 'my-profile'],
+  SUPER_ADMIN: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'audit-log', 'notifications', 'my-profile'],
+  HQ_OPERATOR: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'audit-log', 'notifications', 'my-profile'],
   REGION_ADMIN: ['dashboard', 'kanban', 'review-region', 'hr-management', 'statistics', 'notifications', 'my-profile'],
   TEAM_LEADER: ['my-orders', 'my-stats', 'notifications', 'my-profile'],
-  AUDITOR: ['dashboard', 'statistics', 'reconciliation', 'notifications', 'my-profile'],
+  AUDITOR: ['dashboard', 'statistics', 'reconciliation', 'audit-log', 'notifications', 'my-profile'],
 };
 
 // 메뉴 정의
@@ -45,6 +45,7 @@ OMS.MENU_ITEMS = {
     { id: 'statistics', icon: 'fa-chart-bar', label: '통계', group: '분석' },
     { id: 'hr-management', icon: 'fa-users-gear', label: '인사관리', group: '관리' },
     { id: 'policies', icon: 'fa-gears', label: '정책관리', group: '관리' },
+    { id: 'audit-log', icon: 'fa-scroll', label: '감사로그', group: '관리' },
     { id: 'notifications', icon: 'fa-bell', label: '알림', group: '관리' },
   ],
   REGION: [

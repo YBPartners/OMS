@@ -178,8 +178,9 @@ auth.get('/team-leaders', async (c) => {
   const params: any[] = [];
   
   if (orgId) {
-    query += ' AND u.org_id = ?';
-    params.push(Number(orgId));
+    // 팀장의 소속 org가 직접 orgId이거나, 팀의 parent_org_id가 orgId인 경우
+    query += ' AND (u.org_id = ? OR o.parent_org_id = ?)';
+    params.push(Number(orgId), Number(orgId));
   }
   query += ' ORDER BY o.name, u.name';
 
