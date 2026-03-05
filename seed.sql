@@ -1,18 +1,18 @@
 -- ============================================================
--- SEED DATA: 다하다 OMS 초기 데이터
+-- SEED DATA: 와이비 OMS 초기 데이터
 -- ============================================================
 
 -- 역할 정의
 INSERT OR IGNORE INTO roles (code, name, description) VALUES
-  ('SUPER_ADMIN', '슈퍼관리자', '전권 - 다하다 HQ'),
+  ('SUPER_ADMIN', '슈퍼관리자', '전권 - 와이비 HQ'),
   ('HQ_OPERATOR', 'HQ 운영자', '본사 운영(수신/배분/대사/최종검수/정산/통계)'),
   ('REGION_ADMIN', '지역법인 관리자', '지역법인 운영(배정/1차검수/지역정산/통계)'),
   ('TEAM_LEADER', '팀장', '현장 수행/보고서 제출/본인 통계 조회'),
   ('AUDITOR', '감사/조회', '읽기 전용 + 대사/통계 열람');
 
--- 조직: 다하다 HQ
+-- 조직: 와이비 HQ
 INSERT OR IGNORE INTO organizations (org_id, org_type, name, code, status) VALUES
-  (1, 'HQ', '다하다 본사', 'DAHADA_HQ', 'ACTIVE');
+  (1, 'HQ', '와이비 본사', 'DAHADA_HQ', 'ACTIVE');
 
 -- 조직: 지역법인 4개
 INSERT OR IGNORE INTO organizations (org_id, org_type, name, code, status) VALUES
@@ -23,15 +23,15 @@ INSERT OR IGNORE INTO organizations (org_id, org_type, name, code, status) VALUE
 
 -- 사용자: HQ 관리자 (password: admin123 → SHA-256 해시)
 INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo) VALUES
-  (1, 1, 'admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '시스템관리자', '01000000000', 'admin@dahada.co.kr', 'ACTIVE', 1, '2024-01-01', '전권 관리자'),
-  (2, 1, 'hq_operator', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'HQ운영자', '01000000001', 'operator@dahada.co.kr', 'ACTIVE', 1, '2024-01-15', NULL);
+  (1, 1, 'admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '시스템관리자', '01000000000', 'admin@yb.co.kr', 'ACTIVE', 1, '2024-01-01', '전권 관리자'),
+  (2, 1, 'hq_operator', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'HQ운영자', '01000000001', 'operator@yb.co.kr', 'ACTIVE', 1, '2024-01-15', NULL);
 
 -- 사용자: 지역법인 관리자
 INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo) VALUES
-  (3, 2, 'seoul_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '서울관리자', '01011110001', 'seoul@dahada.co.kr', 'ACTIVE', 1, '2024-02-01', '서울지역법인 담당'),
-  (4, 3, 'gyeonggi_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '경기관리자', '01022220001', 'gyeonggi@dahada.co.kr', 'ACTIVE', 1, '2024-02-01', '경기지역법인 담당'),
-  (5, 4, 'incheon_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '인천관리자', '01033330001', 'incheon@dahada.co.kr', 'ACTIVE', 1, '2024-02-01', '인천지역법인 담당'),
-  (6, 5, 'busan_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '부산관리자', '01044440001', 'busan@dahada.co.kr', 'ACTIVE', 1, '2024-02-01', '부산지역법인 담당');
+  (3, 2, 'seoul_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '서울관리자', '01011110001', 'seoul@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '서울지역법인 담당'),
+  (4, 3, 'gyeonggi_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '경기관리자', '01022220001', 'gyeonggi@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '경기지역법인 담당'),
+  (5, 4, 'incheon_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '인천관리자', '01033330001', 'incheon@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '인천지역법인 담당'),
+  (6, 5, 'busan_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '부산관리자', '01044440001', 'busan@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '부산지역법인 담당');
 
 -- 사용자: 팀장
 INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo) VALUES

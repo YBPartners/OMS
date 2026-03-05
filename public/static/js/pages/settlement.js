@@ -1,5 +1,5 @@
 // ============================================================
-// 다하다 OMS - 정산관리 + 대사(정합성) 페이지 v7.0
+// 와이비 OMS - 정산관리 + 대사(정합성) 페이지 v7.0
 // Interaction Design: 행 컨텍스트메뉴, 호버프리뷰, 확장가능행,
 // 인라인 미리보기, 이슈 배치해결, 드릴다운
 // ============================================================
@@ -604,7 +604,7 @@ async function printSettlementReport(runId) {
 </style></head><body>
 <div class="no-print"><button onclick="window.print()" style="padding:8px 24px;background:#2563eb;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px">🖨️ 인쇄하기</button>
 <button onclick="window.close()" style="padding:8px 24px;background:#6b7280;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;margin-left:8px">닫기</button></div>
-<h1>다하다 OMS — 정산 보고서</h1>
+<h1>와이비 OMS — 정산 보고서</h1>
 <div class="subtitle">Run #${run.run_id} | ${periodLabel} | ${run.period_start} ~ ${run.period_end}</div>
 <div class="summary-grid">
   <div class="summary-box"><div class="label">총 건수</div><div class="value">${summary.total_count}건</div></div>
@@ -628,7 +628,7 @@ ${grouped.map(g => `
       <td class="text-right green">${fmt(g.total_payable)}</td></tr>
   </tbody>
 </table>`).join('')}
-<div class="footer">다하다 OMS | 생성일: ${generated_at} | 이 문서는 자동 생성되었습니다.</div>
+<div class="footer">와이비 OMS | 생성일: ${generated_at} | 이 문서는 자동 생성되었습니다.</div>
 </body></html>`;
 
   const w = window.open('', '_blank', 'width=900,height=700');
@@ -752,7 +752,7 @@ ${st.leaders.map(l => `<div class="section">${l.name} — ${l.count}건</div>
 <table><thead><tr><th>주문</th><th>고객</th><th class="text-right">금액</th><th class="text-right">수수료</th><th class="text-right">지급액</th></tr></thead>
 <tbody>${l.items.map(i => `<tr><td>#${i.order_id}</td><td>${i.customer_name||'-'}</td><td class="text-right">${fmt(i.base_amount)}</td><td class="text-right red">${fmt(i.commission_amount)}</td><td class="text-right green">${fmt(i.payable_amount)}</td></tr>`).join('')}
 <tr class="subtotal"><td colspan="2">소계</td><td class="text-right">${fmt(l.total_base)}</td><td class="text-right red">${fmt(l.total_commission)}</td><td class="text-right green">${fmt(l.total_payable)}</td></tr></tbody></table>`).join('')}
-<div class="footer">다하다 OMS | 생성일: ${today}</div></body></html>`;
+<div class="footer">와이비 OMS | 생성일: ${today}</div></body></html>`;
 
   const w = window.open('', '_blank', 'width=900,height=700');
   if (w) { w.document.write(html); w.document.close(); }

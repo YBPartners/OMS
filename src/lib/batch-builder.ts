@@ -1,5 +1,5 @@
 // ================================================================
-// 다하다 OMS — D1 Batch Transaction Builder v5.0
+// 와이비 OMS — D1 Batch Transaction Builder v5.0
 // Cloudflare D1의 batch() API를 사용한 원자적 다중 쿼리 실행
 // 기존: 정산 시 개별 INSERT 6회 × N건 → 네트워크 왕복 60+회
 // 혁신: BatchBuilder로 1회 batch() 호출 (−98% DB 호출)

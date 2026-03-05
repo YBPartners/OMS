@@ -1,9 +1,9 @@
 // ============================================================
-// 다하다 OMS — Service Worker v14.0
+// 와이비 OMS — Service Worker v14.0
 // 웹 푸시 알림 수신 + 오프라인 캐시
 // ============================================================
 
-const CACHE_NAME = 'dahada-oms-v14';
+const CACHE_NAME = 'yb-oms-v14';
 const STATIC_ASSETS = [
   '/',
   '/static/css/mobile.css',
@@ -74,7 +74,7 @@ self.addEventListener('fetch', (event) => {
 
 // ─── 푸시 알림 수신 ───
 self.addEventListener('push', (event) => {
-  let data = { title: '다하다 OMS', body: '새로운 알림이 있습니다.', icon: '', tag: 'default' };
+  let data = { title: '와이비 OMS', body: '새로운 알림이 있습니다.', icon: '', tag: 'default' };
   
   try {
     if (event.data) {
@@ -89,7 +89,7 @@ self.addEventListener('push', (event) => {
     body: data.body,
     icon: data.icon || '/static/icon-192.png',
     badge: '/static/icon-72.png',
-    tag: data.tag || 'dahada-oms',
+    tag: data.tag || 'yb-oms',
     vibrate: [200, 100, 200],
     data: {
       url: data.url || '/',
@@ -131,11 +131,11 @@ self.addEventListener('notificationclick', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SHOW_NOTIFICATION') {
     const { title, body, tag, url } = event.data;
-    self.registration.showNotification(title || '다하다 OMS', {
+    self.registration.showNotification(title || '와이비 OMS', {
       body: body || '새로운 알림이 있습니다.',
       icon: '/static/icon-192.png',
       badge: '/static/icon-72.png',
-      tag: tag || 'dahada-local',
+      tag: tag || 'yb-local',
       vibrate: [200, 100, 200],
       data: { url: url || '/' },
     });

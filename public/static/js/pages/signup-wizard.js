@@ -1,5 +1,5 @@
 // ============================================================
-// 다하다 OMS — 팀장 자가가입 위자드 v5.0
+// 와이비 OMS — 팀장 자가가입 위자드 v5.0
 // 퍼블릭 (로그인 불필요) — 스텝별 UI
 // ============================================================
 
@@ -69,7 +69,7 @@ function renderSignupWizard() {
         <div class="flex items-center justify-between">
           <div>
             <h1 class="text-xl font-bold"><i class="fas fa-user-plus mr-2"></i>팀장 가입 신청</h1>
-            <p class="text-teal-100 text-sm mt-1">다하다 OMS 팀장 자가 등록</p>
+            <p class="text-teal-100 text-sm mt-1">와이비 OMS 팀장 자가 등록</p>
           </div>
           <button onclick="closeSignupWizard()" class="text-teal-100 hover:text-white transition">
             <i class="fas fa-times text-xl"></i>

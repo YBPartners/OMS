@@ -1,5 +1,5 @@
 // ============================================================
-// 다하다 OMS — 글로벌 검색 (Cmd+K) + 주문 타임라인 + 시스템 관리 v14.0
+// 와이비 OMS — 글로벌 검색 (Cmd+K) + 주문 타임라인 + 시스템 관리 v14.0
 // v14.0: 데이터 임포트/백업 + 푸시 알림 + 매출/정산 차트
 // ============================================================
 
@@ -561,7 +561,7 @@ async function createSnapshot() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `dahada-oms-snapshot_${new Date().toISOString().split('T')[0]}.json`;
+  a.download = `yb-oms-snapshot_${new Date().toISOString().split('T')[0]}.json`;
   a.click();
   URL.revokeObjectURL(url);
   showToast(`${res.meta.total_rows}행 스냅샷 다운로드 완료`, 'success');
@@ -669,7 +669,7 @@ function showLocalNotification(title, body, url = '/') {
   window._swRegistration.active?.postMessage({
     type: 'SHOW_NOTIFICATION',
     title, body, url,
-    tag: 'dahada-' + Date.now(),
+    tag: 'yb-' + Date.now(),
   });
 }
 

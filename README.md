@@ -1,13 +1,13 @@
-# 다하다 OMS - 주문관리시스템 v14.0.0
+# 와이비 OMS - 주문관리시스템 v14.0.0
 
 ## 프로젝트 개요
-- **명칭**: 다하다 OMS (Order Management System)
-- **목적**: 원청(아정당) → 다하다(HQ) → 총판(4개) → 대리점(AGENCY) → 팀 구조의 주문 처리/배분/검수/정산/대사/통계 통합 시스템
+- **명칭**: 와이비 OMS (Order Management System)
+- **목적**: 원청(아정당) → 와이비(HQ) → 총판(4개) → 대리점(AGENCY) → 팀 구조의 주문 처리/배분/검수/정산/대사/통계 통합 시스템
 - **설계 원칙**: 고품질 · 자동화 · 정합성 · 보안 우선 · 기능별 분리 설계 · 서비스 레이어 분리
 - **기술 스택**: Hono + TypeScript + Cloudflare Workers + D1 (SQLite) + TailwindCSS + Vanilla JS
 
 ## URLs
-- **프로덕션**: https://dahada-oms.pages.dev
+- **프로덕션**: https://yb-oms.pages.dev
 - **샌드박스**: https://3000-inedg4lr7hnug2y22i9nx-5185f4aa.sandbox.novita.ai
 
 ## 관련 문서 (새 대화에서 이어가기)

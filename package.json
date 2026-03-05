@@ -1,5 +1,5 @@
 {
-  "name": "dahada-oms",
+  "name": "yb-oms",
   "type": "module",
   "scripts": {
     "dev": "vite",

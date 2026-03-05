@@ -1,4 +1,4 @@
-# 다하다 OMS — 개발 진척도 (Development Progress)
+# 와이비 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-05
 > **현재 버전**: v14.0.0
@@ -122,7 +122,7 @@
 - `GET /api/settlements/runs/:run_id/report` — 팀장별 그룹핑 보고서 데이터
 - `printSettlementReport()` — 인쇄용 HTML 새 창 (CSS @media print)
 - 요약 카드 (건수/기본금액/수수료/지급액) + 팀장별 소계 + 개별 명세
-- 인쇄/닫기 버튼, 다하다 OMS 푸터
+- 인쇄/닫기 버튼, 와이비 OMS 푸터
 
 ### 11-2: 정산 CSV 내보내기 ✅
 - `GET /api/settlements/runs/:run_id/export` — CSV용 원시 데이터
@@ -525,6 +525,6 @@
 
 | 구분 | URL |
 |------|-----|
-| 프로덕션 | https://dahada-oms.pages.dev |
+| 프로덕션 | https://yb-oms.pages.dev |
 | 샌드박스 | https://3000-inedg4lr7hnug2y22i9nx-5185f4aa.sandbox.novita.ai |
 | D1 Database ID | 0b7aedd5-7510-44d3-8b81-d421b03fffa6 |

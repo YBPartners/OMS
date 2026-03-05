@@ -1,5 +1,5 @@
 // ============================================================
-// 다하다 OMS — App Bootstrap v9.0
+// 와이비 OMS — App Bootstrap v9.0
 // 메인 렌더링, 레이아웃, 초기화
 // v9.0: 모바일 반응형 (바텀네비, 햄버거, 풀투리프레시, 스와이프)
 // ============================================================
@@ -39,7 +39,7 @@ function renderLoginPage() {
         <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
           <i class="fas fa-cubes text-white text-2xl"></i>
         </div>
-        <h1 class="text-2xl font-bold text-gray-800">다하다 OMS</h1>
+        <h1 class="text-2xl font-bold text-gray-800">와이비 OMS</h1>
         <p class="text-gray-500 mt-1">주문관리시스템 v9.0</p>
       </div>
       <form onsubmit="event.preventDefault();login(document.getElementById('lid').value,document.getElementById('lpw').value)">
@@ -152,7 +152,7 @@ function renderLayout() {
 
   // 페이지 타이틀 찾기
   const curMenu = menuItems.find(m => m.id === currentPage);
-  const pageTitle = curMenu ? curMenu.label : '다하다 OMS';
+  const pageTitle = curMenu ? curMenu.label : '와이비 OMS';
 
   return `
   <div class="layout-root flex h-screen">
@@ -164,7 +164,7 @@ function renderLayout() {
             <i class="fas fa-cubes text-white"></i>
           </div>
           <div>
-            <div class="font-bold text-gray-800">다하다 OMS</div>
+            <div class="font-bold text-gray-800">와이비 OMS</div>
             <div class="text-xs text-gray-400">v14.0 · ${menuKey}</div>
           </div>
         </div>
@@ -248,7 +248,7 @@ function updateBottomNav() {
     const menuKey = isAgency ? 'AGENCY' : (currentUser.org_type === 'TEAM' || isLeader) ? 'TEAM_LEADER' : isRegion ? 'REGION' : 'HQ';
     const menuItems = OMS.MENU_ITEMS[menuKey] || [];
     const cur = menuItems.find(m => m.id === currentPage);
-    titleEl.textContent = cur ? cur.label : '다하다 OMS';
+    titleEl.textContent = cur ? cur.label : '와이비 OMS';
   }
 }
 

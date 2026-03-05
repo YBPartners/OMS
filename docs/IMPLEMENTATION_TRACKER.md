@@ -1,4 +1,4 @@
-# 다하다 OMS — 구현 추적 문서 (Implementation Tracker)
+# 와이비 OMS — 구현 추적 문서 (Implementation Tracker)
 
 > **최종 업데이트**: 2026-03-05
 > **버전**: v13.0.0
@@ -23,7 +23,7 @@
 ## 현재 상태 요약
 
 - **전체 Phase**: 0~13 완료 (Phase 13: 시스템 관리 + 보안 강화 + 글로벌 검색 + 타임라인)
-- **프로덕션 배포**: ✅ https://dahada-oms.pages.dev
+- **프로덕션 배포**: ✅ https://yb-oms.pages.dev
 - **로컬 개발**: ✅ PM2 + wrangler pages dev, port 3000
 - **서비스 레이어**: ✅ 5개 서비스, 모듈 간 교차 의존성 해소
 - **v13.0 신규**: ✅ 시스템 관리 대시보드, 계정 잠금, Cmd+K 검색, 주문 타임라인
@@ -79,7 +79,7 @@
 - [x] Kanban: 다중선택, 배치배정, 배정해제, 드래그, 필터, 통계
 - [x] 감사 로그 API + UI (목록/통계/상세)
 - [x] Cloudflare Pages 프로덕션 배포
-- [x] D1 dahada-production 연결
+- [x] D1 DB (dahada-production) 연결
 - [x] E2E 테스트 23/23 PASS
 
 ### ✅ Phase 6: 인터랙션 디자인 시스템
