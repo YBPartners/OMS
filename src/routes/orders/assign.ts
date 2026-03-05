@@ -1,12 +1,13 @@
 // ================================================================
-// 와이비 OMS — 팀장 배정 (칸반) + 작업 시작 v5.0
-// State Machine 적용 — transitionOrder()로 통합
+// 와이비 OMS — 팀장 배정 (칸반) + 준비완료 + 작업 시작 v6.0
+// v6.0: READY_DONE 단계 추가, 알림 트리거, 대리점 Scope 실시간 DB 조회
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { requireAuth } from '../../middleware/auth';
 import { transitionOrder } from '../../lib/state-machine';
 import { upsertTeamLeaderDailyStats } from '../../lib/db-helpers';
+import { createNotification } from '../../services/notification-service';
 
 export function mountAssign(router: Hono<Env>) {
 
@@ -22,10 +23,13 @@ export function mountAssign(router: Hono<Env>) {
 
     if (!team_leader_id) return c.json({ error: '팀장 ID는 필수입니다.' }, 400);
 
-    // ★ Scope 검증: AGENCY_LEADER는 하위 팀장에게만
+    // ★ GAP-4 fix: 대리점 Scope 실시간 DB 조회 (session 캐시 대신)
     if (user.roles.includes('AGENCY_LEADER') && user.org_type === 'TEAM' && !user.roles.includes('SUPER_ADMIN')) {
-      const agencyTeamIds = user.agency_team_ids || [];
-      if (!agencyTeamIds.includes(team_leader_id) && team_leader_id !== user.user_id) {
+      const liveTeams = await db.prepare(
+        'SELECT team_user_id FROM agency_team_mappings WHERE agency_user_id = ?'
+      ).bind(user.user_id).all();
+      const liveTeamIds = liveTeams.results.map((r: any) => r.team_user_id);
+      if (!liveTeamIds.includes(team_leader_id) && team_leader_id !== user.user_id) {
         return c.json({ error: '하위 팀장에게만 배정할 수 있습니다.' }, 403);
       }
     }
@@ -57,6 +61,15 @@ export function mountAssign(router: Hono<Env>) {
 
         // 통계 업데이트
         await upsertTeamLeaderDailyStats(db, team_leader_id, 'intake_count');
+
+        // ★ GAP-3: 배정 알림 전송
+        await createNotification(db, team_leader_id, {
+          type: 'ASSIGNMENT',
+          title: '새 주문 배정',
+          message: `주문 #${orderId}이(가) 배정되었습니다.`,
+          link_url: '#my-orders',
+          metadata_json: JSON.stringify({ order_id: orderId }),
+        });
       },
     });
 
@@ -160,7 +173,39 @@ export function mountAssign(router: Hono<Env>) {
     return c.json({ ok: true, order_id: orderId, new_status: 'DISTRIBUTED' });
   });
 
-  // ─── 작업 시작 ───
+  // ─── 준비완료 (ASSIGNED → READY_DONE: 고객통화 + 일정확정) ───
+  router.post('/:order_id/ready-done', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'TEAM_LEADER']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const orderId = Number(c.req.param('order_id'));
+    let body: any = {};
+    try { body = await c.req.json(); } catch { /* optional body */ }
+
+    // ★ State Machine 적용 — ASSIGNED → READY_DONE
+    const result = await transitionOrder(db, orderId, 'READY_DONE', user, {
+      note: body.note || '고객 통화 후 일정 확정',
+      additionalUpdates: body.scheduled_date ? { scheduled_date: body.scheduled_date } : undefined,
+      afterTransition: async (db) => {
+        await db.prepare(`
+          UPDATE order_assignments SET status = 'READY_DONE', updated_at = datetime('now')
+          WHERE order_id = ? AND status = 'ASSIGNED'
+        `).bind(orderId).run();
+      },
+    });
+
+    if (!result.ok) {
+      const statusCode = result.errorCode === 'ORDER_NOT_FOUND' ? 404
+        : result.errorCode === 'UNAUTHORIZED' ? 403 : 400;
+      return c.json({ error: result.error }, statusCode);
+    }
+
+    return c.json({ ok: true, scheduled_date: body.scheduled_date || null });
+  });
+
+  // ─── 작업 시작 (READY_DONE → IN_PROGRESS) ───
   router.post('/:order_id/start', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'TEAM_LEADER']);
     if (authErr) return authErr;
@@ -169,12 +214,12 @@ export function mountAssign(router: Hono<Env>) {
     const db = c.env.DB;
     const orderId = Number(c.req.param('order_id'));
 
-    // ★ State Machine 적용 — ASSIGNED → IN_PROGRESS
+    // ★ State Machine 적용 — READY_DONE → IN_PROGRESS
     const result = await transitionOrder(db, orderId, 'IN_PROGRESS', user, {
       afterTransition: async (db) => {
         await db.prepare(`
           UPDATE order_assignments SET status = 'IN_PROGRESS', updated_at = datetime('now')
-          WHERE order_id = ? AND status = 'ASSIGNED'
+          WHERE order_id = ? AND status IN ('ASSIGNED','READY_DONE')
         `).bind(orderId).run();
       },
     });

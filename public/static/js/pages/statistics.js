@@ -203,54 +203,81 @@ async function renderPolicies(el) {
 }
 
 function renderDistPolicyTable(policies) {
+  const canEditPolicy = canEdit('policy');
   return `
     <div class="bg-white rounded-xl p-5 border border-gray-100">
-      <h3 class="font-semibold mb-4">배분 정책 (행정동 기반 자동배분)</h3>
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-semibold">배분 정책 (행정동 기반 자동배분)</h3>
+        ${canEditPolicy ? `<button onclick="showNewDistPolicyModal()" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700"><i class="fas fa-plus mr-1"></i>새 버전</button>` : ''}
+      </div>
       <table class="w-full text-sm"><thead class="bg-gray-50"><tr>
         <th class="px-3 py-2 text-left">ID</th><th class="px-3 py-2 text-left">이름</th>
         <th class="px-3 py-2 text-center">버전</th><th class="px-3 py-2 text-center">활성</th>
         <th class="px-3 py-2 text-left">적용일</th>
+        ${canEditPolicy ? '<th class="px-3 py-2 text-center">관리</th>' : ''}
       </tr></thead><tbody class="divide-y">${policies.map(p => `
         <tr class="hover:bg-gray-50">
           <td class="px-3 py-2">${p.policy_id}</td><td class="px-3 py-2">${p.name}</td>
           <td class="px-3 py-2 text-center">v${p.version}</td>
-          <td class="px-3 py-2 text-center">${p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '비활성'}</td>
+          <td class="px-3 py-2 text-center">${p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '<span class="text-gray-400">비활성</span>'}</td>
           <td class="px-3 py-2 text-xs">${p.effective_from || '-'}</td>
+          ${canEditPolicy ? `<td class="px-3 py-2 text-center"><div class="flex gap-1 justify-center">
+            <button onclick='showEditDistPolicyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
+            <button onclick="togglePolicyActive('distribution',${p.policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
+          </div></td>` : ''}
         </tr>`).join('')}
       </tbody></table>
     </div>`;
 }
 
 function renderReportPolicyTable(policies) {
+  const canEditPolicy = canEdit('policy');
   return `
     <div class="bg-white rounded-xl p-5 border border-gray-100">
-      <h3 class="font-semibold mb-4">보고서 필수요건 정책</h3>
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-semibold">보고서 필수요건 정책</h3>
+        ${canEditPolicy ? `<button onclick="showNewReportPolicyModal()" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700"><i class="fas fa-plus mr-1"></i>새 버전</button>` : ''}
+      </div>
       <table class="w-full text-sm"><thead class="bg-gray-50"><tr>
         <th class="px-3 py-2 text-left">ID</th><th class="px-3 py-2 text-left">이름</th>
         <th class="px-3 py-2 text-left">서비스유형</th><th class="px-3 py-2 text-left">필수사진</th>
         <th class="px-3 py-2 text-center">영수증</th><th class="px-3 py-2 text-center">활성</th>
-      </tr></thead><tbody class="divide-y">${policies.map(p => `
+        ${canEditPolicy ? '<th class="px-3 py-2 text-center">관리</th>' : ''}
+      </tr></thead><tbody class="divide-y">${policies.map(p => {
+        let photosDisplay = '-';
+        try { const pj = typeof p.required_photos_json === 'string' ? JSON.parse(p.required_photos_json) : p.required_photos_json; photosDisplay = Object.entries(pj || {}).map(([k,v]) => `${k}:${v}`).join(', '); } catch { photosDisplay = p.required_photos_json || '-'; }
+        return `
         <tr class="hover:bg-gray-50">
           <td class="px-3 py-2">${p.policy_id}</td><td class="px-3 py-2">${p.name}</td>
           <td class="px-3 py-2">${p.service_type}</td>
-          <td class="px-3 py-2 text-xs font-mono">${p.required_photos_json || '{}'}</td>
-          <td class="px-3 py-2 text-center">${p.require_receipt ? 'Y' : 'N'}</td>
-          <td class="px-3 py-2 text-center">${p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '비활성'}</td>
-        </tr>`).join('')}
+          <td class="px-3 py-2 text-xs">${photosDisplay}</td>
+          <td class="px-3 py-2 text-center">${p.require_receipt ? '<span class="text-green-600">Y</span>' : 'N'}</td>
+          <td class="px-3 py-2 text-center">${p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '<span class="text-gray-400">비활성</span>'}</td>
+          ${canEditPolicy ? `<td class="px-3 py-2 text-center"><div class="flex gap-1 justify-center">
+            <button onclick='showEditReportPolicyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
+            <button onclick="togglePolicyActive('report',${p.policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
+          </div></td>` : ''}
+        </tr>`;
+      }).join('')}
       </tbody></table>
     </div>`;
 }
 
 function renderCommissionPolicyTable(policies) {
+  const canEditPolicy = canEdit('policy');
   return `
     <div class="bg-white rounded-xl p-5 border border-gray-100">
-      <h3 class="font-semibold mb-4">수수료(정률/정액) 정책</h3>
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-semibold">수수료(정률/정액) 정책</h3>
+        ${canEditPolicy ? `<button onclick="showNewCommissionModal()" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700"><i class="fas fa-plus mr-1"></i>추가</button>` : ''}
+      </div>
       <p class="text-xs text-gray-500 mb-3">정률(PERCENT): 주문금액의 %를 수수료로 차감 · 정액(FIXED): 건당 고정금액 차감</p>
       <table class="w-full text-sm"><thead class="bg-gray-50"><tr>
         <th class="px-3 py-2 text-left">ID</th><th class="px-3 py-2 text-left">지역법인</th>
         <th class="px-3 py-2 text-left">대상 팀장</th><th class="px-3 py-2 text-center">유형</th>
         <th class="px-3 py-2 text-right">값</th><th class="px-3 py-2 text-left">적용일</th>
         <th class="px-3 py-2 text-center">활성</th>
+        ${canEditPolicy ? '<th class="px-3 py-2 text-center">관리</th>' : ''}
       </tr></thead><tbody class="divide-y">${policies.map(p => `
         <tr class="hover:bg-gray-50">
           <td class="px-3 py-2">${p.commission_policy_id}</td>
@@ -259,7 +286,11 @@ function renderCommissionPolicyTable(policies) {
           <td class="px-3 py-2 text-center"><span class="status-badge ${p.mode === 'PERCENT' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}">${p.mode === 'PERCENT' ? '정률' : '정액'}</span></td>
           <td class="px-3 py-2 text-right font-bold">${p.mode === 'PERCENT' ? p.value + '%' : formatAmount(p.value)}</td>
           <td class="px-3 py-2 text-xs">${p.effective_from || '-'}</td>
-          <td class="px-3 py-2 text-center">${p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '비활성'}</td>
+          <td class="px-3 py-2 text-center">${p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '<span class="text-gray-400">비활성</span>'}</td>
+          ${canEditPolicy ? `<td class="px-3 py-2 text-center"><div class="flex gap-1 justify-center">
+            <button onclick='showEditCommissionModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
+            <button onclick="toggleCommissionActive(${p.commission_policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
+          </div></td>` : ''}
         </tr>`).join('')}
       </tbody></table>
     </div>`;
@@ -273,13 +304,223 @@ function renderTerritoryTable(territories) {
         <th class="px-3 py-2 text-left">시도</th><th class="px-3 py-2 text-left">시군구</th>
         <th class="px-3 py-2 text-left">읍면동</th><th class="px-3 py-2 text-left">행정동코드</th>
         <th class="px-3 py-2 text-left">배정 법인</th>
+        ${canEdit('policy') ? '<th class="px-3 py-2 text-center">관리</th>' : ''}
       </tr></thead><tbody class="divide-y">${territories.map(t => `
         <tr class="hover:bg-gray-50">
           <td class="px-3 py-2">${t.sido}</td><td class="px-3 py-2">${t.sigungu}</td>
           <td class="px-3 py-2">${t.eupmyeondong || '-'}</td>
           <td class="px-3 py-2 font-mono text-xs">${t.admin_dong_code}</td>
           <td class="px-3 py-2 font-medium ${t.org_name ? 'text-purple-700' : 'text-red-500'}">${t.org_name || '미매핑'}</td>
+          ${canEdit('policy') ? `<td class="px-3 py-2 text-center">
+            <button onclick="showTerritoryMappingModal(${t.territory_id}, '${(t.org_name||'').replace(/'/g,"\\'")}')" class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit mr-1"></i>변경</button>
+          </td>` : ''}
         </tr>`).join('')}
       </tbody></table>
     </div>`;
+}
+
+// ═══════ 정책 CRUD 모달/핸들러 ═══════
+
+// 배분 정책 — 새 버전 생성
+function showNewDistPolicyModal() {
+  const content = `<div class="space-y-4">
+    <div><label class="block text-xs text-gray-500 mb-1">정책명</label>
+      <input id="dp-name" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="예: 행정동 기반 자동배분 v2"></div>
+    <div><label class="block text-xs text-gray-500 mb-1">규칙 (JSON)</label>
+      <textarea id="dp-rule" rows="4" class="w-full border rounded-lg px-3 py-2 text-sm font-mono" placeholder='{"method":"admin_dong_code","fallback":"DISTRIBUTION_PENDING"}'>{"method":"admin_dong_code","fallback":"DISTRIBUTION_PENDING"}</textarea></div>
+    <div><label class="block text-xs text-gray-500 mb-1">적용일</label>
+      <input id="dp-from" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${new Date().toISOString().split('T')[0]}"></div>
+  </div>`;
+  showModal('새 배분 정책 버전', content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitNewDistPolicy()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">생성</button>`);
+}
+async function submitNewDistPolicy() {
+  const name = document.getElementById('dp-name')?.value;
+  const rule_json = document.getElementById('dp-rule')?.value || '{}';
+  const effective_from = document.getElementById('dp-from')?.value;
+  if (!name) { showToast('정책명을 입력하세요.', 'warning'); return; }
+  const res = await api('POST', '/stats/policies/distribution', { name, rule_json, effective_from });
+  if (res?.ok) { showToast(`새 버전 v${res.version} 생성 완료`, 'success'); closeModal(); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
+}
+
+// 배분 정책 — 수정
+function showEditDistPolicyModal(p) {
+  const content = `<div class="space-y-4">
+    <div><label class="block text-xs text-gray-500 mb-1">정책명</label>
+      <input id="dp-edit-name" class="w-full border rounded-lg px-3 py-2 text-sm" value="${p.name}"></div>
+    <div><label class="block text-xs text-gray-500 mb-1">규칙 (JSON)</label>
+      <textarea id="dp-edit-rule" rows="4" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">${typeof p.rule_json === 'string' ? p.rule_json : JSON.stringify(p.rule_json || {})}</textarea></div>
+  </div>`;
+  showModal(`배분 정책 수정 — v${p.version}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitEditDistPolicy(${p.policy_id})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`);
+}
+async function submitEditDistPolicy(id) {
+  const name = document.getElementById('dp-edit-name')?.value;
+  const rule_json = document.getElementById('dp-edit-rule')?.value;
+  const res = await api('PUT', `/stats/policies/distribution/${id}`, { name, rule_json });
+  if (res?.ok) { showToast('수정 완료', 'success'); closeModal(); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
+}
+
+// 활성/비활성 토글 (배분/보고서 공용)
+async function togglePolicyActive(type, id, newActive) {
+  const res = await api('PUT', `/stats/policies/${type}/${id}`, { is_active: !!newActive });
+  if (res?.ok) { showToast(newActive ? '활성화 완료' : '비활성화 완료', 'success'); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
+}
+
+// 보고서 정책 — 새 버전 생성
+function showNewReportPolicyModal() {
+  const content = `<div class="space-y-4">
+    <div><label class="block text-xs text-gray-500 mb-1">정책명</label>
+      <input id="rp-name" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="예: 기본 보고서 정책 v2"></div>
+    <div><label class="block text-xs text-gray-500 mb-1">서비스유형</label>
+      <input id="rp-type" class="w-full border rounded-lg px-3 py-2 text-sm" value="DEFAULT"></div>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block text-xs text-gray-500 mb-1">BEFORE 사진 수</label><input id="rp-before" type="number" class="w-full border rounded-lg px-3 py-2 text-sm" value="1" min="0"></div>
+      <div><label class="block text-xs text-gray-500 mb-1">AFTER 사진 수</label><input id="rp-after" type="number" class="w-full border rounded-lg px-3 py-2 text-sm" value="1" min="0"></div>
+      <div><label class="block text-xs text-gray-500 mb-1">WASH 사진 수</label><input id="rp-wash" type="number" class="w-full border rounded-lg px-3 py-2 text-sm" value="1" min="0"></div>
+      <div><label class="block text-xs text-gray-500 mb-1">RECEIPT 사진 수</label><input id="rp-receipt" type="number" class="w-full border rounded-lg px-3 py-2 text-sm" value="1" min="0"></div>
+    </div>
+    <div><label class="flex items-center gap-2 cursor-pointer"><input id="rp-require-receipt" type="checkbox" checked class="w-4 h-4 rounded text-blue-600"><span class="text-sm">영수증 필수</span></label></div>
+    <div><label class="block text-xs text-gray-500 mb-1">체크리스트 항목 (줄바꿈 구분)</label>
+      <textarea id="rp-checklist" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="작업완료확인\n고객서명확인\n현장정리확인">작업완료확인\n고객서명확인\n현장정리확인</textarea></div>
+  </div>`;
+  showModal('새 보고서 정책 버전', content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitNewReportPolicy()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">생성</button>`);
+}
+async function submitNewReportPolicy() {
+  const name = document.getElementById('rp-name')?.value;
+  if (!name) { showToast('정책명을 입력하세요.', 'warning'); return; }
+  const photos = { BEFORE: +document.getElementById('rp-before').value, AFTER: +document.getElementById('rp-after').value, WASH: +document.getElementById('rp-wash').value, RECEIPT: +document.getElementById('rp-receipt').value };
+  const checklist = document.getElementById('rp-checklist').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const res = await api('POST', '/stats/policies/report', {
+    name, service_type: document.getElementById('rp-type').value || 'DEFAULT',
+    required_photos_json: photos, required_checklist_json: checklist,
+    require_receipt: document.getElementById('rp-require-receipt').checked,
+  });
+  if (res?.ok) { showToast(`새 버전 v${res.version} 생성 완료`, 'success'); closeModal(); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
+}
+
+// 보고서 정책 — 수정
+function showEditReportPolicyModal(p) {
+  let photos = {};
+  try { photos = typeof p.required_photos_json === 'string' ? JSON.parse(p.required_photos_json) : (p.required_photos_json || {}); } catch {}
+  let checklist = [];
+  try { checklist = typeof p.required_checklist_json === 'string' ? JSON.parse(p.required_checklist_json) : (p.required_checklist_json || []); } catch {}
+  const content = `<div class="space-y-4">
+    <div><label class="block text-xs text-gray-500 mb-1">정책명</label>
+      <input id="rp-edit-name" class="w-full border rounded-lg px-3 py-2 text-sm" value="${p.name}"></div>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block text-xs text-gray-500 mb-1">BEFORE</label><input id="rp-edit-before" type="number" class="w-full border rounded-lg px-3 py-2 text-sm" value="${photos.BEFORE||0}" min="0"></div>
+      <div><label class="block text-xs text-gray-500 mb-1">AFTER</label><input id="rp-edit-after" type="number" class="w-full border rounded-lg px-3 py-2 text-sm" value="${photos.AFTER||0}" min="0"></div>
+      <div><label class="block text-xs text-gray-500 mb-1">WASH</label><input id="rp-edit-wash" type="number" class="w-full border rounded-lg px-3 py-2 text-sm" value="${photos.WASH||0}" min="0"></div>
+      <div><label class="block text-xs text-gray-500 mb-1">RECEIPT</label><input id="rp-edit-receipt" type="number" class="w-full border rounded-lg px-3 py-2 text-sm" value="${photos.RECEIPT||0}" min="0"></div>
+    </div>
+    <div><label class="flex items-center gap-2"><input id="rp-edit-require" type="checkbox" ${p.require_receipt ? 'checked' : ''} class="w-4 h-4 rounded text-blue-600"><span class="text-sm">영수증 필수</span></label></div>
+    <div><label class="block text-xs text-gray-500 mb-1">체크리스트</label>
+      <textarea id="rp-edit-checklist" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm">${checklist.join('\n')}</textarea></div>
+  </div>`;
+  showModal(`보고서 정책 수정 — ${p.name}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitEditReportPolicy(${p.policy_id})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`);
+}
+async function submitEditReportPolicy(id) {
+  const photos = { BEFORE: +document.getElementById('rp-edit-before').value, AFTER: +document.getElementById('rp-edit-after').value, WASH: +document.getElementById('rp-edit-wash').value, RECEIPT: +document.getElementById('rp-edit-receipt').value };
+  const checklist = document.getElementById('rp-edit-checklist').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const res = await api('PUT', `/stats/policies/report/${id}`, {
+    name: document.getElementById('rp-edit-name').value,
+    required_photos_json: photos, required_checklist_json: checklist,
+    require_receipt: document.getElementById('rp-edit-require').checked,
+  });
+  if (res?.ok) { showToast('수정 완료', 'success'); closeModal(); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
+}
+
+// 수수료 정책 — 새로 추가
+async function showNewCommissionModal() {
+  const orgsRes = await api('GET', '/auth/organizations');
+  const orgs = orgsRes?.organizations || [];
+  const content = `<div class="space-y-4">
+    <div><label class="block text-xs text-gray-500 mb-1">대상 법인</label>
+      <select id="cp-org" class="w-full border rounded-lg px-3 py-2 text-sm">${orgs.map(o => `<option value="${o.org_id}">${o.name} (${o.org_type})</option>`).join('')}</select></div>
+    <div><label class="block text-xs text-gray-500 mb-1">대상 팀장 ID (비우면 법인 기본)</label>
+      <input id="cp-leader" type="number" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="선택사항"></div>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block text-xs text-gray-500 mb-1">유형</label>
+        <select id="cp-mode" class="w-full border rounded-lg px-3 py-2 text-sm"><option value="PERCENT">정률 (%)</option><option value="FIXED">정액 (원)</option></select></div>
+      <div><label class="block text-xs text-gray-500 mb-1">값</label>
+        <input id="cp-value" type="number" step="0.1" class="w-full border rounded-lg px-3 py-2 text-sm" value="7.5"></div>
+    </div>
+  </div>`;
+  showModal('수수료 정책 추가', content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitNewCommission()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">추가</button>`);
+}
+async function submitNewCommission() {
+  const orgId = +document.getElementById('cp-org').value;
+  const leaderId = document.getElementById('cp-leader').value ? +document.getElementById('cp-leader').value : null;
+  const res = await api('POST', '/stats/policies/commission', {
+    org_id: orgId, team_leader_id: leaderId,
+    mode: document.getElementById('cp-mode').value,
+    value: +document.getElementById('cp-value').value,
+  });
+  if (res?.ok) { showToast('수수료 정책 추가 완료', 'success'); closeModal(); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
+}
+
+// 수수료 정책 — 수정
+function showEditCommissionModal(p) {
+  const content = `<div class="space-y-4">
+    <div class="bg-gray-50 rounded-lg p-3 text-sm"><strong>${p.org_name}</strong> ${p.team_leader_name ? '· 팀장: ' + p.team_leader_name : '· 법인 기본'}</div>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block text-xs text-gray-500 mb-1">유형</label>
+        <select id="cp-edit-mode" class="w-full border rounded-lg px-3 py-2 text-sm"><option value="PERCENT" ${p.mode==='PERCENT'?'selected':''}>정률 (%)</option><option value="FIXED" ${p.mode==='FIXED'?'selected':''}>정액 (원)</option></select></div>
+      <div><label class="block text-xs text-gray-500 mb-1">값</label>
+        <input id="cp-edit-value" type="number" step="0.1" class="w-full border rounded-lg px-3 py-2 text-sm" value="${p.value}"></div>
+    </div>
+  </div>`;
+  showModal(`수수료 수정 — ${p.org_name}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitEditCommission(${p.commission_policy_id})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`);
+}
+async function submitEditCommission(id) {
+  const res = await api('PUT', `/stats/policies/commission/${id}`, {
+    mode: document.getElementById('cp-edit-mode').value,
+    value: +document.getElementById('cp-edit-value').value,
+  });
+  if (res?.ok) { showToast('수정 완료', 'success'); closeModal(); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
+}
+
+// 수수료 활성/비활성 토글
+async function toggleCommissionActive(id, newActive) {
+  const res = await api('PUT', `/stats/policies/commission/${id}`, { is_active: !!newActive });
+  if (res?.ok) { showToast(newActive ? '활성화 완료' : '비활성화 완료', 'success'); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
+}
+
+// 지역권 매핑 변경
+async function showTerritoryMappingModal(territoryId, currentOrgName) {
+  const orgsRes = await api('GET', '/auth/organizations');
+  const orgs = (orgsRes?.organizations || []).filter(o => o.org_type === 'REGION');
+  const content = `<div class="space-y-4">
+    <div class="bg-gray-50 rounded-lg p-3 text-sm">현재 배정: <strong class="${currentOrgName ? 'text-purple-700' : 'text-red-500'}">${currentOrgName || '미매핑'}</strong></div>
+    <div><label class="block text-xs text-gray-500 mb-1">새 배정 법인 (REGION)</label>
+      <select id="tm-org" class="w-full border rounded-lg px-3 py-2 text-sm">${orgs.map(o => `<option value="${o.org_id}">${o.name}</option>`).join('')}</select></div>
+  </div>`;
+  showModal(`지역권 매핑 변경 — #${territoryId}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitTerritoryMapping(${territoryId})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">변경</button>`);
+}
+async function submitTerritoryMapping(territoryId) {
+  const orgId = +document.getElementById('tm-org').value;
+  const res = await api('PUT', `/stats/territories/${territoryId}/mapping`, { org_id: orgId });
+  if (res?.ok) { showToast('매핑 변경 완료', 'success'); closeModal(); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
 }

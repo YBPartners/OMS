@@ -1,12 +1,13 @@
 // ================================================================
-// 와이비 OMS — 검수 (1차 지역검수 / 2차 HQ검수) v5.0
-// State Machine 적용 — transitionOrder()로 통합
+// 와이비 OMS — 검수 (1차 지역검수 / 2차 HQ검수) v6.0
+// State Machine 적용 — DONE → REGION_APPROVED|REGION_REJECTED
 // ================================================================
 import { Hono } from 'hono';
 import type { Env, OrderStatus } from '../../types';
 import { requireAuth } from '../../middleware/auth';
 import { transitionOrder } from '../../lib/state-machine';
 import { upsertRegionDailyStats, upsertTeamLeaderDailyStats } from '../../lib/db-helpers';
+import { createNotification } from '../../services/notification-service';
 
 export function mountReview(router: Hono<Env>) {
 
@@ -32,7 +33,7 @@ export function mountReview(router: Hono<Env>) {
 
     const targetStatus: OrderStatus = reviewResult === 'APPROVE' ? 'REGION_APPROVED' : 'REGION_REJECTED';
 
-    // ★ State Machine 적용 — SUBMITTED → REGION_APPROVED | REGION_REJECTED
+    // ★ State Machine 적용 — DONE → REGION_APPROVED | REGION_REJECTED
     const result = await transitionOrder(db, orderId, targetStatus, user, {
       note: comment,
       afterTransition: async (db, order) => {
@@ -46,12 +47,27 @@ export function mountReview(router: Hono<Env>) {
         // assignment 상태 동기화
         await db.prepare(`
           UPDATE order_assignments SET status = ?, updated_at = datetime('now')
-          WHERE order_id = ? AND status = 'SUBMITTED'
+          WHERE order_id = ? AND status IN ('SUBMITTED','DONE')
         `).bind(targetStatus, orderId).run();
 
         // 통계
         if (reviewResult === 'APPROVE') {
           await upsertRegionDailyStats(db, user.org_id, 'region_approved_count');
+        }
+
+        // ★ GAP-3: 팀장에게 검수 결과 알림
+        const assign = await db.prepare(
+          `SELECT team_leader_id FROM order_assignments WHERE order_id = ? AND status = ?`
+        ).bind(orderId, targetStatus).first();
+        if (assign) {
+          const isApproved = reviewResult === 'APPROVE';
+          await createNotification(db, assign.team_leader_id as number, {
+            type: isApproved ? 'REGION_APPROVED' : 'REGION_REJECTED',
+            title: isApproved ? '지역 검수 승인' : '지역 검수 반려',
+            message: `주문 #${orderId}이(가) ${isApproved ? '지역 검수 승인' : '지역 검수 반려'}되었습니다.${!isApproved && comment ? ' 사유: ' + comment : ''}`,
+            link_url: '#my-orders',
+            metadata_json: JSON.stringify({ order_id: orderId, result: reviewResult }),
+          });
         }
       },
     });
@@ -111,6 +127,21 @@ export function mountReview(router: Hono<Env>) {
             `SELECT team_leader_id FROM order_assignments WHERE order_id = ? AND status = '${targetStatus}'`
           ).bind(orderId).first();
           if (assign) await upsertTeamLeaderDailyStats(db, assign.team_leader_id as number, 'hq_approved_count');
+        }
+
+        // ★ GAP-3: 팀장에게 HQ 검수 결과 알림
+        const hqAssign = await db.prepare(
+          `SELECT team_leader_id FROM order_assignments WHERE order_id = ? ORDER BY assignment_id DESC LIMIT 1`
+        ).bind(orderId).first();
+        if (hqAssign) {
+          const isApproved = reviewResult === 'APPROVE';
+          await createNotification(db, hqAssign.team_leader_id as number, {
+            type: isApproved ? 'HQ_APPROVED' : 'HQ_REJECTED',
+            title: isApproved ? 'HQ 최종 승인' : 'HQ 검수 반려',
+            message: `주문 #${orderId}이(가) ${isApproved ? 'HQ 최종 승인' : 'HQ 검수 반려'}되었습니다.${!isApproved && comment ? ' 사유: ' + comment : ''}`,
+            link_url: '#my-orders',
+            metadata_json: JSON.stringify({ order_id: orderId, result: reviewResult }),
+          });
         }
       },
     });

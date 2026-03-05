@@ -1,12 +1,13 @@
 // ================================================================
-// 와이비 OMS — 보고서 제출 / 사진 관리 v5.0
-// State Machine 적용
+// 와이비 OMS — 보고서 제출 / 영수증 첨부 / 사진 관리 v6.0
+// State Machine 적용 + SUBMITTED→DONE 전이 (영수증 첨부)
 // ================================================================
 import { Hono } from 'hono';
 import type { Env, OrderStatus } from '../../types';
 import { requireAuth } from '../../middleware/auth';
 import { transitionOrder } from '../../lib/state-machine';
 import { upsertTeamLeaderDailyStats } from '../../lib/db-helpers';
+import { createNotification } from '../../services/notification-service';
 
 export function mountReport(router: Hono<Env>) {
 
@@ -87,5 +88,71 @@ export function mountReport(router: Hono<Env>) {
       report_id: latestReport?.report_id,
       version: latestReport?.version || newVersion,
     });
+  });
+
+  // ─── 영수증 첨부로 최종완료 (SUBMITTED → DONE) ───
+  router.post('/:order_id/complete', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'TEAM_LEADER']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const orderId = Number(c.req.param('order_id'));
+    let body: any = {};
+    try { body = await c.req.json(); } catch { /* optional body */ }
+
+    // ★ State Machine 적용 — SUBMITTED → DONE
+    const result = await transitionOrder(db, orderId, 'DONE', user, {
+      note: body.note || '영수증 첨부 완료 → 최종완료',
+      afterTransition: async (db, order) => {
+        // 영수증 사진 첨부 (선택적)
+        if (body.receipt_url) {
+          const report = await db.prepare(
+            'SELECT report_id FROM work_reports WHERE order_id = ? ORDER BY version DESC LIMIT 1'
+          ).bind(orderId).first();
+          if (report) {
+            await db.prepare(`
+              INSERT INTO work_report_photos (report_id, category, file_url, file_hash) VALUES (?, 'RECEIPT', ?, ?)
+            `).bind(report.report_id, body.receipt_url, body.file_hash || null).run();
+          }
+        }
+
+        // assignment 상태 동기화
+        await db.prepare(`
+          UPDATE order_assignments SET status = 'DONE', updated_at = datetime('now')
+          WHERE order_id = ? AND status = 'SUBMITTED'
+        `).bind(orderId).run();
+
+        // ★ GAP-3: 검수자(REGION_ADMIN)에게 알림
+        const dist = await db.prepare(
+          "SELECT region_org_id FROM order_distributions WHERE order_id = ? AND status = 'ACTIVE'"
+        ).bind(orderId).first();
+        if (dist) {
+          const reviewers = await db.prepare(`
+            SELECT u.user_id FROM users u
+            JOIN user_roles ur ON u.user_id = ur.user_id
+            JOIN roles r ON ur.role_id = r.role_id
+            WHERE u.org_id = ? AND r.code = 'REGION_ADMIN' AND u.status = 'ACTIVE'
+          `).bind(dist.region_org_id).all();
+          for (const rv of reviewers.results as any[]) {
+            await createNotification(db, rv.user_id, {
+              type: 'ORDER_COMPLETED',
+              title: '검수 대기',
+              message: `주문 #${orderId}이(가) 최종완료되어 검수 대기 중입니다.`,
+              link_url: '#review-region',
+              metadata_json: JSON.stringify({ order_id: orderId }),
+            });
+          }
+        }
+      },
+    });
+
+    if (!result.ok) {
+      const statusCode = result.errorCode === 'ORDER_NOT_FOUND' ? 404
+        : result.errorCode === 'UNAUTHORIZED' ? 403 : 400;
+      return c.json({ error: result.error }, statusCode);
+    }
+
+    return c.json({ ok: true, order_id: orderId, new_status: 'DONE' });
   });
 }

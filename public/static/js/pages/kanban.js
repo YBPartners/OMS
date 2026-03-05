@@ -18,18 +18,20 @@ async function renderKanban(el) {
   const user = currentUser;
   const orgId = user.org_id;
 
-  const [distRes, assignedRes, leadersRes, inProgressRes] = await Promise.all([
+  const [distRes, assignedRes, leadersRes, inProgressRes, readyDoneRes] = await Promise.all([
     api('GET', '/orders?status=DISTRIBUTED&limit=200'),
     api('GET', '/orders?status=ASSIGNED&limit=200'),
     api('GET', `/auth/team-leaders?org_id=${orgId}`),
     api('GET', '/orders?status=IN_PROGRESS&limit=200'),
+    api('GET', '/orders?status=READY_DONE&limit=200'),
   ]);
 
   const distributed = distRes?.orders || [];
   const assigned = assignedRes?.orders || [];
   const inProgress = inProgressRes?.orders || [];
+  const readyDone = readyDoneRes?.orders || [];
   const leaders = leadersRes?.team_leaders || [];
-  const allAssigned = [...assigned, ...inProgress];
+  const allAssigned = [...assigned, ...readyDone, ...inProgress];
 
   // 팀장별 배정 그룹화
   const leaderMap = {};
@@ -209,8 +211,9 @@ async function renderKanban(el) {
                 <span class="bg-purple-200 text-purple-800 text-xs px-2 py-0.5 rounded-full font-bold">${lOrders.length}</span>
               </div>
               <div class="flex items-center gap-3 text-[10px] mt-1">
-                <span class="text-purple-500"><i class="fas fa-user-check mr-0.5"></i>배정 ${assignedCnt}</span>
-                <span class="text-orange-500"><i class="fas fa-wrench mr-0.5"></i>작업중 ${inProgCnt}</span>
+                <span class="text-purple-500"><i class="fas fa-user-check mr-0.5"></i>준비 ${assignedCnt}</span>
+                <span class="text-violet-500"><i class="fas fa-phone-volume mr-0.5"></i>준비완료 ${lOrders.filter(o => o.status === 'READY_DONE').length}</span>
+                <span class="text-orange-500"><i class="fas fa-wrench mr-0.5"></i>수행중 ${inProgCnt}</span>
                 <span class="text-green-600 font-bold ml-auto">${formatAmount(leaderAmount)}</span>
               </div>
             </div>
@@ -364,10 +367,16 @@ function showKanbanCardContextMenu(event, order) {
     items.push({ icon: 'fa-user-minus', label: '배정 해제', danger: true, action: () => kanbanUnassign(o.order_id) });
   }
   if (o.status === 'ASSIGNED') {
+    items.push({ icon: 'fa-phone-volume', label: '준비완료 (일정확정)', action: () => readyDone(o.order_id) });
+  }
+  if (o.status === 'READY_DONE') {
     items.push({ icon: 'fa-play', label: '작업 시작', action: () => startWork(o.order_id) });
   }
   if (['IN_PROGRESS', 'REGION_REJECTED', 'HQ_REJECTED'].includes(o.status)) {
     items.push({ icon: 'fa-file-pen', label: '보고서 제출', action: () => showReportModal(o.order_id) });
+  }
+  if (o.status === 'SUBMITTED') {
+    items.push({ icon: 'fa-receipt', label: '최종완료 (영수증)', action: () => completeOrder(o.order_id) });
   }
 
   items.push(

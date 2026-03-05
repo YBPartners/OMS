@@ -20,9 +20,10 @@ async function renderMyOrders(el) {
       <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
         ${[
           { status: '', label: '전체', icon: 'fa-list', color: 'gray', count: res?.total || 0 },
-          { status: 'ASSIGNED', label: '배정됨', icon: 'fa-user-check', color: 'purple' },
-          { status: 'IN_PROGRESS', label: '작업중', icon: 'fa-wrench', color: 'orange' },
-          { status: 'SUBMITTED', label: '제출됨', icon: 'fa-file-lines', color: 'cyan' },
+          { status: 'ASSIGNED', label: '준비', icon: 'fa-user-check', color: 'purple' },
+          { status: 'READY_DONE', label: '준비완료', icon: 'fa-phone-volume', color: 'violet' },
+          { status: 'IN_PROGRESS', label: '수행중', icon: 'fa-wrench', color: 'orange' },
+          { status: 'SUBMITTED,DONE', label: '완료', icon: 'fa-file-lines', color: 'cyan' },
           { status: 'REGION_REJECTED,HQ_REJECTED', label: '반려', icon: 'fa-times-circle', color: 'red' },
         ].map(c => {
           const count = c.count !== undefined ? c.count : orders.filter(o => c.status.split(',').includes(o.status)).length;
@@ -60,12 +61,20 @@ async function renderMyOrders(el) {
                 <i class="fas fa-eye mr-1"></i>상세
               </button>
               ${o.status === 'ASSIGNED' ? `
+                <button onclick="readyDone(${o.order_id})" class="px-3 py-1.5 bg-violet-600 text-white rounded-lg text-xs hover:bg-violet-700 transition" data-tooltip="고객통화 후 일정 확정">
+                  <i class="fas fa-phone-volume mr-1"></i>준비완료
+                </button>` : ''}
+              ${o.status === 'READY_DONE' ? `
                 <button onclick="startWork(${o.order_id})" class="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-xs hover:bg-orange-700 transition" data-tooltip="작업을 시작합니다">
                   <i class="fas fa-play mr-1"></i>작업시작
                 </button>` : ''}
               ${['IN_PROGRESS', 'REGION_REJECTED', 'HQ_REJECTED'].includes(o.status) ? `
                 <button onclick="showReportModal(${o.order_id})" class="px-3 py-1.5 bg-cyan-600 text-white rounded-lg text-xs hover:bg-cyan-700 transition" data-tooltip="보고서를 제출합니다">
                   <i class="fas fa-file-pen mr-1"></i>보고서 제출
+                </button>` : ''}
+              ${o.status === 'SUBMITTED' ? `
+                <button onclick="completeOrder(${o.order_id})" class="px-3 py-1.5 bg-sky-600 text-white rounded-lg text-xs hover:bg-sky-700 transition" data-tooltip="영수증 첨부 후 최종완료">
+                  <i class="fas fa-receipt mr-1"></i>최종완료
                 </button>` : ''}
               <button onclick="event.stopPropagation();showMyOrderContextMenu(event, ${JSON.stringify(o).replace(/"/g, '&quot;')})" 
                 class="ml-auto w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" data-tooltip="더보기">
@@ -92,10 +101,16 @@ function showMyOrderContextMenu(event, order) {
   ];
 
   if (o.status === 'ASSIGNED') {
+    items.push({ icon: 'fa-phone-volume', label: '준비완료 (일정확정)', action: () => readyDone(o.order_id) });
+  }
+  if (o.status === 'READY_DONE') {
     items.push({ icon: 'fa-play', label: '작업 시작', action: () => startWork(o.order_id) });
   }
   if (['IN_PROGRESS', 'REGION_REJECTED', 'HQ_REJECTED'].includes(o.status)) {
     items.push({ icon: 'fa-file-pen', label: '보고서 제출', action: () => showReportModal(o.order_id) });
+  }
+  if (o.status === 'SUBMITTED') {
+    items.push({ icon: 'fa-receipt', label: '최종완료 (영수증)', action: () => completeOrder(o.order_id) });
   }
 
   items.push(
@@ -114,6 +129,71 @@ async function startWork(orderId) {
       if (res?.ok) { showToast('작업 시작!', 'success'); renderContent(); }
       else showToast(res?.error || '실패', 'error');
     }, '시작', 'bg-orange-600');
+}
+
+// ─── 준비완료 (ASSIGNED → READY_DONE) ───
+function readyDone(orderId) {
+  const content = `
+    <div class="space-y-4">
+      <p class="text-sm text-gray-600">고객 통화 후 방문 일정을 확정하세요.</p>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">방문 예정일</label>
+        <input id="ready-done-date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${new Date().toISOString().split('T')[0]}">
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">메모 (선택)</label>
+        <textarea id="ready-done-note" rows="2" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="고객 요청사항 등..."></textarea>
+      </div>
+    </div>`;
+  showModal(`준비완료 — 주문 #${orderId}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitReadyDone(${orderId})" class="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm">확정</button>`);
+}
+
+async function submitReadyDone(orderId) {
+  const scheduledDate = document.getElementById('ready-done-date')?.value || '';
+  const note = document.getElementById('ready-done-note')?.value || '';
+  const res = await api('POST', `/orders/${orderId}/ready-done`, {
+    scheduled_date: scheduledDate, note: note || '고객 통화 후 일정 확정'
+  });
+  if (res?.ok) {
+    showToast('준비완료! 일정: ' + (scheduledDate || '-'), 'success');
+    closeModal();
+    renderContent();
+  } else showToast(res?.error || '실패', 'error');
+}
+
+// ─── 최종완료 (SUBMITTED → DONE: 영수증 첨부) ───
+function completeOrder(orderId) {
+  const content = `
+    <div class="space-y-4">
+      <p class="text-sm text-gray-600">영수증을 첨부하면 최종완료 처리되며 검수 단계로 넘어갑니다.</p>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">영수증 URL (선택)</label>
+        <input id="receipt-url" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="https://example.com/receipt.jpg">
+        <p class="text-[10px] text-gray-400 mt-1">* 데모에서는 URL 입력으로 대체합니다.</p>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">메모 (선택)</label>
+        <textarea id="complete-note" rows="2" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="추가 메모..."></textarea>
+      </div>
+    </div>`;
+  showModal(`최종완료 — 주문 #${orderId}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitComplete(${orderId})" class="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm">최종완료</button>`);
+}
+
+async function submitComplete(orderId) {
+  const receiptUrl = document.getElementById('receipt-url')?.value || '';
+  const note = document.getElementById('complete-note')?.value || '';
+  const res = await api('POST', `/orders/${orderId}/complete`, {
+    receipt_url: receiptUrl || undefined, note: note || '영수증 첨부 완료'
+  });
+  if (res?.ok) {
+    showToast('최종완료! 검수 단계로 이동합니다.', 'success');
+    closeModal();
+    renderContent();
+  } else showToast(res?.error || '실패', 'error');
 }
 
 function showReportModal(orderId) {

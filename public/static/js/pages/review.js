@@ -13,7 +13,7 @@ const reviewState = {
 // ════════ 지역 1차 검수 ════════
 async function renderReviewRegion(el) {
   showSkeletonLoading(el, 'cards');
-  const res = await api('GET', '/orders?status=SUBMITTED&limit=100');
+  const res = await api('GET', '/orders?status=DONE&limit=100');
   const orders = res?.orders || [];
 
   // 없어진 주문 제거
@@ -38,7 +38,7 @@ async function renderReviewRegion(el) {
 
       <div class="bg-white rounded-xl border border-gray-100 p-4 mb-4">
         <div class="flex items-center gap-4 text-sm text-gray-600">
-          <span><i class="fas fa-file-lines mr-1 text-cyan-500"></i>보고서 제출 완료: <strong class="text-cyan-700">${orders.length}건</strong></span>
+          <span><i class="fas fa-check-double mr-1 text-sky-500"></i>최종완료 (검수대기): <strong class="text-sky-700">${orders.length}건</strong></span>
           <span class="text-gray-300">|</span>
           <span>검수 결과를 승인 또는 반려하세요.</span>
           <span class="ml-auto text-xs text-gray-400"><i class="fas fa-hand-pointer mr-1"></i>카드 클릭: 선택 · 우클릭: 액션 메뉴</span>

@@ -1,11 +1,12 @@
 // ================================================================
-// 와이비 OMS 타입 정의 v5.0
+// 와이비 OMS 타입 정의 v6.0
+// v6.0: READY_DONE, DONE 상태 추가 (팀장 수행 플로우 정규화)
 // ================================================================
 
 // ─── 기본 Enum 타입 ───
 export type OrgType = 'HQ' | 'REGION' | 'TEAM';
 export type RoleCode = 'SUPER_ADMIN' | 'HQ_OPERATOR' | 'REGION_ADMIN' | 'AGENCY_LEADER' | 'TEAM_LEADER' | 'AUDITOR';
-export type OrderStatus = 'RECEIVED' | 'VALIDATED' | 'DISTRIBUTION_PENDING' | 'DISTRIBUTED' | 'ASSIGNED' | 'IN_PROGRESS' | 'SUBMITTED' | 'REGION_APPROVED' | 'REGION_REJECTED' | 'HQ_APPROVED' | 'HQ_REJECTED' | 'SETTLEMENT_CONFIRMED' | 'PAID';
+export type OrderStatus = 'RECEIVED' | 'VALIDATED' | 'DISTRIBUTION_PENDING' | 'DISTRIBUTED' | 'ASSIGNED' | 'READY_DONE' | 'IN_PROGRESS' | 'SUBMITTED' | 'DONE' | 'REGION_APPROVED' | 'REGION_REJECTED' | 'HQ_APPROVED' | 'HQ_REJECTED' | 'SETTLEMENT_CONFIRMED' | 'PAID';
 export type ReviewStage = 'REGION' | 'HQ';
 export type ReviewResult = 'APPROVE' | 'REJECT';
 export type CommissionMode = 'FIXED' | 'PERCENT';
@@ -68,21 +69,26 @@ export const STATUS_TRANSITIONS: Record<string, TransitionRule> = {
   'VALIDATED':            { next: ['DISTRIBUTED', 'DISTRIBUTION_PENDING'], requiredRoles: ['SUPER_ADMIN', 'HQ_OPERATOR'] },
   'DISTRIBUTION_PENDING': { next: ['DISTRIBUTED'],                       requiredRoles: ['SUPER_ADMIN', 'HQ_OPERATOR'] },
   'DISTRIBUTED':          { next: ['ASSIGNED'],                          requiredRoles: ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'AGENCY_LEADER'] },
-  'ASSIGNED':             { next: ['IN_PROGRESS'],                       requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
+  // ★ v6.0: ASSIGNED(준비) → READY_DONE(준비완료: 고객통화+일정확정) → IN_PROGRESS(수행중)
+  'ASSIGNED':             { next: ['READY_DONE'],                        requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
+  'READY_DONE':           { next: ['IN_PROGRESS'],                       requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
+  // ★ v6.0: IN_PROGRESS → SUBMITTED(완료전송) → DONE(최종완료: 영수증) → 검수
   'IN_PROGRESS':          { next: ['SUBMITTED'],                         requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
-  'SUBMITTED':            { next: ['REGION_APPROVED', 'REGION_REJECTED'], requiredRoles: ['SUPER_ADMIN', 'REGION_ADMIN', 'AGENCY_LEADER'] },
+  'SUBMITTED':            { next: ['DONE'],                              requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
+  'DONE':                 { next: ['REGION_APPROVED', 'REGION_REJECTED'], requiredRoles: ['SUPER_ADMIN', 'REGION_ADMIN', 'AGENCY_LEADER'] },
   'REGION_APPROVED':      { next: ['HQ_APPROVED', 'HQ_REJECTED'],       requiredRoles: ['SUPER_ADMIN', 'HQ_OPERATOR'] },
-  'REGION_REJECTED':      { next: ['SUBMITTED'],                         requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
+  'REGION_REJECTED':      { next: ['IN_PROGRESS'],                       requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
   'HQ_APPROVED':          { next: ['SETTLEMENT_CONFIRMED'],              requiredRoles: ['SUPER_ADMIN', 'HQ_OPERATOR'] },
-  'HQ_REJECTED':          { next: ['SUBMITTED'],                         requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
+  'HQ_REJECTED':          { next: ['IN_PROGRESS'],                       requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
   'SETTLEMENT_CONFIRMED': { next: ['PAID'],                              requiredRoles: ['SUPER_ADMIN', 'HQ_OPERATOR'] },
 };
 
 // ─── 상태 한글명 ───
 export const STATUS_LABELS: Record<string, string> = {
   'RECEIVED': '수신', 'VALIDATED': '유효성통과', 'DISTRIBUTION_PENDING': '배분대기',
-  'DISTRIBUTED': '배분완료', 'ASSIGNED': '배정완료', 'IN_PROGRESS': '작업중',
-  'SUBMITTED': '보고서제출', 'REGION_APPROVED': '지역승인', 'REGION_REJECTED': '지역반려',
+  'DISTRIBUTED': '배분완료', 'ASSIGNED': '준비(배정됨)', 'READY_DONE': '준비완료',
+  'IN_PROGRESS': '수행중', 'SUBMITTED': '완료전송', 'DONE': '최종완료',
+  'REGION_APPROVED': '지역승인', 'REGION_REJECTED': '지역반려',
   'HQ_APPROVED': 'HQ승인', 'HQ_REJECTED': 'HQ반려', 'SETTLEMENT_CONFIRMED': '정산확정',
   'PAID': '지급완료'
 };
