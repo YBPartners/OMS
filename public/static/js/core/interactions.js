@@ -85,12 +85,17 @@ function positionPopover(pop, anchor, placement) {
 }
 
 function closePopover() {
-  if (IX.activePopover) {
-    IX.activePopover.classList.add('opacity-0', 'scale-95');
-    setTimeout(() => IX.activePopover?.remove(), 150);
-    IX.activePopover = null;
-  }
   document.removeEventListener('click', _popoverOutsideClick);
+  const pop = IX.activePopover;
+  IX.activePopover = null;
+  if (pop) {
+    pop.classList.add('opacity-0', 'scale-95');
+    setTimeout(() => pop.remove(), 150);
+  }
+  // 잔여 팝오버 DOM도 정리
+  document.querySelectorAll('#ix-popover').forEach(el => {
+    if (el !== pop) el.remove();
+  });
 }
 
 function _popoverOutsideClick(e) {
@@ -156,18 +161,20 @@ function showContextMenu(x, y, items, options = {}) {
 }
 
 function closeContextMenu() {
-  if (IX.activeContextMenu) {
-    IX.activeContextMenu.remove();
-    IX.activeContextMenu = null;
-  }
   document.removeEventListener('click', closeContextMenu);
+  const menu = IX.activeContextMenu;
+  IX.activeContextMenu = null;
+  if (menu) menu.remove();
+  // 잔여 컨텍스트 메뉴 DOM도 정리
+  document.querySelectorAll('#ix-context-menu').forEach(el => el.remove());
 }
 
 // ────────────────────────────────────────
 //  3. DRAWER — 옆에서 슬라이드되는 패널
 // ────────────────────────────────────────
 function showDrawer(content, options = {}) {
-  closeDrawer();
+  // 기존 드로어 즉시 제거 (애니메이션 없이)
+  _forceCloseDrawer();
   const side = options.side || 'right';
   const width = options.width || '420px';
   const drawer = document.createElement('div');
@@ -202,22 +209,42 @@ function showDrawer(content, options = {}) {
 }
 
 function closeDrawer() {
-  if (!IX.activeDrawer) return;
+  document.removeEventListener('keydown', _drawerEscHandler);
   const drawer = IX.activeDrawer;
+  IX.activeDrawer = null;
+  if (!drawer) {
+    // activeDrawer가 없어도 잔여 DOM 정리
+    document.querySelectorAll('#ix-drawer').forEach(el => el.remove());
+    return;
+  }
   const panel = drawer.querySelector('.ix-drawer-panel');
   const overlay = drawer.querySelector('.ix-drawer-overlay');
-  const isRight = panel.classList.contains('right-0') || !panel.classList.contains('left-0');
+  const isRight = panel?.classList.contains('right-0') || !panel?.classList.contains('left-0');
 
   overlay?.classList.add('opacity-0');
   panel?.classList.add(isRight ? 'translate-x-full' : '-translate-x-full');
 
-  setTimeout(() => drawer.remove(), 300);
-  IX.activeDrawer = null;
+  // 애니메이션 후 제거, 참조를 로컬로 고정
+  const drawerRef = drawer;
+  setTimeout(() => drawerRef.remove(), 300);
+  // 다른 잔여 드로어도 정리
+  document.querySelectorAll('#ix-drawer').forEach(el => {
+    if (el !== drawerRef) el.remove();
+  });
+}
+
+// 강제 즉시 닫기 (새 드로어 열기 전 사용)
+function _forceCloseDrawer() {
   document.removeEventListener('keydown', _drawerEscHandler);
+  IX.activeDrawer = null;
+  document.querySelectorAll('#ix-drawer').forEach(el => el.remove());
 }
 
 function _drawerEscHandler(e) {
-  if (e.key === 'Escape') closeDrawer();
+  if (e.key === 'Escape') {
+    e.stopPropagation();
+    closeDrawer();
+  }
 }
 
 // ────────────────────────────────────────

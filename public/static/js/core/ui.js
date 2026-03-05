@@ -51,7 +51,10 @@ function showModal(title, content, actions = '', options = {}) {
     </div>`;
   document.body.insertAdjacentHTML('beforeend', html);
 }
-function closeModal() { document.getElementById('modal-overlay')?.remove(); }
+function closeModal() {
+  // 모든 모달 오버레이 제거 (잔여 DOM 방지)
+  document.querySelectorAll('#modal-overlay').forEach(el => el.remove());
+}
 
 function showConfirmModal(title, message, onConfirm, confirmText = '확인', confirmColor = 'bg-blue-600') {
   const content = `<div class="text-center py-4"><p class="text-gray-600">${message}</p></div>`;
