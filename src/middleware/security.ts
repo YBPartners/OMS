@@ -119,7 +119,7 @@ export function isValidEmail(email: string): boolean {
 // ─── Rate Limiting (메모리 기반, Worker 인스턴스 내) ───
 // Cloudflare Workers에서는 KV/Durable Objects 사용 권장
 // 현재는 인스턴스 레벨 메모리 기반 (보수적 접근)
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+export const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 /**
  * 요청 제한 확인. key별로 window_ms 동안 max_count 이내인지 검사.

@@ -26,7 +26,7 @@ const STATUS = OMS.STATUS;
 
 // 권한별 접근 가능 페이지
 OMS.PERMISSIONS = {
-  SUPER_ADMIN: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'audit-log', 'notifications', 'my-profile', 'channels'],
+  SUPER_ADMIN: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'audit-log', 'notifications', 'my-profile', 'channels', 'system-admin'],
   HQ_OPERATOR: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'audit-log', 'notifications', 'my-profile', 'channels'],
   REGION_ADMIN: ['dashboard', 'kanban', 'review-region', 'hr-management', 'statistics', 'notifications', 'my-profile'],
   AGENCY_LEADER: ['agency-dashboard', 'agency-orders', 'agency-team', 'agency-statement', 'review-region', 'kanban', 'my-orders', 'my-stats', 'notifications', 'my-profile'],
@@ -49,6 +49,7 @@ OMS.MENU_ITEMS = {
     { id: 'policies', icon: 'fa-gears', label: '정책관리', group: '관리' },
     { id: 'audit-log', icon: 'fa-scroll', label: '감사로그', group: '관리' },
     { id: 'notifications', icon: 'fa-bell', label: '알림', group: '관리' },
+    { id: 'system-admin', icon: 'fa-server', label: '시스템', group: '관리', adminOnly: true },
   ],
   REGION: [
     { id: 'dashboard', icon: 'fa-chart-pie', label: '대시보드', group: '현황' },

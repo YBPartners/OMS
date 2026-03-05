@@ -165,11 +165,16 @@ function renderLayout() {
           </div>
           <div>
             <div class="font-bold text-gray-800">다하다 OMS</div>
-            <div class="text-xs text-gray-400">v9.0 · ${menuKey}</div>
+            <div class="text-xs text-gray-400">v13.0 · ${menuKey}</div>
           </div>
         </div>
       </div>
-      <nav class="flex-1 p-3 overflow-y-auto">${menuHtml}</nav>
+      <nav class="flex-1 p-3 overflow-y-auto">
+        <button onclick="showGlobalSearchModal()" class="w-full flex items-center gap-3 px-4 py-2.5 mb-2 rounded-lg text-sm text-gray-400 bg-gray-50 hover:bg-gray-100 transition border border-gray-200">
+          <i class="fas fa-search w-5 text-center"></i><span class="flex-1 text-left">검색...</span>
+          <kbd class="px-1.5 py-0.5 bg-white text-gray-400 rounded text-[10px] font-mono border">⌘K</kbd>
+        </button>
+        ${menuHtml}</nav>
       <div class="p-4 border-t">
         <div class="flex items-center gap-3 mb-3">
           <div class="w-9 h-9 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center shadow">
@@ -200,6 +205,9 @@ function renderLayout() {
       <div class="logo"><i class="fas fa-cubes"></i></div>
       <div class="title">${pageTitle}</div>
       <div class="header-actions">
+        <button class="header-btn" onclick="showGlobalSearchModal()" aria-label="검색">
+          <i class="fas fa-search"></i>
+        </button>
         <button class="header-btn" onclick="toggleNotifDropdown()" aria-label="알림">
           <i class="fas fa-bell"></i>
           ${_notifUnreadCount > 0 ? `<span style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:#ef4444;border-radius:50%;border:2px solid white;"></span>` : ''}

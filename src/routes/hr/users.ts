@@ -350,7 +350,11 @@ export function mountUsers(router: Hono<Env>) {
     const { current_password, new_password } = await c.req.json();
 
     if (!current_password || !new_password) return c.json({ error: '현재 비밀번호와 새 비밀번호를 입력하세요.' }, 400);
-    if (new_password.length < 4) return c.json({ error: '비밀번호는 최소 4자 이상이어야 합니다.' }, 400);
+    if (new_password.length < 6) return c.json({ error: '비밀번호는 최소 6자 이상이어야 합니다.' }, 400);
+    if (!/[a-zA-Z]/.test(new_password) || !/[0-9]/.test(new_password)) {
+      return c.json({ error: '비밀번호는 영문과 숫자를 모두 포함해야 합니다.' }, 400);
+    }
+    if (current_password === new_password) return c.json({ error: '현재 비밀번호와 다른 새 비밀번호를 입력하세요.' }, 400);
 
     const userRow = await db.prepare('SELECT password_hash FROM users WHERE user_id = ?').bind(currentUser.user_id).first();
     if (!userRow?.password_hash) return c.json({ error: '사용자 정보를 찾을 수 없습니다.' }, 500);

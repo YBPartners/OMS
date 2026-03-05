@@ -12,6 +12,7 @@ import hrRoutes from './routes/hr/index';
 import signupRoutes from './routes/signup/index';
 import notificationRoutes from './routes/notifications';
 import auditRoutes from './routes/audit';
+import systemRoutes from './routes/system';
 
 const app = new Hono<Env>();
 
@@ -44,9 +45,10 @@ app.route('/api/hr', hrRoutes);
 app.route('/api/signup', signupRoutes);
 app.route('/api/notifications', notificationRoutes);
 app.route('/api/audit', auditRoutes);
+app.route('/api/system', systemRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '12.0.0', system: '다하다 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '13.0.0', system: '다하다 OMS' }));
 
 // ─── SPA 라우팅: 모든 페이지 요청에 index.html 반환 ───
 app.get('*', async (c) => {
@@ -142,6 +144,7 @@ function getIndexHtml(): string {
   <script src="/static/js/pages/my-orders.js"></script>
   <script src="/static/js/pages/agency.js"></script>
   <script src="/static/js/pages/channels.js"></script>
+  <script src="/static/js/pages/system.js"></script>
   
   <!-- App bootstrap (must be last) -->
   <script src="/static/js/core/app.js"></script>

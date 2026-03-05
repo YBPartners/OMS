@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, writeAuditLog } from '../middleware/auth';
-import { verifyPassword, needsRehash, hashPassword, checkRateLimit } from '../middleware/security';
+import { verifyPassword, needsRehash, hashPassword, checkRateLimit, rateLimitMap } from '../middleware/security';
 import { createSession, deleteSession, cleanExpiredSessions } from '../services/session-service';
 
 const auth = new Hono<Env>();
@@ -37,12 +37,26 @@ auth.post('/login', async (c) => {
     return c.json({ error: '아이디 또는 비밀번호가 틀렸습니다.' }, 401);
   }
 
+  // 계정 잠금 확인 (5회 실패 시 5분 잠금) — 검사만 하고 카운트 증가 안 함
+  const failKey = `login_fail:${login_id}`;
+  const failEntry = rateLimitMap.get(failKey);
+  const now = Date.now();
+  if (failEntry && now <= failEntry.resetAt && failEntry.count >= 5) {
+    const retryMin = Math.ceil((failEntry.resetAt - now) / 60000);
+    return c.json({ error: `로그인 시도 초과로 계정이 잠겼습니다. ${retryMin}분 후 다시 시도하세요.` }, 423);
+  }
+
   // PBKDF2 검증 (레거시 SHA-256도 자동 호환)
   const valid = await verifyPassword(password, user.password_hash as string);
   if (!valid) {
+    // 실패 시에만 카운트 증가
+    checkRateLimit(failKey, 5, 300_000);
     await writeAuditLog(db, { entity_type: 'USER', entity_id: user.user_id as number, action: 'LOGIN_FAILED', detail_json: JSON.stringify({ login_id }) });
     return c.json({ error: '아이디 또는 비밀번호가 틀렸습니다.' }, 401);
   }
+
+  // 로그인 성공 시 실패 카운트 초기화
+  rateLimitMap.delete(failKey);
 
   // 레거시 해시 → PBKDF2 자동 마이그레이션 (투명하게)
   if (needsRehash(user.password_hash as string)) {

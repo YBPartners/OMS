@@ -653,7 +653,9 @@ async function showOrderHistoryDrawer(orderId) {
   showDrawer(content, {
     title: `주문 #${orderId} 이력`,
     subtitle: `${o.customer_name || ''} · ${statusBadge(o.status)}`,
-    width: '480px'
+    width: '480px',
+    footer: `<button onclick="closeDrawer();showOrderTimelineModal(${orderId})" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"><i class="fas fa-timeline mr-1"></i>전체 타임라인</button>
+             <button onclick="closeDrawer()" class="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm">닫기</button>`
   });
 }
 
