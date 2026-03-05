@@ -165,7 +165,7 @@ function renderLayout() {
           </div>
           <div>
             <div class="font-bold text-gray-800">다하다 OMS</div>
-            <div class="text-xs text-gray-400">v13.0 · ${menuKey}</div>
+            <div class="text-xs text-gray-400">v14.0 · ${menuKey}</div>
           </div>
         </div>
       </div>

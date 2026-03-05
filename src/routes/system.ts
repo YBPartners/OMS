@@ -1,6 +1,6 @@
 // ================================================================
-// 다하다 OMS — 시스템 관리 API v13.0
-// 백업/복원, 시스템 설정, 글로벌 검색, 주문 타임라인
+// 다하다 OMS — 시스템 관리 API v14.0
+// 백업/복원, 데이터 임포트, 글로벌 검색, 주문 타임라인, 푸시 알림
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -26,7 +26,7 @@ system.get('/info', async (c) => {
 
   return c.json({
     system: {
-      version: '13.0.0',
+      version: '14.0.0',
       name: '다하다 OMS',
       platform: 'Cloudflare Workers + D1',
     },
@@ -361,6 +361,224 @@ system.get('/order-timeline/:order_id', async (c) => {
     reviews: reviews.results.length,
     settlements: settlements.results.length,
   }});
+});
+
+// ─── 데이터 임포트 (CSV/JSON 기반) ───
+system.post('/import/:table', async (c) => {
+  const authErr = requireAuth(c, ['SUPER_ADMIN']);
+  if (authErr) return authErr;
+
+  const db = c.env.DB;
+  const user = c.get('user')!;
+  const table = c.req.param('table');
+  const body = await c.req.json();
+  const { rows, mode = 'insert' } = body; // mode: insert | upsert
+
+  // 안전한 테이블명 검증 (화이트리스트)
+  const importableTables: Record<string, string[]> = {
+    orders: ['external_order_no', 'customer_name', 'customer_phone', 'address_text', 'service_type', 'base_amount', 'requested_date', 'memo'],
+    users: ['login_id', 'name', 'phone', 'email', 'org_id'],
+    organizations: ['name', 'org_type', 'code', 'parent_org_id'],
+    commission_policies: ['org_id', 'service_type', 'commission_mode', 'commission_rate'],
+  };
+
+  if (!importableTables[table]) return c.json({ error: '임포트 불가능한 테이블입니다.' }, 400);
+  if (!Array.isArray(rows) || rows.length === 0) return c.json({ error: '데이터가 비어있습니다.' }, 400);
+  if (rows.length > 500) return c.json({ error: '최대 500행까지 임포트 가능합니다.' }, 400);
+
+  const allowedCols = importableTables[table];
+  let imported = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const cols: string[] = [];
+    const vals: any[] = [];
+
+    for (const col of allowedCols) {
+      if (row[col] !== undefined && row[col] !== null && row[col] !== '') {
+        cols.push(col);
+        vals.push(row[col]);
+      }
+    }
+
+    if (cols.length === 0) { skipped++; continue; }
+
+    try {
+      if (mode === 'upsert' && table === 'orders' && row.external_order_no) {
+        // Upsert: 기존 주문 업데이트 또는 새 주문 삽입
+        const existing = await db.prepare('SELECT order_id FROM orders WHERE external_order_no = ?').bind(row.external_order_no).first();
+        if (existing) {
+          const setClause = cols.filter(c => c !== 'external_order_no').map(c => `${c} = ?`).join(', ');
+          const updateVals = vals.filter((_, idx) => cols[idx] !== 'external_order_no');
+          if (setClause) {
+            await db.prepare(`UPDATE orders SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE external_order_no = ?`)
+              .bind(...updateVals, row.external_order_no).run();
+          }
+          imported++;
+          continue;
+        }
+      }
+
+      // 주문 기본값: status = 'RECEIVED'
+      if (table === 'orders' && !cols.includes('status')) {
+        cols.push('status');
+        vals.push('RECEIVED');
+      }
+
+      const placeholders = cols.map(() => '?').join(',');
+      const insertMode = mode === 'upsert' ? 'INSERT OR REPLACE' : 'INSERT OR IGNORE';
+      await db.prepare(`${insertMode} INTO ${table} (${cols.join(',')}) VALUES (${placeholders})`).bind(...vals).run();
+      imported++;
+    } catch (e: any) {
+      errors.push(`행 ${i + 1}: ${e.message}`);
+      skipped++;
+    }
+  }
+
+  await writeAuditLog(db, {
+    entity_type: 'SYSTEM', entity_id: 0, action: 'DATA_IMPORT',
+    actor_id: user.user_id,
+    detail_json: JSON.stringify({ table, mode, total: rows.length, imported, skipped, errors: errors.slice(0, 5) }),
+  });
+
+  return c.json({ ok: true, table, mode, total: rows.length, imported, skipped, errors: errors.slice(0, 10) });
+});
+
+// ─── 스냅샷 백업 (전체 테이블 데이터 JSON) ───
+system.get('/snapshot', async (c) => {
+  const authErr = requireAuth(c, ['SUPER_ADMIN']);
+  if (authErr) return authErr;
+
+  const db = c.env.DB;
+  const user = c.get('user')!;
+  const tables = (c.req.query('tables') || 'orders,users,organizations,settlements,commission_policies').split(',');
+
+  const allowedTables = [
+    'organizations', 'users', 'user_roles', 'orders', 'order_distributions',
+    'order_assignments', 'work_reports', 'reviews', 'settlements', 'settlement_runs',
+    'commission_policies', 'order_channels', 'agency_team_mappings', 'notifications',
+  ];
+
+  const snapshot: Record<string, any[]> = {};
+  const meta: Record<string, number> = {};
+
+  for (const table of tables) {
+    const t = table.trim();
+    if (!allowedTables.includes(t)) continue;
+    try {
+      const result = await db.prepare(`SELECT * FROM ${t} LIMIT 10000`).all();
+      snapshot[t] = result.results;
+      meta[t] = result.results.length;
+    } catch { /* skip */ }
+  }
+
+  await writeAuditLog(db, {
+    entity_type: 'SYSTEM', entity_id: 0, action: 'SNAPSHOT_CREATED',
+    actor_id: user.user_id,
+    detail_json: JSON.stringify({ tables: Object.keys(snapshot), meta }),
+  });
+
+  return c.json({
+    snapshot,
+    meta: {
+      tables: meta,
+      total_rows: Object.values(meta).reduce((a, b) => a + b, 0),
+      created_at: new Date().toISOString(),
+      version: '14.0.0',
+    },
+  });
+});
+
+// ─── 스냅샷 복원 (JSON → DB) ───
+system.post('/snapshot/restore', async (c) => {
+  const authErr = requireAuth(c, ['SUPER_ADMIN']);
+  if (authErr) return authErr;
+
+  const db = c.env.DB;
+  const user = c.get('user')!;
+  const { snapshot, options } = await c.req.json();
+  const clearBefore = options?.clear_before === true;
+
+  if (!snapshot || typeof snapshot !== 'object') return c.json({ error: '유효하지 않은 스냅샷 데이터입니다.' }, 400);
+
+  const restorableTables = [
+    'organizations', 'users', 'user_roles', 'orders', 'order_distributions',
+    'order_assignments', 'commission_policies', 'order_channels',
+  ];
+
+  const results: Record<string, { cleared: number; restored: number; errors: number }> = {};
+
+  for (const [table, rows] of Object.entries(snapshot)) {
+    if (!restorableTables.includes(table) || !Array.isArray(rows)) continue;
+
+    let cleared = 0, restored = 0, errors = 0;
+
+    if (clearBefore) {
+      try {
+        const res = await db.prepare(`DELETE FROM ${table}`).run();
+        cleared = res.meta.changes || 0;
+      } catch { /* skip */ }
+    }
+
+    for (const row of rows) {
+      try {
+        const cols = Object.keys(row).filter(k => row[k] !== undefined);
+        const vals = cols.map(k => row[k]);
+        const placeholders = cols.map(() => '?').join(',');
+        await db.prepare(`INSERT OR REPLACE INTO ${table} (${cols.join(',')}) VALUES (${placeholders})`).bind(...vals).run();
+        restored++;
+      } catch { errors++; }
+    }
+
+    results[table] = { cleared, restored, errors };
+  }
+
+  await writeAuditLog(db, {
+    entity_type: 'SYSTEM', entity_id: 0, action: 'SNAPSHOT_RESTORED',
+    actor_id: user.user_id,
+    detail_json: JSON.stringify({ tables: Object.keys(results), results, clear_before: clearBefore }),
+  });
+
+  return c.json({ ok: true, results });
+});
+
+// ─── 푸시 알림 구독 저장 ───
+system.post('/push/subscribe', async (c) => {
+  const authErr = requireAuth(c);
+  if (authErr) return authErr;
+
+  const db = c.env.DB;
+  const user = c.get('user')!;
+  const { subscription } = await c.req.json();
+  if (!subscription?.endpoint) return c.json({ error: '유효하지 않은 구독 정보입니다.' }, 400);
+
+  // notification_preferences 테이블의 push_subscription 컬럼에 저장
+  await db.prepare(
+    'INSERT OR IGNORE INTO notification_preferences (user_id) VALUES (?)'
+  ).bind(user.user_id).run();
+
+  await db.prepare(
+    'UPDATE notification_preferences SET push_enabled = 1, push_subscription = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?'
+  ).bind(JSON.stringify(subscription), user.user_id).run();
+
+  return c.json({ ok: true, message: '푸시 알림이 활성화되었습니다.' });
+});
+
+// ─── 푸시 알림 구독 해제 ───
+system.post('/push/unsubscribe', async (c) => {
+  const authErr = requireAuth(c);
+  if (authErr) return authErr;
+
+  const db = c.env.DB;
+  const user = c.get('user')!;
+
+  await db.prepare(
+    'UPDATE notification_preferences SET push_enabled = 0, push_subscription = NULL, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?'
+  ).bind(user.user_id).run();
+
+  return c.json({ ok: true, message: '푸시 알림이 비활성화되었습니다.' });
 });
 
 export default system;

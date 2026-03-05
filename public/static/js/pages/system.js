@@ -1,5 +1,6 @@
 // ============================================================
-// 다하다 OMS — 글로벌 검색 (Cmd+K) + 주문 타임라인 + 시스템 관리 v13.0
+// 다하다 OMS — 글로벌 검색 (Cmd+K) + 주문 타임라인 + 시스템 관리 v14.0
+// v14.0: 데이터 임포트/백업 + 푸시 알림 + 매출/정산 차트
 // ============================================================
 
 // ════════ 글로벌 검색 (Cmd+K / Ctrl+K) ════════
@@ -217,21 +218,155 @@ async function renderSystemAdmin(el) {
         <div class="bg-white rounded-xl p-5 border"><div class="text-xs text-gray-500 mb-1">활성 세션</div><div class="text-xl font-bold text-amber-600">${s.active_sessions}개</div></div>
       </div>
 
-      <!-- 세션 관리 -->
-      <div class="bg-white rounded-xl p-6 border mb-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold"><i class="fas fa-users-cog mr-2 text-amber-500"></i>활성 세션 관리</h3>
-          <button onclick="purgeAllSessions()" class="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs hover:bg-red-200">
-            <i class="fas fa-broom mr-1"></i>전체 세션 초기화
-          </button>
-        </div>
-        <div id="session-list"><div class="text-center text-gray-400 py-4"><i class="fas fa-spinner fa-spin"></i> 로딩...</div></div>
+      <!-- 탭 네비게이션 -->
+      <div class="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6">
+        <button onclick="switchSystemTab('sessions')" id="sys-tab-sessions" class="flex-1 px-4 py-2 rounded-md text-sm font-medium bg-white shadow text-blue-600">
+          <i class="fas fa-users-cog mr-1"></i>세션 관리
+        </button>
+        <button onclick="switchSystemTab('database')" id="sys-tab-database" class="flex-1 px-4 py-2 rounded-md text-sm font-medium text-gray-600">
+          <i class="fas fa-database mr-1"></i>DB 현황
+        </button>
+        <button onclick="switchSystemTab('import')" id="sys-tab-import" class="flex-1 px-4 py-2 rounded-md text-sm font-medium text-gray-600">
+          <i class="fas fa-file-import mr-1"></i>데이터 임포트
+        </button>
+        <button onclick="switchSystemTab('backup')" id="sys-tab-backup" class="flex-1 px-4 py-2 rounded-md text-sm font-medium text-gray-600">
+          <i class="fas fa-shield-halved mr-1"></i>백업/복원
+        </button>
       </div>
 
-      <!-- 데이터 테이블 정보 -->
-      <div class="bg-white rounded-xl p-6 border">
-        <h3 class="text-lg font-semibold mb-4"><i class="fas fa-database mr-2 text-indigo-500"></i>데이터베이스 현황</h3>
-        <div id="db-table-info"><div class="text-center text-gray-400 py-4"><i class="fas fa-spinner fa-spin"></i> 로딩...</div></div>
+      <div id="sys-tab-content">
+        <!-- 세션 관리 (기본) -->
+        <div id="sys-panel-sessions">
+          <div class="bg-white rounded-xl p-6 border">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold"><i class="fas fa-users-cog mr-2 text-amber-500"></i>활성 세션 관리</h3>
+              <button onclick="purgeAllSessions()" class="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs hover:bg-red-200">
+                <i class="fas fa-broom mr-1"></i>전체 세션 초기화
+              </button>
+            </div>
+            <div id="session-list"><div class="text-center text-gray-400 py-4"><i class="fas fa-spinner fa-spin"></i> 로딩...</div></div>
+          </div>
+        </div>
+
+        <!-- DB 현황 (숨김) -->
+        <div id="sys-panel-database" style="display:none;">
+          <div class="bg-white rounded-xl p-6 border">
+            <h3 class="text-lg font-semibold mb-4"><i class="fas fa-database mr-2 text-indigo-500"></i>데이터베이스 현황</h3>
+            <div id="db-table-info"><div class="text-center text-gray-400 py-4"><i class="fas fa-spinner fa-spin"></i> 로딩...</div></div>
+          </div>
+        </div>
+
+        <!-- 데이터 임포트 (숨김) -->
+        <div id="sys-panel-import" style="display:none;">
+          <div class="bg-white rounded-xl p-6 border">
+            <h3 class="text-lg font-semibold mb-4"><i class="fas fa-file-import mr-2 text-green-500"></i>데이터 임포트</h3>
+            <p class="text-sm text-gray-500 mb-4">CSV 또는 JSON 형식의 데이터를 업로드하여 시스템에 일괄 입력할 수 있습니다.</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <!-- 임포트 설정 -->
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">대상 테이블</label>
+                  <select id="import-table" class="w-full border rounded-lg px-3 py-2 text-sm">
+                    <option value="orders">주문 (orders)</option>
+                    <option value="users">사용자 (users)</option>
+                    <option value="organizations">조직 (organizations)</option>
+                    <option value="commission_policies">수수료 정책 (commission_policies)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">임포트 모드</label>
+                  <select id="import-mode" class="w-full border rounded-lg px-3 py-2 text-sm">
+                    <option value="insert">신규 삽입 (중복 무시)</option>
+                    <option value="upsert">Upsert (있으면 업데이트)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">데이터 (JSON 배열)</label>
+                  <textarea id="import-data" class="w-full border rounded-lg px-3 py-2 text-sm font-mono h-40" 
+                    placeholder='[{"external_order_no":"ORD-001","customer_name":"홍길동","base_amount":50000}]'></textarea>
+                </div>
+                <div class="flex items-center gap-2">
+                  <input type="file" id="import-file" accept=".csv,.json" onchange="handleImportFile(this)" class="text-sm text-gray-500">
+                  <span class="text-xs text-gray-400">CSV/JSON 파일 업로드</span>
+                </div>
+              </div>
+
+              <!-- 임포트 가이드 -->
+              <div class="bg-gray-50 rounded-xl p-4 space-y-3">
+                <h4 class="font-semibold text-sm"><i class="fas fa-info-circle mr-1 text-blue-500"></i>임포트 가이드</h4>
+                <div id="import-guide">
+                  <p class="text-xs text-gray-600 mb-2"><strong>orders</strong> 허용 컬럼:</p>
+                  <div class="flex flex-wrap gap-1 mb-3">
+                    ${['external_order_no','customer_name','customer_phone','address_text','service_type','base_amount','requested_date','memo'].map(c => 
+                      `<span class="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-mono">${c}</span>`
+                    ).join('')}
+                  </div>
+                  <p class="text-xs text-gray-600 mb-2"><strong>users</strong> 허용 컬럼:</p>
+                  <div class="flex flex-wrap gap-1 mb-3">
+                    ${['login_id','name','phone','email','org_id'].map(c => 
+                      `<span class="px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-[10px] font-mono">${c}</span>`
+                    ).join('')}
+                  </div>
+                  <div class="mt-3 p-2 bg-yellow-50 rounded-lg">
+                    <p class="text-[10px] text-yellow-700"><i class="fas fa-exclamation-triangle mr-1"></i>최대 500행까지 한번에 임포트 가능합니다.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3 mt-4">
+              <button onclick="executeImport()" class="px-5 py-2.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+                <i class="fas fa-upload mr-1"></i>임포트 실행
+              </button>
+              <div id="import-result" class="text-sm"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 백업/복원 (숨김) -->
+        <div id="sys-panel-backup" style="display:none;">
+          <div class="space-y-6">
+            <!-- 스냅샷 백업 -->
+            <div class="bg-white rounded-xl p-6 border">
+              <h3 class="text-lg font-semibold mb-4"><i class="fas fa-download mr-2 text-blue-500"></i>스냅샷 백업</h3>
+              <p class="text-sm text-gray-500 mb-4">전체 데이터를 JSON 파일로 다운로드합니다. 복원 시 이 파일을 업로드하세요.</p>
+              <div class="space-y-3">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">백업 대상 테이블</label>
+                  <div class="flex flex-wrap gap-2" id="backup-table-checks">
+                    ${['orders','users','organizations','user_roles','order_distributions','order_assignments','settlements','commission_policies','order_channels'].map(t => `
+                      <label class="flex items-center gap-1 px-2 py-1 bg-gray-50 rounded text-xs cursor-pointer hover:bg-blue-50">
+                        <input type="checkbox" value="${t}" checked class="w-3 h-3"> ${t}
+                      </label>
+                    `).join('')}
+                  </div>
+                </div>
+                <button onclick="createSnapshot()" class="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+                  <i class="fas fa-camera mr-1"></i>스냅샷 생성 & 다운로드
+                </button>
+              </div>
+            </div>
+
+            <!-- 스냅샷 복원 -->
+            <div class="bg-white rounded-xl p-6 border">
+              <h3 class="text-lg font-semibold mb-4"><i class="fas fa-upload mr-2 text-amber-500"></i>스냅샷 복원</h3>
+              <p class="text-sm text-gray-500 mb-4">이전에 백업한 JSON 스냅샷 파일을 업로드하여 데이터를 복원합니다.</p>
+              <div class="space-y-3">
+                <input type="file" id="restore-file" accept=".json" class="text-sm text-gray-500">
+                <label class="flex items-center gap-2 text-sm">
+                  <input type="checkbox" id="restore-clear" class="w-4 h-4 text-red-600">
+                  <span class="text-red-600 font-medium">기존 데이터 삭제 후 복원</span>
+                  <span class="text-xs text-gray-400">(주의: 되돌릴 수 없음)</span>
+                </label>
+                <button onclick="restoreSnapshot()" class="px-5 py-2.5 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700">
+                  <i class="fas fa-undo mr-1"></i>복원 실행
+                </button>
+                <div id="restore-result" class="text-sm"></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>`;
 
@@ -307,4 +442,249 @@ async function purgeAllSessions() {
 // 초기화 — DOM 로드 후 글로벌 검색 이벤트 등록
 if (typeof document !== 'undefined') {
   document.addEventListener('DOMContentLoaded', initGlobalSearch);
+}
+
+// ════════ 시스템 탭 전환 ════════
+function switchSystemTab(tab) {
+  ['sessions', 'database', 'import', 'backup'].forEach(t => {
+    const panel = document.getElementById(`sys-panel-${t}`);
+    const btn = document.getElementById(`sys-tab-${t}`);
+    if (panel) panel.style.display = t === tab ? '' : 'none';
+    if (btn) {
+      btn.className = t === tab
+        ? 'flex-1 px-4 py-2 rounded-md text-sm font-medium bg-white shadow text-blue-600'
+        : 'flex-1 px-4 py-2 rounded-md text-sm font-medium text-gray-600';
+    }
+  });
+  // 탭 전환 시 데이터 로드
+  if (tab === 'database') loadBackupInfo();
+  if (tab === 'sessions') loadSessionList();
+}
+
+// ════════ 데이터 임포트 ════════
+function handleImportFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const text = e.target.result;
+    try {
+      if (file.name.endsWith('.json')) {
+        // JSON 파일
+        const data = JSON.parse(text);
+        document.getElementById('import-data').value = JSON.stringify(Array.isArray(data) ? data : [data], null, 2);
+      } else if (file.name.endsWith('.csv')) {
+        // CSV → JSON 변환
+        const rows = parseCSV(text);
+        document.getElementById('import-data').value = JSON.stringify(rows, null, 2);
+        showToast(`CSV ${rows.length}행 파싱 완료`, 'success');
+      }
+    } catch (err) {
+      showToast('파일 파싱 오류: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  
+  // BOM 제거
+  const headerLine = lines[0].replace(/^\uFEFF/, '');
+  const headers = headerLine.split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  
+  return lines.slice(1).map(line => {
+    const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+    const obj = {};
+    headers.forEach((h, i) => {
+      if (values[i] !== undefined && values[i] !== '') {
+        // 숫자인지 판별
+        obj[h] = isNaN(values[i]) ? values[i] : Number(values[i]);
+      }
+    });
+    return obj;
+  }).filter(obj => Object.keys(obj).length > 0);
+}
+
+async function executeImport() {
+  const table = document.getElementById('import-table')?.value;
+  const mode = document.getElementById('import-mode')?.value;
+  const dataText = document.getElementById('import-data')?.value?.trim();
+  const resultEl = document.getElementById('import-result');
+
+  if (!dataText) { showToast('데이터를 입력하세요.', 'warning'); return; }
+
+  let rows;
+  try {
+    rows = JSON.parse(dataText);
+    if (!Array.isArray(rows)) rows = [rows];
+  } catch {
+    showToast('JSON 형식이 올바르지 않습니다.', 'error'); return;
+  }
+
+  showConfirmModal(
+    '데이터 임포트 확인',
+    `<strong>${table}</strong> 테이블에 <strong>${rows.length}</strong>행을 <strong>${mode === 'upsert' ? 'Upsert' : '신규 삽입'}</strong> 모드로 임포트합니다. 계속하시겠습니까?`,
+    async () => {
+      if (resultEl) resultEl.innerHTML = '<i class="fas fa-spinner fa-spin text-blue-500"></i> 처리 중...';
+      const res = await api('POST', `/system/import/${table}`, { rows, mode });
+      if (res?.ok) {
+        if (resultEl) resultEl.innerHTML = `
+          <span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>
+            ${res.imported}건 임포트 / ${res.skipped}건 스킵
+            ${res.errors?.length ? `<span class="text-red-500 ml-2">${res.errors.length}개 오류</span>` : ''}
+          </span>`;
+        showToast(`${res.imported}건 임포트 완료`, 'success');
+      } else {
+        if (resultEl) resultEl.innerHTML = `<span class="text-red-600"><i class="fas fa-times-circle mr-1"></i>${res?.error || '처리 실패'}</span>`;
+        showToast(res?.error || '임포트 실패', 'error');
+      }
+    },
+    '임포트 실행', 'bg-green-600'
+  );
+}
+
+// ════════ 스냅샷 백업/복원 ════════
+async function createSnapshot() {
+  const checks = document.querySelectorAll('#backup-table-checks input[type="checkbox"]:checked');
+  const tables = Array.from(checks).map(c => c.value);
+  if (tables.length === 0) { showToast('백업할 테이블을 선택하세요.', 'warning'); return; }
+
+  showToast('스냅샷 생성 중...', 'info');
+  const res = await api('GET', `/system/snapshot?tables=${tables.join(',')}`);
+  if (!res?.snapshot) { showToast('스냅샷 생성 실패', 'error'); return; }
+
+  // JSON 다운로드
+  const blob = new Blob([JSON.stringify(res, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `dahada-oms-snapshot_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(`${res.meta.total_rows}행 스냅샷 다운로드 완료`, 'success');
+}
+
+async function restoreSnapshot() {
+  const file = document.getElementById('restore-file')?.files[0];
+  if (!file) { showToast('스냅샷 파일을 선택하세요.', 'warning'); return; }
+
+  const clearBefore = document.getElementById('restore-clear')?.checked || false;
+  const resultEl = document.getElementById('restore-result');
+
+  const text = await file.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    showToast('올바른 JSON 파일이 아닙니다.', 'error'); return;
+  }
+
+  if (!data.snapshot) { showToast('유효한 스냅샷 파일이 아닙니다.', 'error'); return; }
+
+  const tableCount = Object.keys(data.snapshot).length;
+  const rowCount = data.meta?.total_rows || '알 수 없는';
+
+  showConfirmModal(
+    '스냅샷 복원',
+    `<div class="text-left space-y-2">
+      <p>${tableCount}개 테이블, ${rowCount}행을 복원합니다.</p>
+      ${clearBefore ? '<p class="text-red-600 font-bold"><i class="fas fa-exclamation-triangle mr-1"></i>기존 데이터가 삭제됩니다!</p>' : ''}
+      <p class="text-gray-500 text-xs">스냅샷 생성일: ${data.meta?.created_at || '알 수 없음'}</p>
+    </div>`,
+    async () => {
+      if (resultEl) resultEl.innerHTML = '<i class="fas fa-spinner fa-spin text-amber-500"></i> 복원 중...';
+      const res = await api('POST', '/system/snapshot/restore', {
+        snapshot: data.snapshot,
+        options: { clear_before: clearBefore },
+      });
+      if (res?.ok) {
+        const summary = Object.entries(res.results).map(([t, r]) =>
+          `${t}: ${r.restored}건 복원${r.errors ? `, ${r.errors}건 오류` : ''}`
+        ).join('\n');
+        if (resultEl) resultEl.innerHTML = `<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>복원 완료</span>`;
+        showToast('스냅샷 복원 완료', 'success');
+      } else {
+        if (resultEl) resultEl.innerHTML = `<span class="text-red-600">${res?.error || '복원 실패'}</span>`;
+        showToast(res?.error || '복원 실패', 'error');
+      }
+    },
+    clearBefore ? '삭제 후 복원' : '복원', clearBefore ? 'bg-red-600' : 'bg-amber-600'
+  );
+}
+
+// ════════ 웹 푸시 알림 ════════
+async function initPushNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    console.log('[Push] Service Worker 등록 성공');
+
+    // 기존 구독 확인
+    const sub = await reg.pushManager.getSubscription();
+    window._pushSubscription = sub;
+    window._swRegistration = reg;
+  } catch (err) {
+    console.warn('[Push] Service Worker 등록 실패:', err);
+  }
+}
+
+async function subscribePush() {
+  if (!window._swRegistration) { showToast('Service Worker가 아직 준비되지 않았습니다.', 'warning'); return; }
+
+  try {
+    // VAPID key가 없으면 로컬 알림만 사용
+    const sub = await window._swRegistration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: null, // VAPID key 미설정 시 null
+    });
+    window._pushSubscription = sub;
+    await api('POST', '/system/push/subscribe', { subscription: sub.toJSON() });
+    showToast('푸시 알림이 활성화되었습니다.', 'success');
+  } catch (err) {
+    // Push subscription 실패 시 로컬 알림 모드
+    console.warn('[Push] 서버 푸시 구독 실패, 로컬 알림 모드:', err);
+    showToast('로컬 알림 모드로 전환됩니다.', 'info');
+    window._pushLocalMode = true;
+  }
+}
+
+async function unsubscribePush() {
+  if (window._pushSubscription) {
+    try {
+      await window._pushSubscription.unsubscribe();
+    } catch { /* ignore */ }
+  }
+  window._pushSubscription = null;
+  await api('POST', '/system/push/unsubscribe');
+  showToast('푸시 알림이 비활성화되었습니다.', 'success');
+}
+
+// 로컬 알림 발송 (Service Worker 메시지)
+function showLocalNotification(title, body, url = '/') {
+  if (!window._swRegistration) return;
+  window._swRegistration.active?.postMessage({
+    type: 'SHOW_NOTIFICATION',
+    title, body, url,
+    tag: 'dahada-' + Date.now(),
+  });
+}
+
+// Service Worker 알림 클릭 핸들링
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'NOTIFICATION_CLICK' && e.data.url) {
+      window.location.hash = e.data.url.replace('/', '');
+    }
+  });
+}
+
+// 초기화
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initPushNotifications();
+  });
 }

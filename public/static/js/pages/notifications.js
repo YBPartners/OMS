@@ -21,8 +21,18 @@ async function fetchUnreadCount() {
   if (!currentUser) return;
   const res = await api('GET', '/notifications/unread-count');
   if (res?.unread_count !== undefined) {
+    const prevCount = _notifUnreadCount;
     _notifUnreadCount = res.unread_count;
     updateNotifBadge();
+    
+    // v14.0: 새 알림이 늘어났으면 로컬 푸시 알림 발송
+    if (_notifUnreadCount > prevCount && prevCount >= 0 && typeof showLocalNotification === 'function') {
+      showLocalNotification(
+        '다하다 OMS',
+        `새로운 알림 ${_notifUnreadCount - prevCount}건이 있습니다.`,
+        '#notifications'
+      );
+    }
   }
 }
 

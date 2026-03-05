@@ -1,6 +1,7 @@
 // ============================================================
-// 다하다 OMS - 대시보드 페이지 v8.0
+// 다하다 OMS - 대시보드 페이지 v14.0
 // Chart.js 실시간 차트, 인터랙션 디자인, 드릴다운
+// 매출 추이, 정산 현황 차트 추가
 // ============================================================
 
 // 차트 인스턴스 관리 (메모리 누수 방지)
@@ -183,6 +184,31 @@ async function renderDashboard(el) {
 
   // ─── Chart.js 렌더링 ───
   _renderDashCharts(funnelRes.funnel || [], dashRes.region_summary || []);
+
+  // ─── v14.0: HQ/REGION 사용자에게 매출 추이 + 정산 현황 추가 ───
+  if (currentUser && (currentUser.org_type === 'HQ' || currentUser.org_type === 'REGION')) {
+    const extraContainer = document.createElement('div');
+    extraContainer.id = 'dashboard-extra';
+    el.querySelector('.fade-in')?.appendChild(extraContainer);
+
+    // 비동기로 추가 차트 로드 (메인 대시보드 블로킹 방지)
+    Promise.all([renderRevenueTrendSection(), renderSettlementSummarySection()]).then(([trendHtml, settleHtml]) => {
+      const extra = document.getElementById('dashboard-extra');
+      if (extra) {
+        extra.innerHTML = `
+          ${trendHtml ? `<h3 class="text-lg font-bold text-gray-800 mb-4 mt-4"><i class="fas fa-chart-line mr-2 text-green-500"></i>매출 추이</h3>${trendHtml}` : ''}
+          ${settleHtml ? `<h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-coins mr-2 text-emerald-500"></i>정산 현황</h3>${settleHtml}` : ''}
+        `;
+        // 추가 차트 렌더링
+        api('GET', '/stats/revenue-trend?days=30').then(res => {
+          if (res?.daily) _renderRevenueTrendCharts(res.daily, res.by_region || []);
+        });
+        api('GET', '/stats/settlement-summary').then(res => {
+          if (res?.status_summary) _renderSettlementCharts(res.status_summary, res.by_region || []);
+        });
+      }
+    });
+  }
 }
 
 // ─── Chart.js 차트 생성 ───
@@ -490,6 +516,297 @@ async function showRegionDetailModal(orgId, regionName) {
         });
       }
     }, 200);
+  }
+}
+
+// ════════ 매출 추이 차트 ════════
+async function renderRevenueTrendSection() {
+  const trendRes = await api('GET', '/stats/revenue-trend?days=30');
+  if (!trendRes?.daily) return '';
+
+  const daily = trendRes.daily || [];
+  const byRegion = trendRes.by_region || [];
+  if (daily.length === 0 && byRegion.length === 0) return '';
+
+  return `
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <!-- 일별 매출 추이 -->
+      <div class="bg-white rounded-xl p-6 border border-gray-100">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-semibold"><i class="fas fa-chart-line mr-2 text-green-500"></i>일별 매출 추이 (30일)</h3>
+          <div class="flex gap-1">
+            <button onclick="_toggleTrendView('daily')" id="btn-trend-daily" class="px-2 py-1 text-[10px] rounded bg-green-100 text-green-700 font-medium">일별</button>
+            <button onclick="_toggleTrendView('cumulative')" id="btn-trend-cum" class="px-2 py-1 text-[10px] rounded bg-gray-100 text-gray-500">누적</button>
+          </div>
+        </div>
+        <div style="height:250px;"><canvas id="chart-revenue-trend"></canvas></div>
+      </div>
+
+      <!-- 지역별 매출 비교 -->
+      <div class="bg-white rounded-xl p-6 border border-gray-100">
+        <h3 class="text-sm font-semibold mb-4"><i class="fas fa-map mr-2 text-purple-500"></i>지역별 매출 비교</h3>
+        <div style="height:250px;"><canvas id="chart-region-revenue"></canvas></div>
+      </div>
+    </div>`;
+}
+
+function _renderRevenueTrendCharts(daily, byRegion) {
+  if (typeof Chart === 'undefined') return;
+
+  // 1) 일별 매출 추이 라인 차트
+  const trendCtx = document.getElementById('chart-revenue-trend');
+  if (trendCtx && daily.length > 0) {
+    _dashCharts.revenueTrend = new Chart(trendCtx, {
+      type: 'line',
+      data: {
+        labels: daily.map(d => d.date?.substring(5) || ''),
+        datasets: [
+          {
+            label: '매출액 (만원)',
+            data: daily.map(d => Math.round((d.revenue || 0) / 10000)),
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16,185,129,0.1)',
+            fill: true, tension: 0.3, pointRadius: 2, pointHoverRadius: 5,
+            yAxisID: 'y',
+          },
+          {
+            label: '지급액 (만원)',
+            data: daily.map(d => Math.round((d.payable || 0) / 10000)),
+            borderColor: '#f59e0b',
+            backgroundColor: 'transparent',
+            borderDash: [5, 3], tension: 0.3, pointRadius: 2,
+            yAxisID: 'y',
+          },
+          {
+            label: '주문건수',
+            data: daily.map(d => d.orders || 0),
+            borderColor: '#3b82f6',
+            backgroundColor: 'transparent',
+            tension: 0.3, pointRadius: 2, borderWidth: 1.5,
+            yAxisID: 'y1',
+          },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                if (ctx.datasetIndex < 2) return ` ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()}만원`;
+                return ` ${ctx.dataset.label}: ${ctx.parsed.y}건`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 9 }, maxTicksLimit: 10 } },
+          y: { position: 'left', beginAtZero: true, ticks: { font: { size: 9 }, callback: v => v + '만' }, grid: { color: '#f1f5f9' } },
+          y1: { position: 'right', beginAtZero: true, ticks: { font: { size: 9 }, stepSize: 1 }, grid: { display: false } },
+        }
+      }
+    });
+  }
+
+  // 2) 지역별 매출 비교 수평 바 차트
+  const regionCtx = document.getElementById('chart-region-revenue');
+  if (regionCtx && byRegion.length > 0) {
+    _dashCharts.regionRevenue = new Chart(regionCtx, {
+      type: 'bar',
+      data: {
+        labels: byRegion.map(r => r.region_name?.replace('지역법인', '') || ''),
+        datasets: [
+          {
+            label: '매출액 (만원)',
+            data: byRegion.map(r => Math.round((r.revenue || 0) / 10000)),
+            backgroundColor: 'rgba(16,185,129,0.7)',
+            borderRadius: 4,
+          },
+          {
+            label: '지급액 (만원)',
+            data: byRegion.map(r => Math.round((r.payable || 0) / 10000)),
+            backgroundColor: 'rgba(245,158,11,0.7)',
+            borderRadius: 4,
+          },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        indexAxis: 'y',
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.x.toLocaleString()}만원` } },
+        },
+        scales: {
+          x: { beginAtZero: true, ticks: { font: { size: 9 }, callback: v => v + '만' }, grid: { color: '#f1f5f9' } },
+          y: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        }
+      }
+    });
+  }
+}
+
+function _toggleTrendView(mode) {
+  // 시각적 버튼 토글만 (실제 데이터 변환 불필요 - 일별이 기본)
+  document.getElementById('btn-trend-daily')?.classList.toggle('bg-green-100', mode === 'daily');
+  document.getElementById('btn-trend-daily')?.classList.toggle('text-green-700', mode === 'daily');
+  document.getElementById('btn-trend-daily')?.classList.toggle('bg-gray-100', mode !== 'daily');
+  document.getElementById('btn-trend-cum')?.classList.toggle('bg-green-100', mode === 'cumulative');
+  document.getElementById('btn-trend-cum')?.classList.toggle('text-green-700', mode === 'cumulative');
+  document.getElementById('btn-trend-cum')?.classList.toggle('bg-gray-100', mode !== 'cumulative');
+}
+
+// ════════ 정산 현황 차트 ════════
+async function renderSettlementSummarySection() {
+  const settleRes = await api('GET', '/stats/settlement-summary');
+  if (!settleRes?.status_summary) return '';
+
+  const statuses = settleRes.status_summary || [];
+  const byRegion = settleRes.by_region || [];
+  const recentRuns = settleRes.recent_runs || [];
+
+  const totalConfirmed = statuses.find(s => s.status === 'CONFIRMED');
+  const totalPaid = statuses.find(s => s.status === 'PAID');
+  const totalCalc = statuses.find(s => s.status === 'CALCULATED');
+
+  return `
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+      <!-- 정산 현황 카드 -->
+      <div class="bg-white rounded-xl p-6 border border-gray-100">
+        <h3 class="text-sm font-semibold mb-4"><i class="fas fa-coins mr-2 text-emerald-500"></i>정산 현황 요약</h3>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+            <div class="flex items-center gap-2"><i class="fas fa-calculator text-yellow-600"></i><span class="text-sm">산출완료</span></div>
+            <div class="text-right">
+              <div class="text-lg font-bold text-yellow-700">${(totalCalc?.count || 0)}건</div>
+              <div class="text-xs text-yellow-600">${formatAmount(totalCalc?.payable_total)}</div>
+            </div>
+          </div>
+          <div class="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+            <div class="flex items-center gap-2"><i class="fas fa-check-double text-green-600"></i><span class="text-sm">확정</span></div>
+            <div class="text-right">
+              <div class="text-lg font-bold text-green-700">${(totalConfirmed?.count || 0)}건</div>
+              <div class="text-xs text-green-600">${formatAmount(totalConfirmed?.payable_total)}</div>
+            </div>
+          </div>
+          <div class="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
+            <div class="flex items-center gap-2"><i class="fas fa-money-check text-emerald-600"></i><span class="text-sm">지급완료</span></div>
+            <div class="text-right">
+              <div class="text-lg font-bold text-emerald-700">${(totalPaid?.count || 0)}건</div>
+              <div class="text-xs text-emerald-600">${formatAmount(totalPaid?.payable_total)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 정산 도넛 차트 -->
+      <div class="bg-white rounded-xl p-6 border border-gray-100">
+        <h3 class="text-sm font-semibold mb-4"><i class="fas fa-chart-pie mr-2 text-teal-500"></i>정산 상태 분포</h3>
+        <div style="height:220px;"><canvas id="chart-settlement-donut"></canvas></div>
+      </div>
+
+      <!-- 지역별 정산 바 차트 -->
+      <div class="bg-white rounded-xl p-6 border border-gray-100">
+        <h3 class="text-sm font-semibold mb-4"><i class="fas fa-building mr-2 text-blue-500"></i>지역별 정산</h3>
+        <div style="height:220px;"><canvas id="chart-settlement-region"></canvas></div>
+      </div>
+    </div>
+
+    ${recentRuns.length > 0 ? `
+    <div class="bg-white rounded-xl p-6 border border-gray-100 mb-8">
+      <h3 class="text-sm font-semibold mb-4"><i class="fas fa-history mr-2 text-indigo-500"></i>최근 정산 Run</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead><tr class="border-b text-gray-500 text-xs">
+            <th class="py-2 text-left">Run ID</th>
+            <th class="py-2 text-left">기간</th>
+            <th class="py-2 text-center">상태</th>
+            <th class="py-2 text-right">건수</th>
+            <th class="py-2 text-right">기본금액</th>
+            <th class="py-2 text-right">지급액</th>
+            <th class="py-2 text-left">생성일</th>
+          </tr></thead>
+          <tbody class="divide-y">
+            ${recentRuns.map(r => {
+              const st = OMS.RUN_STATUS[r.status] || { label: r.status, color: 'bg-gray-100 text-gray-600' };
+              return `<tr class="hover:bg-gray-50 ix-clickable" onclick="navigateTo('settlement')">
+                <td class="py-2 font-mono text-xs text-blue-600">#${r.run_id}</td>
+                <td class="py-2 text-xs">${r.period_start || ''} ~ ${r.period_end || ''}</td>
+                <td class="py-2 text-center"><span class="status-badge ${st.color}">${st.label}</span></td>
+                <td class="py-2 text-right font-medium">${r.settlement_count}</td>
+                <td class="py-2 text-right text-xs">${formatAmount(r.total_base)}</td>
+                <td class="py-2 text-right font-bold text-green-600">${formatAmount(r.total_payable)}</td>
+                <td class="py-2 text-xs text-gray-500">${formatDate(r.created_at)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : ''}`;
+}
+
+function _renderSettlementCharts(statuses, byRegion) {
+  if (typeof Chart === 'undefined') return;
+
+  // 정산 상태 도넛
+  const donutCtx = document.getElementById('chart-settlement-donut');
+  if (donutCtx && statuses.length > 0) {
+    const SETTLE_COLORS = { CALCULATED: '#fbbf24', CONFIRMED: '#22c55e', PAID: '#10b981' };
+    const SETTLE_LABELS = { CALCULATED: '산출완료', CONFIRMED: '확정', PAID: '지급완료' };
+
+    _dashCharts.settlementDonut = new Chart(donutCtx, {
+      type: 'doughnut',
+      data: {
+        labels: statuses.map(s => SETTLE_LABELS[s.status] || s.status),
+        datasets: [{
+          data: statuses.map(s => s.count),
+          backgroundColor: statuses.map(s => SETTLE_COLORS[s.status] || '#cbd5e1'),
+          borderWidth: 2, borderColor: '#fff',
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '55%',
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const s = statuses[ctx.dataIndex];
+                return ` ${ctx.label}: ${ctx.parsed}건 (${formatAmount(s.payable_total)})`;
+              }
+            }
+          }
+        },
+      }
+    });
+  }
+
+  // 지역별 정산 스택 바
+  const regionCtx = document.getElementById('chart-settlement-region');
+  if (regionCtx && byRegion.length > 0) {
+    _dashCharts.settlementRegion = new Chart(regionCtx, {
+      type: 'bar',
+      data: {
+        labels: byRegion.map(r => r.region_name?.replace('지역법인', '') || ''),
+        datasets: [
+          { label: '확정', data: byRegion.map(r => r.confirmed || 0), backgroundColor: '#22c55e', borderRadius: 4 },
+          { label: '지급', data: byRegion.map(r => r.paid || 0), backgroundColor: '#10b981', borderRadius: 4 },
+          { label: '산출', data: byRegion.map(r => r.calculated || 0), backgroundColor: '#fbbf24', borderRadius: 4 },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
+        },
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { font: { size: 10 } } },
+          y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+        }
+      }
+    });
   }
 }
 
