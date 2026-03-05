@@ -1,17 +1,23 @@
 // ============================================================
-// 다하다 OMS — App Bootstrap v5.0
+// 다하다 OMS — App Bootstrap v5.1
 // 메인 렌더링, 레이아웃, 초기화 (최종 로드)
-// TEAM org_type 지원, 총판 체계
+// TEAM org_type 지원, 총판 체계, 알림, 가입 위자드
 // ============================================================
 
 // ─── 메인 렌더 ───
 function render() {
   const app = document.getElementById('app');
-  if (!currentUser) { app.innerHTML = renderLoginPage(); return; }
+  if (!currentUser) {
+    stopNotificationPolling();
+    // URL 해시가 signup이면 가입 위자드 표시
+    if (window.location.hash === '#signup') { app.innerHTML = ''; openSignupWizard(); return; }
+    app.innerHTML = renderLoginPage(); return;
+  }
   
   // 기본 페이지 설정 (첫 접근 가능한 페이지)
   const hash = window.location.hash.replace('#', '');
-  if (hash && hasPermission(hash)) { currentPage = hash; }
+  if (hash === 'signup') { window.location.hash = ''; } // 로그인 상태에서 signup 해시 제거
+  if (hash && hash !== 'signup' && hasPermission(hash)) { currentPage = hash; }
   else if (!hasPermission(currentPage)) {
     const isHQ = currentUser.org_type === 'HQ';
     const isLeader = currentUser.roles.includes('TEAM_LEADER');
@@ -20,6 +26,7 @@ function render() {
   
   app.innerHTML = renderLayout();
   renderContent();
+  startNotificationPolling();
 }
 
 function renderLoginPage() {
@@ -31,7 +38,7 @@ function renderLoginPage() {
           <i class="fas fa-cubes text-white text-2xl"></i>
         </div>
         <h1 class="text-2xl font-bold text-gray-800">다하다 OMS</h1>
-        <p class="text-gray-500 mt-1">주문관리시스템 v5.0</p>
+        <p class="text-gray-500 mt-1">주문관리시스템 v5.1</p>
       </div>
       <form onsubmit="event.preventDefault();login(document.getElementById('lid').value,document.getElementById('lpw').value)">
         <div class="mb-4">
@@ -46,7 +53,12 @@ function renderLoginPage() {
           <i class="fas fa-sign-in-alt mr-2"></i>로그인
         </button>
       </form>
-      <div class="mt-6 p-4 bg-gray-50 rounded-lg text-xs text-gray-500 space-y-1">
+      <div class="mt-4 text-center">
+        <button onclick="window.location.hash='signup';render()" class="text-sm text-teal-600 hover:text-teal-700 font-medium hover:underline">
+          <i class="fas fa-user-plus mr-1"></i>팀장 가입 신청
+        </button>
+      </div>
+      <div class="mt-4 p-4 bg-gray-50 rounded-lg text-xs text-gray-500 space-y-1">
         <p class="font-semibold mb-2 text-gray-700"><i class="fas fa-info-circle mr-1"></i>테스트 계정:</p>
         <div class="grid grid-cols-2 gap-x-4">
           <p><span class="font-medium text-blue-600">HQ관리자:</span> admin / admin123</p>
@@ -81,9 +93,11 @@ function renderLayout() {
       lastGroup = m.group;
       groupHeader = `<div class="px-4 pt-4 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">${m.group}</div>`;
     }
+    // 알림 메뉴에 뱃지 추가
+    const badge = m.id === 'notifications' ? `<span id="notif-menu-badge" class="ml-auto min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 ${_notifUnreadCount > 0 ? '' : 'hidden'}">${_notifUnreadCount}</span>` : '';
     return `${groupHeader}
       <button data-page="${m.id}" onclick="navigateTo('${m.id}')" class="sidebar-item w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-gray-600 ${currentPage === m.id ? 'active' : ''}">
-        <i class="fas ${m.icon} w-5 text-center"></i><span>${m.label}</span>
+        <i class="fas ${m.icon} w-5 text-center"></i><span>${m.label}</span>${badge}
       </button>`;
   }).join('');
 
@@ -97,7 +111,7 @@ function renderLayout() {
           </div>
           <div>
             <div class="font-bold text-gray-800">다하다 OMS</div>
-            <div class="text-xs text-gray-400">v3.0 · ${menuKey}</div>
+            <div class="text-xs text-gray-400">v5.1 · ${menuKey}</div>
           </div>
         </div>
       </div>
@@ -113,6 +127,10 @@ function renderLayout() {
               <span class="text-[10px] px-1.5 py-0.5 rounded ${orgBadge}">${currentUser.org_name || currentUser.org_type}</span>
               <span class="text-[10px] text-gray-400">${roleLabel[currentUser.roles[0]] || currentUser.roles[0]}</span>
             </div>
+          </div>
+          <!-- 알림 벨 -->
+          <div class="relative">
+            ${getNotifBellHtml()}
           </div>
         </div>
         <div class="flex gap-2">
@@ -134,6 +152,7 @@ function renderLayout() {
 // ─── 해시 라우팅 ───
 window.addEventListener('hashchange', () => {
   const hash = window.location.hash.replace('#', '');
+  if (hash === 'signup' && !currentUser) { render(); return; }
   if (hash && currentUser && hasPermission(hash)) {
     currentPage = hash;
     renderContent();

@@ -185,6 +185,26 @@ signup.get('/distributors/:org_id/regions', async (c) => {
   });
 });
 
+// ─── Step 3-C: 행정구역 검색 (가입 위자드용, 인증 불필요) ───
+signup.get('/regions/search', async (c) => {
+  const q = c.req.query('q');
+  const limit = Math.min(Number(c.req.query('limit') || '20'), 50);
+  if (!q || q.length < 2) return c.json({ error: '검색어는 2글자 이상 입력하세요.' }, 400);
+
+  const db = c.env.DB;
+  const result = await db.prepare(`
+    SELECT region_id, sido, sigungu, eupmyeondong, admin_code, full_name
+    FROM admin_regions
+    WHERE is_active = 1 AND (
+      sido LIKE ? OR sigungu LIKE ? OR eupmyeondong LIKE ?
+    )
+    ORDER BY sido, sigungu, eupmyeondong
+    LIMIT ?
+  `).bind(`%${q}%`, `%${q}%`, `%${q}%`, limit).all();
+
+  return c.json({ regions: result.results, total: result.results.length });
+});
+
 // ─── Step 4: 가입 신청 제출 ───
 signup.post('/submit', async (c) => {
   const db = c.env.DB;

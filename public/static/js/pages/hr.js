@@ -6,15 +6,19 @@ async function renderHRManagement(el) {
   const activeTab = window._hrTab || 'users';
   const isAdmin = currentUser.roles.includes('SUPER_ADMIN') || currentUser.roles.includes('HQ_OPERATOR');
   const isRegion = currentUser.org_type === 'REGION' && currentUser.roles.includes('REGION_ADMIN');
+  const canManageSignup = isAdmin || isRegion;
 
   el.innerHTML = `
     <div class="fade-in">
       <h2 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-users-gear mr-2 text-teal-600"></i>인사관리</h2>
-      <div class="flex gap-1 mb-6 border-b">
-        <button onclick="window._hrTab='users';renderContent()" class="px-4 py-2 text-sm ${activeTab === 'users' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-users mr-1"></i>사용자</button>
-        ${isAdmin ? `<button onclick="window._hrTab='orgs';renderContent()" class="px-4 py-2 text-sm ${activeTab === 'orgs' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-building mr-1"></i>조직</button>` : ''}
-        <button onclick="window._hrTab='commission';renderContent()" class="px-4 py-2 text-sm ${activeTab === 'commission' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-percent mr-1"></i>수수료 설정</button>
-        <button onclick="window._hrTab='phone';renderContent()" class="px-4 py-2 text-sm ${activeTab === 'phone' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-mobile-alt mr-1"></i>폰인증</button>
+      <div class="flex gap-1 mb-6 border-b overflow-x-auto">
+        <button onclick="window._hrTab='users';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'users' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-users mr-1"></i>사용자</button>
+        ${isAdmin ? `<button onclick="window._hrTab='orgs';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'orgs' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-building mr-1"></i>조직</button>` : ''}
+        ${isAdmin ? `<button onclick="window._hrTab='org-tree';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'org-tree' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-sitemap mr-1"></i>조직트리</button>` : ''}
+        ${canManageSignup ? `<button onclick="window._hrTab='signup';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'signup' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-user-plus mr-1"></i>가입관리</button>` : ''}
+        ${isAdmin ? `<button onclick="window._hrTab='region-add';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'region-add' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-map-pin mr-1"></i>추가지역</button>` : ''}
+        <button onclick="window._hrTab='commission';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'commission' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-percent mr-1"></i>수수료 설정</button>
+        <button onclick="window._hrTab='phone';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'phone' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-mobile-alt mr-1"></i>폰인증</button>
       </div>
       <div id="hr-content"></div>
     </div>`;
@@ -23,6 +27,9 @@ async function renderHRManagement(el) {
   switch (activeTab) {
     case 'users': await renderHRUsers(hrEl); break;
     case 'orgs': await renderHROrgs(hrEl); break;
+    case 'org-tree': await renderHROrgTree(hrEl); break;
+    case 'signup': await renderHRSignupRequests(hrEl); break;
+    case 'region-add': await renderHRRegionAddRequests(hrEl); break;
     case 'commission': await renderHRCommission(hrEl); break;
     case 'phone': renderHRPhone(hrEl); break;
   }

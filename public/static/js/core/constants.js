@@ -26,11 +26,11 @@ const STATUS = OMS.STATUS;
 
 // 권한별 접근 가능 페이지
 OMS.PERMISSIONS = {
-  SUPER_ADMIN: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'my-profile'],
-  HQ_OPERATOR: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'my-profile'],
-  REGION_ADMIN: ['dashboard', 'kanban', 'review-region', 'hr-management', 'statistics', 'my-profile'],
-  TEAM_LEADER: ['my-orders', 'my-stats', 'my-profile'],
-  AUDITOR: ['dashboard', 'statistics', 'reconciliation', 'my-profile'],
+  SUPER_ADMIN: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'notifications', 'my-profile'],
+  HQ_OPERATOR: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'notifications', 'my-profile'],
+  REGION_ADMIN: ['dashboard', 'kanban', 'review-region', 'hr-management', 'statistics', 'notifications', 'my-profile'],
+  TEAM_LEADER: ['my-orders', 'my-stats', 'notifications', 'my-profile'],
+  AUDITOR: ['dashboard', 'statistics', 'reconciliation', 'notifications', 'my-profile'],
 };
 
 // 메뉴 정의
@@ -45,6 +45,7 @@ OMS.MENU_ITEMS = {
     { id: 'statistics', icon: 'fa-chart-bar', label: '통계', group: '분석' },
     { id: 'hr-management', icon: 'fa-users-gear', label: '인사관리', group: '관리' },
     { id: 'policies', icon: 'fa-gears', label: '정책관리', group: '관리' },
+    { id: 'notifications', icon: 'fa-bell', label: '알림', group: '관리' },
   ],
   REGION: [
     { id: 'dashboard', icon: 'fa-chart-pie', label: '대시보드', group: '현황' },
@@ -52,10 +53,12 @@ OMS.MENU_ITEMS = {
     { id: 'review-region', icon: 'fa-clipboard-check', label: '1차검수', group: '검수' },
     { id: 'hr-management', icon: 'fa-users-gear', label: '인사/수수료', group: '관리' },
     { id: 'statistics', icon: 'fa-chart-bar', label: '통계', group: '분석' },
+    { id: 'notifications', icon: 'fa-bell', label: '알림', group: '관리' },
   ],
   TEAM_LEADER: [
     { id: 'my-orders', icon: 'fa-list', label: '내 주문', group: '주문' },
     { id: 'my-stats', icon: 'fa-chart-line', label: '내 현황', group: '현황' },
+    { id: 'notifications', icon: 'fa-bell', label: '알림', group: '알림' },
   ],
 };
 

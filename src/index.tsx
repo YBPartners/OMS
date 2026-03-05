@@ -44,7 +44,7 @@ app.route('/api/signup', signupRoutes);
 app.route('/api/notifications', notificationRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '5.1.0', system: '다하다 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '5.2.0', system: '다하다 OMS' }));
 
 // ─── SPA 라우팅: 모든 페이지 요청에 index.html 반환 ───
 app.get('*', async (c) => {
@@ -127,6 +127,9 @@ function getIndexHtml(): string {
   <script src="/static/js/pages/settlement.js"></script>
   <script src="/static/js/pages/statistics.js"></script>
   <script src="/static/js/pages/hr.js"></script>
+  <script src="/static/js/pages/signup-wizard.js"></script>
+  <script src="/static/js/pages/signup-admin.js"></script>
+  <script src="/static/js/pages/notifications.js"></script>
   <script src="/static/js/pages/my-orders.js"></script>
   
   <!-- App bootstrap (must be last) -->

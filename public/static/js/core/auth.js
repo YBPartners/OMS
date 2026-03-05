@@ -91,6 +91,7 @@ async function renderContent() {
       case 'policies': await renderPolicies(el); break;
       case 'kanban': await renderKanban(el); break;
       case 'hr-management': await renderHRManagement(el); break;
+      case 'notifications': await renderNotifications(el); break;
       case 'my-orders': await renderMyOrders(el); break;
       case 'my-stats': await renderMyStats(el); break;
       case 'my-profile': await renderMyProfile(el); break;
