@@ -210,3 +210,44 @@ function exportToCSV(data, columns, filename) {
   URL.revokeObjectURL(url);
   showToast(`${data.length}건 CSV 내보내기 완료`, 'success');
 }
+
+// ─── API 응답 캐시 (TTL 기반) ───
+const _apiCache = new Map();
+function cachedApi(method, url, ttlMs = 30000) {
+  const key = method + ':' + url;
+  const cached = _apiCache.get(key);
+  if (cached && Date.now() - cached.ts < ttlMs) return Promise.resolve(cached.data);
+  return api(method, url).then(data => {
+    _apiCache.set(key, { data, ts: Date.now() });
+    // 캐시 크기 제한 (최대 50)
+    if (_apiCache.size > 50) {
+      const oldest = [..._apiCache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0];
+      if (oldest) _apiCache.delete(oldest[0]);
+    }
+    return data;
+  });
+}
+function invalidateCache(urlPattern) {
+  if (!urlPattern) { _apiCache.clear(); return; }
+  for (const key of _apiCache.keys()) {
+    if (key.includes(urlPattern)) _apiCache.delete(key);
+  }
+}
+
+// ─── Debounce 유틸 ───
+function debounce(fn, delay = 300) {
+  let timer;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
+// ─── Throttle 유틸 ───
+function throttle(fn, limit = 200) {
+  let lastTime = 0;
+  return function (...args) {
+    const now = Date.now();
+    if (now - lastTime >= limit) { lastTime = now; fn.apply(this, args); }
+  };
+}

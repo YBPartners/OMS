@@ -1,8 +1,8 @@
 # 다하다 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-05
-> **현재 버전**: v10.0.0
-> **총 코드량**: Backend 7,478줄 (46 TS) + Frontend 8,770줄 (22 JS) + CSS 419줄 + SQL 994줄 = **17,661줄**
+> **현재 버전**: v11.0.0
+> **총 코드량**: Backend 7,677줄 (47 TS) + Frontend 9,005줄 (22 JS) + CSS 419줄 + SQL 994줄 = **18,095줄**
 
 ---
 
@@ -23,10 +23,45 @@
 | **8.0** | **데이터 시각화 + CSV** | **✅ 완료** | **2026-03-05** | **Chart.js 대시보드, CSV 내보내기, exportToCSV 유틸** |
 | **9.0** | **모바일 반응형** | **✅ 완료** | **2026-03-05** | **하단 내비, 풀투리프레시, 스와이프, mobile.css 419줄** |
 | **10.0** | **성능 최적화 + 알림 설정** | **✅ 완료** | **2026-03-05** | **16개 DB 인덱스, 알림 설정 UI/API, 프로필 탭 리디자인** |
+| **11.0** | **정산 보고서 + 대리점 내역서 + 성능** | **✅ 완료** | **2026-03-05** | **인쇄용 HTML 보고서, CSV 내보내기, 대리점 정산, 캐시/debounce** |
 
 ---
 
-## Phase 10.0 — 성능 최적화 + 알림 설정 ✅ (최신)
+## Phase 11.0 — 정산 보고서 + 대리점 내역서 + 성능 최적화 ✅ (최신)
+
+> **목적**: 정산 데이터 인쇄/내보내기, 대리점 정산 관리, 프론트엔드 성능 유틸
+
+### 11-1: 정산 보고서 인쇄용 HTML ✅
+- `GET /api/settlements/runs/:run_id/report` — 팀장별 그룹핑 보고서 데이터
+- `printSettlementReport()` — 인쇄용 HTML 새 창 (CSS @media print)
+- 요약 카드 (건수/기본금액/수수료/지급액) + 팀장별 소계 + 개별 명세
+- 인쇄/닫기 버튼, 다하다 OMS 푸터
+
+### 11-2: 정산 CSV 내보내기 ✅
+- `GET /api/settlements/runs/:run_id/export` — CSV용 원시 데이터
+- `exportSettlementCSV()` — exportToCSV 유틸 활용
+- 정산 컨텍스트 메뉴에 '보고서 인쇄', 'CSV 내보내기' 추가
+
+### 11-3: 대리점 정산 내역서 ✅
+- `GET /api/settlements/agency-statement` — 대리점 하위 팀장 정산 집계
+- `renderAgencyStatement()` — 대리점 정산 내역 페이지 (팀장별 확장)
+- `printAgencyStatement()` — 대리점 전용 인쇄용 HTML
+- constants.js: AGENCY 메뉴/권한에 'agency-statement' 추가
+- auth.js: 라우팅 추가
+
+### 11-4: 프론트엔드 성능 유틸 ✅
+- `cachedApi()` — TTL 기반 API 응답 캐시 (30초, 최대 50건)
+- `invalidateCache()` — 패턴 기반 캐시 무효화
+- `debounce()` — 입력 지연 유틸 (300ms 기본)
+- `throttle()` — 빈도 제한 유틸 (200ms 기본)
+
+### 변경 통계
+- 신규 파일 1개: report.ts (199줄)
+- 변경 6개: settlement.js (+235줄), ui.js (+37줄), constants.js (+2줄), auth.js (+1줄), index.tsx (버전), settlements/index.ts (+3줄)
+
+---
+
+## Phase 10.0 — 성능 최적화 + 알림 설정 ✅
 
 > **목적**: DB 쿼리 성능 인덱스 추가 + 사용자별 알림 설정 기능
 

@@ -106,6 +106,7 @@ async function renderContent() {
       case 'agency-dashboard': await renderAgencyDashboard(el); break;
       case 'agency-orders': await renderAgencyOrders(el); break;
       case 'agency-team': await renderAgencyTeam(el); break;
+      case 'agency-statement': await renderAgencyStatement(); break;
       default: el.innerHTML = '<div class="text-center py-16 text-gray-400"><i class="fas fa-compass text-5xl mb-4"></i><p class="text-lg">페이지를 찾을 수 없습니다.</p></div>';
     }
   } catch (err) {

@@ -96,6 +96,9 @@ function showRunContextMenu(event, run) {
 
   items.push(
     { divider: true },
+    { icon: 'fa-print', label: '보고서 인쇄', action: () => printSettlementReport(r.run_id) },
+    { icon: 'fa-file-csv', label: 'CSV 내보내기', action: () => exportSettlementCSV(r.run_id) },
+    { divider: true },
     { icon: 'fa-scale-balanced', label: '대사 페이지로 이동', action: () => navigateTo('reconciliation') },
     { icon: 'fa-chart-bar', label: '통계 확인', action: () => navigateTo('statistics') }
   );
@@ -563,4 +566,193 @@ async function resolveIssue(issueId) {
       if (res?.ok) { showToast('해결 처리 완료', 'success'); renderContent(); }
       else showToast(res?.error || '처리 실패', 'error');
     }, '해결 처리', 'bg-green-600');
+}
+
+// ════════ 정산 보고서 인쇄 ════════
+async function printSettlementReport(runId) {
+  showToast('보고서 생성 중...', 'info');
+  const res = await api('GET', `/settlements/runs/${runId}/report`);
+  if (!res?.report) return showToast('보고서 생성 실패', 'error');
+
+  const { run, summary, grouped, generated_at } = res.report;
+  const fmt = n => Number(n).toLocaleString('ko-KR') + '원';
+  const periodLabel = run.period_type === 'WEEKLY' ? '주간' : '월간';
+
+  const html = `<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8">
+<title>정산 보고서 — Run #${run.run_id}</title>
+<style>
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  body { font-family: 'Pretendard', -apple-system, sans-serif; font-size: 12px; color: #333; padding: 20px; max-width: 800px; margin: 0 auto; }
+  h1 { font-size: 20px; text-align: center; margin-bottom: 4px; }
+  .subtitle { text-align: center; color: #666; margin-bottom: 24px; font-size: 13px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .summary-box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; text-align: center; }
+  .summary-box .label { font-size: 11px; color: #888; margin-bottom: 4px; }
+  .summary-box .value { font-size: 16px; font-weight: 700; }
+  .green { color: #16a34a; } .red { color: #dc2626; } .blue { color: #2563eb; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 11px; }
+  th { background: #f3f4f6; padding: 6px 8px; text-align: left; font-weight: 600; border-bottom: 2px solid #d1d5db; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; }
+  .text-right { text-align: right; }
+  .section-title { font-size: 14px; font-weight: 700; margin: 20px 0 10px; padding-bottom: 4px; border-bottom: 2px solid #333; }
+  .subtotal { background: #f9fafb; font-weight: 600; }
+  .footer { margin-top: 30px; padding-top: 12px; border-top: 1px solid #ccc; text-align: center; color: #999; font-size: 10px; }
+  .no-print { margin-bottom: 16px; text-align: center; }
+  @media print { .no-print { display: none; } }
+</style></head><body>
+<div class="no-print"><button onclick="window.print()" style="padding:8px 24px;background:#2563eb;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px">🖨️ 인쇄하기</button>
+<button onclick="window.close()" style="padding:8px 24px;background:#6b7280;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;margin-left:8px">닫기</button></div>
+<h1>다하다 OMS — 정산 보고서</h1>
+<div class="subtitle">Run #${run.run_id} | ${periodLabel} | ${run.period_start} ~ ${run.period_end}</div>
+<div class="summary-grid">
+  <div class="summary-box"><div class="label">총 건수</div><div class="value">${summary.total_count}건</div></div>
+  <div class="summary-box"><div class="label">기본금액</div><div class="value blue">${fmt(summary.total_base)}</div></div>
+  <div class="summary-box"><div class="label">수수료 합계</div><div class="value red">${fmt(summary.total_commission)}</div></div>
+  <div class="summary-box"><div class="label">지급액 합계</div><div class="value green">${fmt(summary.total_payable)}</div></div>
+</div>
+${grouped.map(g => `
+<div class="section-title">${g.name} (${g.region}) — ${g.count}건</div>
+<table>
+  <thead><tr><th>주문번호</th><th>고객명</th><th>주소</th><th class="text-right">금액</th><th class="text-right">수수료</th><th class="text-right">지급액</th></tr></thead>
+  <tbody>
+    ${g.items.map(i => `<tr>
+      <td>${i.external_order_no || '#' + i.order_id}</td><td>${i.customer_name || '-'}</td>
+      <td>${(i.address_text || '').substring(0, 30)}</td>
+      <td class="text-right">${fmt(i.base_amount)}</td><td class="text-right red">${fmt(i.commission_amount)}</td>
+      <td class="text-right green">${fmt(i.payable_amount)}</td>
+    </tr>`).join('')}
+    <tr class="subtotal"><td colspan="3">소계 (${g.count}건)</td>
+      <td class="text-right">${fmt(g.total_base)}</td><td class="text-right red">${fmt(g.total_commission)}</td>
+      <td class="text-right green">${fmt(g.total_payable)}</td></tr>
+  </tbody>
+</table>`).join('')}
+<div class="footer">다하다 OMS | 생성일: ${generated_at} | 이 문서는 자동 생성되었습니다.</div>
+</body></html>`;
+
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if (w) { w.document.write(html); w.document.close(); }
+  else showToast('팝업이 차단되었습니다. 팝업을 허용해주세요.', 'warning');
+}
+
+// ════════ 정산 CSV 내보내기 ════════
+async function exportSettlementCSV(runId) {
+  showToast('CSV 생성 중...', 'info');
+  const res = await api('GET', `/settlements/runs/${runId}/export`);
+  if (!res?.rows) return showToast('내보내기 실패', 'error');
+
+  const headers = ['정산ID', '주문ID', '외부주문번호', '고객명', '주소', '서비스', '기본금액', '수수료방식', '수수료율', '수수료', '지급액', '상태', '팀장', '지역법인'];
+  const rows = res.rows.map(r => [
+    r.settlement_id, r.order_id, r.external_order_no || '', r.customer_name || '', r.address_text || '',
+    r.service_type || '', r.base_amount, r.commission_mode, r.commission_rate,
+    r.commission_amount, r.payable_amount, r.status, r.team_leader_name, r.region_name
+  ]);
+
+  exportToCSV(`settlement_run_${runId}.csv`, headers, rows);
+  showToast('CSV 다운로드 완료', 'success');
+}
+
+// ════════ 대리점 정산 내역서 ════════
+async function renderAgencyStatement() {
+  const el = document.getElementById('content');
+  if (!el) return;
+  showSkeletonLoading(el, 'table');
+
+  const today = new Date().toISOString().split('T')[0];
+  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+  const res = await api('GET', `/settlements/agency-statement?from=${monthAgo}&to=${today}`);
+  const st = res?.statement;
+  if (!st) { el.innerHTML = '<div class="text-center py-16 text-gray-400">정산 내역이 없습니다.</div>'; return; }
+
+  el.innerHTML = `
+    <div class="fade-in">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-file-invoice-dollar mr-2 text-emerald-500"></i>대리점 정산 내역서</h2>
+        <button onclick="printAgencyStatement()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700"><i class="fas fa-print mr-1"></i>인쇄</button>
+      </div>
+
+      <div class="grid grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-xl p-4 border text-center"><div class="text-2xl font-bold">${st.totals.count}</div><div class="text-xs text-gray-500">총 건수</div></div>
+        <div class="bg-white rounded-xl p-4 border text-center"><div class="text-xl font-bold text-blue-600">${formatAmount(st.totals.base)}</div><div class="text-xs text-gray-500">기본금액</div></div>
+        <div class="bg-white rounded-xl p-4 border text-center"><div class="text-xl font-bold text-red-600">${formatAmount(st.totals.commission)}</div><div class="text-xs text-gray-500">수수료</div></div>
+        <div class="bg-white rounded-xl p-4 border text-center"><div class="text-xl font-bold text-green-600">${formatAmount(st.totals.payable)}</div><div class="text-xs text-gray-500">지급액</div></div>
+      </div>
+
+      ${st.leaders.map(l => `
+      <div class="bg-white rounded-xl border mb-4 overflow-hidden">
+        <div class="px-5 py-3 bg-gray-50 flex items-center justify-between cursor-pointer" onclick="this.nextElementSibling.classList.toggle('hidden')">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center"><i class="fas fa-user text-purple-600 text-sm"></i></div>
+            <span class="font-medium">${l.name}</span>
+            <span class="text-xs text-gray-400">${l.count}건</span>
+          </div>
+          <div class="flex items-center gap-4 text-sm">
+            <span class="text-red-600">${formatAmount(l.total_commission)}</span>
+            <span class="font-bold text-green-600">${formatAmount(l.total_payable)}</span>
+            <i class="fas fa-chevron-down text-gray-400 text-xs"></i>
+          </div>
+        </div>
+        <div class="hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50"><tr><th class="px-4 py-2 text-left">주문</th><th class="px-4 py-2 text-left">고객</th><th class="px-4 py-2 text-right">금액</th><th class="px-4 py-2 text-right">수수료</th><th class="px-4 py-2 text-right">지급액</th><th class="px-4 py-2 text-center">상태</th></tr></thead>
+            <tbody class="divide-y">${l.items.map(i => `
+              <tr class="hover:bg-gray-50"><td class="px-4 py-2 text-xs text-blue-600">#${i.order_id}</td><td class="px-4 py-2">${i.customer_name || '-'}</td>
+              <td class="px-4 py-2 text-right">${formatAmount(i.base_amount)}</td><td class="px-4 py-2 text-right text-red-600">${formatAmount(i.commission_amount)}</td>
+              <td class="px-4 py-2 text-right font-bold text-green-600">${formatAmount(i.payable_amount)}</td>
+              <td class="px-4 py-2 text-center"><span class="status-badge ${i.status === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}">${i.status === 'PAID' ? '지급완료' : '확정'}</span></td></tr>
+            `).join('')}</tbody>
+          </table>
+        </div>
+      </div>`).join('')}
+    </div>`;
+}
+
+// ─── 대리점 내역서 인쇄 ───
+async function printAgencyStatement() {
+  showToast('내역서 생성 중...', 'info');
+  const today = new Date().toISOString().split('T')[0];
+  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+  const res = await api('GET', `/settlements/agency-statement?from=${monthAgo}&to=${today}`);
+  if (!res?.statement) return showToast('생성 실패', 'error');
+
+  const st = res.statement;
+  const fmt = n => Number(n).toLocaleString('ko-KR') + '원';
+
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<title>대리점 정산 내역서</title>
+<style>
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .no-print { display: none; } }
+  body { font-family: 'Pretendard', sans-serif; font-size: 12px; color: #333; padding: 20px; max-width: 800px; margin: 0 auto; }
+  h1 { font-size: 18px; text-align: center; } .subtitle { text-align: center; color: #666; margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11px; }
+  th { background: #f3f4f6; padding: 6px 8px; text-align: left; border-bottom: 2px solid #d1d5db; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; } .text-right { text-align: right; }
+  .green { color: #16a34a; } .red { color: #dc2626; }
+  .summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 20px; }
+  .summary-box { border: 1px solid #ddd; border-radius: 6px; padding: 10px; text-align: center; }
+  .summary-box .val { font-size: 15px; font-weight: 700; }
+  .section { font-size: 13px; font-weight: 700; margin: 16px 0 8px; border-bottom: 1px solid #333; padding-bottom: 4px; }
+  .subtotal { background: #f9fafb; font-weight: 600; }
+  .footer { margin-top: 24px; text-align: center; color: #999; font-size: 10px; border-top: 1px solid #ccc; padding-top: 10px; }
+</style></head><body>
+<div class="no-print" style="text-align:center;margin-bottom:16px">
+  <button onclick="window.print()" style="padding:8px 24px;background:#059669;color:white;border:none;border-radius:8px;cursor:pointer">🖨️ 인쇄</button>
+  <button onclick="window.close()" style="padding:8px 24px;background:#6b7280;color:white;border:none;border-radius:8px;cursor:pointer;margin-left:8px">닫기</button>
+</div>
+<h1>대리점 정산 내역서</h1>
+<div class="subtitle">${monthAgo} ~ ${today} | ${currentUser.name}</div>
+<div class="summary">
+  <div class="summary-box"><div style="font-size:10px;color:#888">총 건수</div><div class="val">${st.totals.count}건</div></div>
+  <div class="summary-box"><div style="font-size:10px;color:#888">기본금액</div><div class="val">${fmt(st.totals.base)}</div></div>
+  <div class="summary-box"><div style="font-size:10px;color:#888">수수료</div><div class="val red">${fmt(st.totals.commission)}</div></div>
+  <div class="summary-box"><div style="font-size:10px;color:#888">지급액</div><div class="val green">${fmt(st.totals.payable)}</div></div>
+</div>
+${st.leaders.map(l => `<div class="section">${l.name} — ${l.count}건</div>
+<table><thead><tr><th>주문</th><th>고객</th><th class="text-right">금액</th><th class="text-right">수수료</th><th class="text-right">지급액</th></tr></thead>
+<tbody>${l.items.map(i => `<tr><td>#${i.order_id}</td><td>${i.customer_name||'-'}</td><td class="text-right">${fmt(i.base_amount)}</td><td class="text-right red">${fmt(i.commission_amount)}</td><td class="text-right green">${fmt(i.payable_amount)}</td></tr>`).join('')}
+<tr class="subtotal"><td colspan="2">소계</td><td class="text-right">${fmt(l.total_base)}</td><td class="text-right red">${fmt(l.total_commission)}</td><td class="text-right green">${fmt(l.total_payable)}</td></tr></tbody></table>`).join('')}
+<div class="footer">다하다 OMS | 생성일: ${today}</div></body></html>`;
+
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if (w) { w.document.write(html); w.document.close(); }
 }
