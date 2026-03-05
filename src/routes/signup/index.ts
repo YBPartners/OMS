@@ -11,6 +11,8 @@ import { BatchBuilder } from '../../lib/batch-builder';
 import { hashPassword } from '../../middleware/security';
 import { normalizePhone, isValidPhone, isValidLoginId, checkRateLimit } from '../../middleware/security';
 import { normalizePagination } from '../../lib/validators';
+import { createTeamWithLeader } from '../../services/hr-service';
+import { notifySignupApproved } from '../../services/notification-service';
 
 const signup = new Hono<Env>();
 
@@ -531,48 +533,21 @@ signup.post('/requests/:request_id/approve', async (c) => {
     WHERE request_id = ? AND is_within_distributor = 1
   `).bind(requestId).all();
 
-  // 1. TEAM 조직 생성
-  const teamCode = `TEAM_${(request.distributor_org_id as number)}_${Date.now().toString(36).slice(-4).toUpperCase()}`;
-  const orgResult = await db.prepare(`
-    INSERT INTO organizations (org_type, name, code, parent_org_id, status)
-    VALUES ('TEAM', ?, ?, ?, 'ACTIVE')
-  `).bind(request.team_name, teamCode, request.distributor_org_id).run();
-  const newOrgId = orgResult.meta.last_row_id as number;
+  // ★ HR 서비스를 통한 팀+팀장 원자적 생성 (교차 도메인 분리)
+  const { orgId: newOrgId, userId: newUserId, teamCode } = await createTeamWithLeader(db, {
+    teamName: request.team_name as string,
+    distributorOrgId: request.distributor_org_id as number,
+    loginId: request.login_id as string,
+    passwordHash: request.password_hash as string,
+    name: request.name as string,
+    phone: request.phone as string,
+    regionIds: (withinRegions.results as any[]).map(r => r.region_id),
+    commissionMode: request.commission_mode as string | null,
+    commissionValue: request.commission_value as number | null,
+    approvedBy: user.user_id,
+  });
 
-  // 2. 팀-총판 매핑
-  await db.prepare(
-    'INSERT OR IGNORE INTO team_distributor_mappings (team_org_id, distributor_org_id) VALUES (?, ?)'
-  ).bind(newOrgId, request.distributor_org_id).run();
-
-  // 3. 사용자 생성
-  const userResult = await db.prepare(`
-    INSERT INTO users (org_id, login_id, password_hash, name, phone, status, phone_verified, joined_at)
-    VALUES (?, ?, ?, ?, ?, 'ACTIVE', 1, datetime('now'))
-  `).bind(newOrgId, request.login_id, request.password_hash, request.name, request.phone).run();
-  const newUserId = userResult.meta.last_row_id as number;
-
-  // 4. TEAM_LEADER 역할 부여
-  const roleRow = await db.prepare("SELECT role_id FROM roles WHERE code = 'TEAM_LEADER'").first();
-  if (roleRow) {
-    await db.prepare('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)').bind(newUserId, roleRow.role_id).run();
-  }
-
-  // 5. 조직-구역 매핑 (총판 관할 내 구역만)
-  for (const r of withinRegions.results as any[]) {
-    await db.prepare(
-      'INSERT OR IGNORE INTO org_region_mappings (org_id, region_id) VALUES (?, ?)'
-    ).bind(newOrgId, r.region_id).run();
-  }
-
-  // 6. 수수료 정책 (옵션)
-  if (request.commission_mode && request.commission_value !== null) {
-    await db.prepare(`
-      INSERT INTO commission_policies (org_id, team_leader_id, mode, value, effective_from)
-      VALUES (?, ?, ?, ?, date('now'))
-    `).bind(request.distributor_org_id, newUserId, request.commission_mode, request.commission_value).run();
-  }
-
-  // 7. 신청 상태 업데이트
+  // 신청 상태 업데이트
   await db.prepare(`
     UPDATE signup_requests SET
       status = 'APPROVED', reviewed_by = ?, reviewed_at = datetime('now'),
@@ -585,15 +560,12 @@ signup.post('/requests/:request_id/approve', async (c) => {
     requestId,
   ).run();
 
-  // 8. 알림 생성
-  await db.prepare(`
-    INSERT INTO notifications (recipient_user_id, type, title, message, link_url, metadata_json)
-    VALUES (?, 'SIGNUP_APPROVED', '가입 승인', ?, ?, ?)
-  `).bind(
-    newUserId, `${request.name}님의 가입이 승인되었습니다.`,
-    '#my-orders',
-    JSON.stringify({ request_id: requestId, org_id: newOrgId }),
-  ).run();
+  // ★ 알림 서비스를 통한 승인 알림 생성 (교차 도메인 분리)
+  await notifySignupApproved(db, newUserId, {
+    requestId,
+    orgId: newOrgId,
+    name: request.name as string,
+  });
 
   await writeAuditLog(db, {
     entity_type: 'SIGNUP_REQUEST', entity_id: requestId,

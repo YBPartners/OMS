@@ -8,6 +8,7 @@ import { requireAuth } from '../../middleware/auth';
 import { writeAuditLog } from '../../lib/audit';
 import { hashPassword, verifyPassword, needsRehash, normalizePhone, isValidPhone, isValidLoginId, isValidEmail } from '../../middleware/security';
 import { normalizePagination, isValidRole } from '../../lib/validators';
+import { invalidateUserSessions } from '../../services/session-service';
 
 export function mountUsers(router: Hono<Env>) {
 
@@ -300,7 +301,8 @@ export function mountUsers(router: Hono<Env>) {
     await db.prepare("UPDATE users SET status = ?, updated_at = datetime('now') WHERE user_id = ?").bind(status, userId).run();
 
     if (status === 'INACTIVE') {
-      await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId).run();
+      // ★ Session Service를 통한 세션 무효화 (교차 도메인 분리)
+      await invalidateUserSessions(db, userId);
     }
 
     await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: status === 'ACTIVE' ? 'ACTIVATE' : 'DEACTIVATE', actor_id: currentUser.user_id });
@@ -330,7 +332,8 @@ export function mountUsers(router: Hono<Env>) {
     const passwordHash = await hashPassword(newPassword);
 
     await db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE user_id = ?").bind(passwordHash, userId).run();
-    await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId).run();
+    // ★ Session Service를 통한 세션 무효화 (교차 도메인 분리)
+    await invalidateUserSessions(db, userId);
 
     await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: 'RESET_PASSWORD', actor_id: currentUser.user_id });
 
@@ -408,7 +411,8 @@ export function mountUsers(router: Hono<Env>) {
     await db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE user_id = ?`).bind(...params).run();
 
     if (password) {
-      await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId).run();
+      // ★ Session Service를 통한 세션 무효화 (교차 도메인 분리)
+      await invalidateUserSessions(db, userId);
     }
 
     await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: 'SET_CREDENTIALS', actor_id: currentUser.user_id, detail_json: JSON.stringify({ login_id_changed: !!login_id, password_changed: !!password }) });

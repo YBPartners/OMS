@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { requireAuth } from '../../middleware/auth';
 import { writeAuditLog } from '../../lib/audit';
-import { createNotification, createNotifications } from '../../lib/audit';
+import { notifyRegionAddComplete } from '../../services/notification-service';
 import { normalizePagination } from '../../lib/validators';
 
 const regionAdd = new Hono<Env>();
@@ -179,24 +179,11 @@ regionAdd.post('/region-add-requests/:request_id/approve', async (c) => {
         'SELECT name, phone FROM signup_requests WHERE request_id = ?'
       ).bind(request.signup_request_id).first();
 
-      // 총판 관리자에게 알림
-      const distAdmins = await db.prepare(`
-        SELECT u.user_id FROM users u
-        JOIN user_roles ur ON u.user_id = ur.user_id
-        JOIN roles r ON ur.role_id = r.role_id
-        WHERE u.org_id = ? AND r.code = 'REGION_ADMIN' AND u.status = 'ACTIVE'
-      `).bind(request.distributor_org_id).all();
-
-      const adminIds = (distAdmins.results as any[]).map(r => r.user_id);
-      if (adminIds.length > 0) {
-        await createNotifications(db, adminIds, {
-          type: 'REGION_ADD_APPROVED',
-          title: '추가 지역 요청 승인 완료',
-          message: `${(signupReq as any)?.name || '신청자'}의 모든 추가 지역 요청이 처리되었습니다. 가입 승인을 진행하세요.`,
-          link_url: `#signup-requests/${request.signup_request_id}`,
-          metadata_json: JSON.stringify({ signup_request_id: request.signup_request_id }),
-        });
-      }
+      // ★ Notification Service를 통한 알림 생성 (교차 도메인 분리)
+      await notifyRegionAddComplete(db, request.distributor_org_id as number, {
+        signupRequestId: request.signup_request_id as number,
+        applicantName: (signupReq as any)?.name || '신청자',
+      });
     }
   }
 

@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, writeAuditLog } from '../middleware/auth';
-import { verifyPassword, needsRehash, hashPassword, checkRateLimit, cleanExpiredSessions } from '../middleware/security';
+import { verifyPassword, needsRehash, hashPassword, checkRateLimit } from '../middleware/security';
+import { createSession, deleteSession, cleanExpiredSessions } from '../services/session-service';
 
 const auth = new Hono<Env>();
 
@@ -59,25 +60,8 @@ auth.post('/login', async (c) => {
     SELECT r.code FROM user_roles ur JOIN roles r ON ur.role_id = r.role_id WHERE ur.user_id = ?
   `).bind(user.user_id).all();
 
-  // 기존 세션 수 제한 (사용자당 최대 5개)
-  const sessionCount = await db.prepare(
-    "SELECT COUNT(*) as cnt FROM sessions WHERE user_id = ? AND expires_at > datetime('now')"
-  ).bind(user.user_id).first();
-  if (sessionCount && (sessionCount.cnt as number) >= 5) {
-    // 가장 오래된 세션 삭제
-    await db.prepare(`
-      DELETE FROM sessions WHERE session_id IN (
-        SELECT session_id FROM sessions WHERE user_id = ? ORDER BY created_at ASC LIMIT 1
-      )
-    `).bind(user.user_id).run();
-  }
-
-  // 세션 생성
-  const sessionId = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  
-  await db.prepare(`INSERT INTO sessions (session_id, user_id, expires_at) VALUES (?, ?, ?)`)
-    .bind(sessionId, user.user_id, expiresAt).run();
+  // ★ Session Service를 통한 세션 생성 (도메인 분리)
+  const { sessionId, expiresAt } = await createSession(db, user.user_id as number);
 
   await writeAuditLog(db, { entity_type: 'USER', entity_id: user.user_id as number, action: 'LOGIN', actor_id: user.user_id as number });
 
@@ -109,7 +93,8 @@ auth.post('/logout', async (c) => {
 
   const sessionId = c.req.header('X-Session-Id') || '';
   if (sessionId) {
-    await c.env.DB.prepare('DELETE FROM sessions WHERE session_id = ?').bind(sessionId).run();
+    // ★ Session Service를 통한 세션 삭제 (도메인 분리)
+    await deleteSession(c.env.DB, sessionId);
   }
   return c.json({ ok: true }, 200, { 'Set-Cookie': 'session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' });
 });

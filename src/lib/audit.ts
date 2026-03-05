@@ -1,9 +1,14 @@
 // ================================================================
-// 다하다 OMS — 감사 로그 & 상태 이력 유틸 v5.0
+// 다하다 OMS — 감사 로그 & 상태 이력 유틸 v6.0
 // 구조화된 이벤트 코드 사용
+//
+// NOTE v6.0: createNotification(s)은 services/notification-service.ts로 이동.
+// 기존 호환성을 위해 re-export 유지.
 // ================================================================
 
 import type { AuditEventCode } from '../types';
+// 알림 함수는 notification-service에서 re-export (하위 호환)
+export { createNotification, createNotifications } from '../services/notification-service';
 
 /** 감사 로그 기록 (구조화 이벤트 코드) */
 export async function writeAuditLog(db: D1Database, params: {
@@ -37,39 +42,4 @@ export async function writeStatusHistory(db: D1Database, params: {
     INSERT INTO order_status_history (order_id, from_status, to_status, actor_id, note)
     VALUES (?, ?, ?, ?, ?)
   `).bind(params.order_id, params.from_status, params.to_status, params.actor_id, params.note || null).run();
-}
-
-/** 알림 생성 */
-export async function createNotification(db: D1Database, params: {
-  recipient_user_id: number;
-  type: string;
-  title: string;
-  message?: string;
-  link_url?: string;
-  metadata_json?: string;
-}) {
-  await db.prepare(`
-    INSERT INTO notifications (recipient_user_id, type, title, message, link_url, metadata_json)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).bind(
-    params.recipient_user_id,
-    params.type,
-    params.title,
-    params.message || null,
-    params.link_url || null,
-    params.metadata_json || '{}'
-  ).run();
-}
-
-/** 다중 사용자에게 알림 생성 */
-export async function createNotifications(db: D1Database, userIds: number[], params: {
-  type: string;
-  title: string;
-  message?: string;
-  link_url?: string;
-  metadata_json?: string;
-}) {
-  for (const userId of userIds) {
-    await createNotification(db, { ...params, recipient_user_id: userId });
-  }
 }

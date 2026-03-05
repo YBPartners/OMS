@@ -1,10 +1,12 @@
 // ================================================================
-// 다하다 OMS — Auth Middleware v5.0
+// 다하다 OMS — Auth Middleware v6.0
 // TEAM org_type 지원, 구조화 역할 검증
+// Session Service 위임
 // ================================================================
 
 import { Context, Next } from 'hono';
 import type { Env, RoleCode, OrgType, SessionUser } from '../types';
+import { validateSession } from '../services/session-service';
 
 // Re-export from lib for backward compatibility
 export { writeAuditLog, writeStatusHistory } from '../lib/audit';
@@ -19,37 +21,15 @@ export async function authMiddleware(c: Context<Env>, next: Next) {
   }
 
   try {
-    const db = c.env.DB;
-    const session = await db.prepare(`
-      SELECT s.user_id, s.expires_at, u.org_id, u.login_id, u.name, 
-             o.org_type, o.name as org_name
-      FROM sessions s
-      JOIN users u ON s.user_id = u.user_id
-      JOIN organizations o ON u.org_id = o.org_id
-      WHERE s.session_id = ? AND s.expires_at > datetime('now') AND u.status = 'ACTIVE'
-    `).bind(sessionId).first();
+    // ★ Session Service에 위임 (도메인 분리)
+    const result = await validateSession(c.env.DB, sessionId);
 
-    if (!session) {
+    if (!result.valid || !result.user) {
       c.set('user', null);
       return next();
     }
 
-    // 역할 조회
-    const roles = await db.prepare(`
-      SELECT r.code FROM user_roles ur JOIN roles r ON ur.role_id = r.role_id WHERE ur.user_id = ?
-    `).bind(session.user_id).all();
-
-    const user: SessionUser = {
-      user_id: session.user_id as number,
-      org_id: session.org_id as number,
-      org_type: session.org_type as OrgType,  // HQ | REGION | TEAM
-      login_id: session.login_id as string,
-      name: session.name as string,
-      org_name: session.org_name as string,
-      roles: roles.results.map((r: any) => r.code as RoleCode),
-    };
-
-    c.set('user', user);
+    c.set('user', result.user);
   } catch {
     c.set('user', null);
   }
