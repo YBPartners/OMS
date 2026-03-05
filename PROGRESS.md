@@ -1,8 +1,8 @@
 # 다하다 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-05
-> **현재 버전**: v6.0.0
-> **총 코드량**: Backend 6,414줄 (38 TS/TSX) + Frontend 7,141줄 (18 JS) + SQL 1,880줄 = **15,435줄**
+> **현재 버전**: v6.5.0
+> **총 코드량**: Backend 6,696줄 (44 TS) + Services 620줄 + Frontend 7,031줄 (20 JS) + SQL 1,880줄 = **16,227줄**
 
 ---
 
@@ -16,7 +16,8 @@
 | 3 | 자가 가입 워크플로, 알림 | ✅ 완료 | 2026-03-04 | OTP 인증, 가입 신청/승인, 알림 시스템 |
 | 4 | 프론트엔드 UI 전체 | ✅ 완료 | 2026-03-04 | 15개 페이지 모듈, SPA 구조 |
 | 5 | Kanban 강화 + 감사로그 + 배포 | ✅ 완료 | 2026-03-04 | 칸반 개선, 감사 UI, CF Pages 프로덕션 배포 |
-| 6 | 인터랙션 디자인 시스템 | 🔄 진행중 | - | 드로어/팝오버/컨텍스트메뉴/호버프리뷰 |
+| 6 | 인터랙션 디자인 시스템 | ✅ 완료 | 2026-03-05 | 드로어/팝오버/컨텍스트메뉴/호버프리뷰 |
+| 6.5 | 서비스 레이어 리팩터링 | ✅ 완료 | 2026-03-05 | 5개 서비스, 모듈 간 교차 의존성 해소 |
 
 ---
 
@@ -71,6 +72,35 @@
 - `_forceCloseDrawer()` 추가
 - 잔여 DOM 정리 로직 추가
 - 로그인 실패 수정 (seed.sql 재적용)
+
+---
+
+## Phase 6.5 — 서비스 레이어 리팩터링 ✅ (신규)
+
+> **목적**: 모듈 간 직접 DB 접근 → 서비스 계층 경유로 의존성 방향 단일화
+
+### 생성된 서비스 파일 (5개, 총 620줄)
+| 서비스 | 줄수 | 책임 |
+|--------|------|------|
+| notification-service.ts | 87 | 알림 생성/배치 생성 (notifications 테이블 유일 쓰기) |
+| session-service.ts | 125 | 세션 생성/삭제/검증/무효화/만료정리 |
+| hr-service.ts | 123 | 팀+리더 원자적 생성 (6개 테이블 배치) |
+| order-lifecycle-service.ts | 159 | 정산 확정 → 주문 상태 + 배정 + 원장 + 통계 업데이트 |
+| stats-service.ts | 111 | 일별 통계 upsert + 정산 확정 통계 배치 |
+
+### 리팩터링된 라우트 파일 (7개)
+- `lib/audit.ts` — notification 생성 로직 제거, notification-service 재수출
+- `middleware/auth.ts` — 세션 검증을 `validateSession()`으로 위임
+- `routes/auth.ts` — `createSession()`, `deleteSession()`, `cleanExpiredSessions()` 사용
+- `routes/hr/users.ts` — `DELETE FROM sessions` 3건 → `invalidateUserSessions()` 전환
+- `routes/settlements/calculation.ts` — 70줄 인라인 배치 → `confirmSettlementOrders()` 1줄
+- `routes/signup/index.ts` — 50줄 HR INSERT → `createTeamWithLeader()` + `notifySignupApproved()`
+- `routes/signup/region-add.ts` — 15줄 알림 로직 → `notifyRegionAddComplete()`
+
+### 변경 통계
+- 13 files changed, 688 insertions(+), 261 deletions(-)
+- 빌드 성공: 68 modules, 175 KB
+- 모든 API 정상 작동 확인 (로그인/세션/HR/주문/알림/권한/범위)
 
 ---
 

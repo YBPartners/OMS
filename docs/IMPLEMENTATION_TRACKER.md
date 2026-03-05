@@ -1,8 +1,8 @@
 # 다하다 OMS — 구현 추적 문서 (Implementation Tracker)
 
 > **최종 업데이트**: 2026-03-05
-> **버전**: v6.0.0
-> **⚠️ 이 문서는 대화 압축/토큰 초과 시 컨텍스트 복구용입니다.**
+> **버전**: v6.5.0
+> **이 문서는 대화 압축/토큰 초과 시 컨텍스트 복구용입니다.**
 > **항상 이 파일 + ARCHITECTURE.md + PROGRESS.md 를 먼저 읽어 현재 진행 상황을 파악하세요.**
 
 ---
@@ -11,7 +11,7 @@
 
 | 문서 | 경로 | 용도 |
 |------|------|------|
-| **ARCHITECTURE.md** | `/home/user/webapp/ARCHITECTURE.md` | 시스템 구조, 기술 스택, API 맵, DB 모델 |
+| **ARCHITECTURE.md** | `/home/user/webapp/ARCHITECTURE.md` | 시스템 구조, 기술 스택, API 맵, DB 모델, 서비스 레이어 |
 | **PROGRESS.md** | `/home/user/webapp/PROGRESS.md` | Phase별 진행 상태, 미구현 목록, 알려진 이슈 |
 | **IMPLEMENTATION_TRACKER.md** | 이 파일 | 세부 체크리스트, 설계 결정, 파일 경로 |
 | **README.md** | `/home/user/webapp/README.md` | 프로젝트 개요, 테스트 계정, API 요약 |
@@ -22,10 +22,12 @@
 
 ## 현재 상태 요약
 
-- **전체 Phase**: 0~5 완료, Phase 6 (인터랙션 디자인) 7개 서브페이즈 모두 완료
+- **전체 Phase**: 0~6.5 완료 (Phase 6 인터랙션 + Phase 6.5 서비스 레이어)
 - **프로덕션 배포**: ✅ https://dahada-oms.pages.dev
 - **로컬 개발**: ✅ PM2 + wrangler pages dev, port 3000
+- **서비스 레이어**: ✅ 5개 서비스, 모듈 간 교차 의존성 해소
 - **알려진 이슈**: commission_policies updated_at 컬럼 누락, signup SQL syntax error (2건 미해결)
+- **총 코드량**: Backend 6,696줄 + Services 620줄 + Frontend 7,031줄 + SQL 1,880줄 = **16,227줄**
 
 ---
 
@@ -90,6 +92,23 @@
 - [x] 6-fix: 드로어/팝오버/모달 race condition 수정
 - [x] 6-fix: 로그인 실패 수정 (seed.sql 재적용)
 
+### ✅ Phase 6.5: 서비스 레이어 리팩터링 (신규)
+- [x] notification-service.ts (87줄) — 알림 테이블 유일 쓰기 진입점
+- [x] session-service.ts (125줄) — 세션 CRUD/검증/만료정리/무효화
+- [x] hr-service.ts (123줄) — 팀+리더 원자적 생성 (6테이블 배치)
+- [x] order-lifecycle-service.ts (159줄) — 정산 확정 시 주문/통계 일괄 업데이트
+- [x] stats-service.ts (111줄) — 일별 통계 upsert + 정산 확정 통계 배치
+- [x] services/index.ts (15줄) — 전체 서비스 재수출
+- [x] lib/audit.ts 리팩터링 — notification 생성 로직 제거
+- [x] middleware/auth.ts 리팩터링 — session-service.validateSession() 위임
+- [x] routes/auth.ts 리팩터링 — session-service 사용
+- [x] routes/hr/users.ts 리팩터링 — session-service.invalidateUserSessions()
+- [x] routes/settlements/calculation.ts 리팩터링 — order-lifecycle-service 사용
+- [x] routes/signup/index.ts 리팩터링 — hr-service + notification-service 사용
+- [x] routes/signup/region-add.ts 리팩터링 — notification-service 사용
+- [x] 빌드 검증 (68 modules, 175 KB)
+- [x] API 전체 테스트 (로그인/세션/HR/주문/알림/권한/범위)
+
 ---
 
 ## 핵심 설계 결정 요약
@@ -104,12 +123,14 @@
 8. **스코프**: getUserScope() 통합 (SUPER_ADMIN=전체, REGION_ADMIN=자기총판+하위팀, TEAM_LEADER=자기팀)
 9. **트랜잭션**: D1 batch()로 원자적 실행
 10. **인증**: PBKDF2 + 레거시 SHA-256 자동 마이그레이션, 세션 24시간, 최대 5개
+11. **서비스 레이어**: 도메인 간 DB 쓰기는 서비스 경유 필수, 읽기(SELECT)는 라우트 직접 허용 (v6.5)
 
 ---
 
 ## 기술 스택 참조
 
 - Backend: Hono v4 + TypeScript + Cloudflare Workers + D1
+- Services: 5개 서비스 파일 (620줄) — 교차 도메인 쓰기 일원화
 - Frontend: Vanilla JS + TailwindCSS (CDN) + FontAwesome + Chart.js
 - Build: Vite + @hono/vite-cloudflare-pages
 - Dev: PM2 + wrangler pages dev --local, port 3000
@@ -120,8 +141,9 @@
 ## 파일 경로 참조
 
 - 프로젝트 루트: `/home/user/webapp/`
-- 백엔드 소스: `/home/user/webapp/src/` (38파일, 6,414줄)
-- 프론트엔드: `/home/user/webapp/public/static/js/` (18파일, 7,141줄)
+- 백엔드 소스: `/home/user/webapp/src/` (44파일, 6,696줄)
+- **서비스 레이어**: `/home/user/webapp/src/services/` (6파일, 620줄) ← v6.5 신규
+- 프론트엔드: `/home/user/webapp/public/static/js/` (20파일, 7,031줄)
 - 마이그레이션: `/home/user/webapp/migrations/` (5파일)
 - 시드 데이터: `/home/user/webapp/seed.sql` + `/home/user/webapp/seed/`
 - 설계 문서: `/home/user/webapp/docs/`
@@ -129,3 +151,16 @@
 - 진척도: `/home/user/webapp/PROGRESS.md`
 - wrangler: `/home/user/webapp/wrangler.jsonc`
 - PM2: `/home/user/webapp/ecosystem.config.cjs`
+
+---
+
+## 서비스 파일 참조 (v6.5)
+
+| 파일 | 경로 | 줄수 | 주요 export |
+|------|------|------|------------|
+| notification-service | `src/services/notification-service.ts` | 87 | createNotification, createNotifications, notifySignupApproved, notifyRegionAddComplete |
+| session-service | `src/services/session-service.ts` | 125 | createSession, deleteSession, validateSession, invalidateUserSessions, cleanExpiredSessions |
+| hr-service | `src/services/hr-service.ts` | 123 | createTeamWithLeader |
+| order-lifecycle-service | `src/services/order-lifecycle-service.ts` | 159 | confirmSettlementOrders |
+| stats-service | `src/services/stats-service.ts` | 111 | upsertRegionDailyStats, upsertTeamLeaderDailyStats, appendSettlementStatsToBatch |
+| index | `src/services/index.ts` | 15 | (전체 재수출) |

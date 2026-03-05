@@ -1,9 +1,9 @@
-# 다하다 OMS - 주문관리시스템 v6.0.0
+# 다하다 OMS - 주문관리시스템 v6.5.0
 
 ## 프로젝트 개요
 - **명칭**: 다하다 OMS (Order Management System)
 - **목적**: 원청(아정당) → 다하다(HQ) → 총판(4개) → 팀 구조의 주문 처리/배분/검수/정산/대사/통계 통합 시스템
-- **설계 원칙**: 고품질 · 자동화 · 정합성 · 보안 우선 · 기능별 분리 설계
+- **설계 원칙**: 고품질 · 자동화 · 정합성 · 보안 우선 · 기능별 분리 설계 · 서비스 레이어 분리
 - **기술 스택**: Hono + TypeScript + Cloudflare Workers + D1 (SQLite) + TailwindCSS + Vanilla JS
 
 ## URLs
@@ -11,7 +11,7 @@
 - **샌드박스**: https://3000-inedg4lr7hnug2y22i9nx-5185f4aa.sandbox.novita.ai
 
 ## 관련 문서 (새 대화에서 이어가기)
-> **⚠️ 새 대화를 시작할 때 반드시 아래 파일들을 순서대로 읽으세요:**
+> **새 대화를 시작할 때 반드시 아래 파일들을 순서대로 읽으세요:**
 1. **`ARCHITECTURE.md`** — 시스템 구조, 기술 스택, 디렉터리, DB 모델, API 전체 맵
 2. **`PROGRESS.md`** — Phase별 개발 진행 상태, 미구현 목록, 알려진 이슈
 3. **`docs/IMPLEMENTATION_TRACKER.md`** — 세부 체크리스트, 설계 결정, 파일 경로
@@ -43,6 +43,29 @@
 | 4 | 프론트엔드 UI | ✅ | 15개 페이지, SPA 구조 |
 | 5 | Kanban + 감사 + 배포 | ✅ | 칸반, 감사 UI, CF Pages 배포 |
 | 6 | 인터랙션 디자인 | ✅ | 드로어, 팝오버, 컨텍스트메뉴, 호버프리뷰, 배치바 |
+| 6.5 | 서비스 레이어 분리 | ✅ | 5개 서비스, 모듈 간 교차 의존성 해소 |
+
+## 서비스 레이어 아키텍처 (v6.5 신규)
+> 모듈 간 직접 DB 접근을 서비스 계층으로 분리하여 의존성 방향 단일화
+
+| 서비스 | 파일 | 역할 | 차단한 교차 의존 |
+|--------|------|------|-----------------|
+| notification-service | 87줄 | 알림 테이블 유일 쓰기 진입점 | Signup/RegionAdd → notifications |
+| session-service | 125줄 | 세션 CRUD/만료정리/무효화 | Auth/HR → sessions |
+| hr-service | 123줄 | 팀+리더 원자적 생성 (6개 테이블) | Signup → HR 테이블 |
+| order-lifecycle-service | 159줄 | 정산 확정 시 주문/통계 일괄 업데이트 | Settlements → Orders/Stats |
+| stats-service | 111줄 | 통계 도메인 유일 쓰기 진입점 | Settlements → 통계 테이블 |
+
+**의존성 변화**:
+```
+Before: Signup ──직접──→ HR Tables, notifications
+After:  Signup ──→ hr-service ──→ HR Tables
+        Signup ──→ notification-service ──→ notifications
+
+Before: Settlements ──직접──→ Orders, Stats Tables
+After:  Settlements ──→ order-lifecycle-service ──→ Orders
+        Settlements ──→ stats-service ──→ Stats Tables
+```
 
 ## 주요 기능 요약
 
@@ -92,12 +115,13 @@
 - **State Machine**: 13단계 주문 상태 전이
 - **Scope Engine**: 역할별 데이터 가시성 (HQ → REGION → TEAM)
 - **Batch Builder**: D1 batch()를 활용한 원자적 트랜잭션
+- **Service Layer**: 5개 서비스 (교차 도메인 쓰기 일원화)
 
 ## 배포 정보
 - **플랫폼**: Cloudflare Pages + D1
 - **상태**: ✅ Active
 - **D1 ID**: 0b7aedd5-7510-44d3-8b81-d421b03fffa6
-- **버전**: v6.0.0
+- **버전**: v6.5.0
 - **최종 업데이트**: 2026-03-05
 
 ## 로컬 개발
