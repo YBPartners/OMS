@@ -191,13 +191,38 @@
 
 ---
 
-## Phase 8 이후 — 미구현 / 향후 계획
+## Phase 7.1 — 배분 기능 완성 ✅ (2026-03-05)
 
-### 8-1: 데이터 시각화 강화 (미구현)
-- [ ] Dashboard 실시간 차트 (Chart.js 활용)
-- [ ] 매출 추이 그래프
-- [ ] 지역별 히트맵
-- [ ] 정산 현황 차트
+> **목적**: 주문관리·배분관리 페이지의 일괄/개별 수동 배분 UI 구현 및 드로어 빠른액션 추가
+
+### 구현 내역
+- [x] 주문관리 페이지: 일괄배분 버튼 → 실제 배분 모달 (placeholder alert 제거)
+- [x] 배분관리 페이지: 선택배분(showBatchDistributeModal) 모달 구현
+- [x] 수동 배분 모달 UI 개선 (주문번호·고객명·주소 표시, 지역법인 선택)
+- [x] 드로어 빠른액션: 미배분(RECEIVED/VALIDATED/DISTRIBUTION_PENDING) 주문에 "수동 배분" 버튼 추가
+- [x] POST /api/orders/batch-distribute 연동 (최대 100건 일괄)
+- [x] PATCH /api/orders/:id/distribution 연동 (개별 수동 재배분)
+
+### 변경 파일 (4개, +366/-51줄)
+- `public/static/js/pages/orders.js` — 배분 모달 전면 재작성
+- `src/routes/orders/distribute.ts` — 기존 백엔드 유지 (변경 없음)
+- `README.md` — v7.1 반영
+- `PROGRESS.md` — Phase 7.1 추가
+
+---
+
+## Phase 8 — 데이터 시각화 + CSV 내보내기
+
+### 8-1: 데이터 시각화 강화 ✅ 완료 (2026-03-05)
+- [x] Dashboard 실시간 차트 (Chart.js 활용) — 3종 차트 구현
+  - 도넛 차트: 상태별 주문 분포
+  - 수평 바 차트: 지역별 처리 현황
+  - 라인 차트: 7일간 주문 추이
+- [x] 차트 영역 접기/펼치기 토글
+- [x] 데이터 없을 때 빈 상태 표시
+- [ ] 매출 추이 그래프 (미구현)
+- [ ] 지역별 히트맵 (미구현)
+- [ ] 정산 현황 차트 (미구현)
 
 ### 8-2: 모바일/반응형 최적화 (미구현)
 - [ ] 사이드바 → 바텀 네비게이션
@@ -209,10 +234,12 @@
 - [ ] 이메일 알림 연동
 - [ ] 알림 설정 (유형별 on/off)
 
-### 8-4: 보고서/엑셀 출력 (미구현)
-- [ ] 정산 보고서 PDF 출력
-- [ ] 주문 목록 엑셀 다운로드
-- [ ] 통계 CSV 내보내기 (현재 일부 구현)
+### 8-4: 보고서/CSV 출력 ✅ 부분 완료 (2026-03-05)
+- [x] 주문 목록 CSV 내보내기 (주문관리 페이지 버튼)
+- [x] 공통 exportToCSV 유틸리티 (core/ui.js)
+- [x] 통계 CSV 내보내기 (지역별/팀장별)
+- [ ] 정산 보고서 PDF 출력 (미구현)
+- [ ] 엑셀(xlsx) 다운로드 (미구현)
 
 ### 8-5: 성능 최적화 (미구현)
 - [ ] 프론트엔드 번들 최적화 (현재 CDN 의존)
@@ -234,7 +261,7 @@
 | 1 | ~~로그인 실패~~ | ✅ 해결 | seed.sql 재적용으로 해결 |
 | 2 | ~~드로어 닫기 버그~~ | ✅ 해결 | race condition 수정 |
 | 3 | ~~commission_policies updated_at 컬럼 없음~~ | ✅ 해결 | 0006 마이그레이션에서 ALTER TABLE 추가 |
-| 4 | 가입 요청 SQL syntax error | ⚠️ 미해결 | near ")": syntax error at offset 98 |
+| 4 | ~~가입 요청 SQL syntax error~~ | ✅ 해결 | admin_regions seed 데이터 누락 → FK 제약 위반. seed.sql에 20개 행정구역 데이터 추가하여 해결 |
 | 5 | Tailwind CDN 프로덕션 경고 | ℹ️ 경미 | PostCSS 설치 권장 |
 
 ---

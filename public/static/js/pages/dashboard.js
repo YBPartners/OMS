@@ -1,10 +1,18 @@
 // ============================================================
-// 다하다 OMS - 대시보드 페이지 v6.0
-// Interaction Design: 호버 프리뷰, 컨텍스트 액션,
-// 드릴다운 강화, 스켈레톤 로딩, 카드 인터랙션
+// 다하다 OMS - 대시보드 페이지 v8.0
+// Chart.js 실시간 차트, 인터랙션 디자인, 드릴다운
 // ============================================================
 
+// 차트 인스턴스 관리 (메모리 누수 방지)
+const _dashCharts = {};
+function _destroyCharts() {
+  Object.keys(_dashCharts).forEach(k => {
+    if (_dashCharts[k]) { _dashCharts[k].destroy(); delete _dashCharts[k]; }
+  });
+}
+
 async function renderDashboard(el) {
+  _destroyCharts();
   showSkeletonLoading(el, 'cards');
 
   const [dashRes, funnelRes] = await Promise.all([
@@ -32,7 +40,7 @@ async function renderDashboard(el) {
     <div class="fade-in">
       <h2 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-chart-pie mr-2 text-blue-600"></i>대시보드</h2>
       
-      <!-- 요약 카드 — 호버 시 설명 표시, 클릭 시 네비게이션 -->
+      <!-- 요약 카드 -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         ${cards.map((c, i) => `
           <div class="ix-card bg-white rounded-xl p-5 border border-gray-100 relative group" 
@@ -56,8 +64,35 @@ async function renderDashboard(el) {
         `).join('')}
       </div>
 
+      <!-- 차트 영역 -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <!-- 주문 상태 도넛 차트 -->
+        <div class="bg-white rounded-xl p-6 border border-gray-100">
+          <h3 class="text-sm font-semibold mb-4"><i class="fas fa-chart-pie mr-2 text-pink-500"></i>상태별 주문 분포</h3>
+          <div class="relative" style="height:220px;">
+            <canvas id="chart-status-donut"></canvas>
+          </div>
+        </div>
+
+        <!-- 지역법인별 바 차트 -->
+        <div class="bg-white rounded-xl p-6 border border-gray-100">
+          <h3 class="text-sm font-semibold mb-4"><i class="fas fa-chart-bar mr-2 text-indigo-500"></i>지역법인별 주문 현황</h3>
+          <div class="relative" style="height:220px;">
+            <canvas id="chart-region-bar"></canvas>
+          </div>
+        </div>
+
+        <!-- 금액 도넛 차트 -->
+        <div class="bg-white rounded-xl p-6 border border-gray-100">
+          <h3 class="text-sm font-semibold mb-4"><i class="fas fa-won-sign mr-2 text-emerald-500"></i>상태별 금액 비중</h3>
+          <div class="relative" style="height:220px;">
+            <canvas id="chart-amount-donut"></canvas>
+          </div>
+        </div>
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <!-- 주문 퍼널 — 클릭 + 호버 프리뷰 -->
+        <!-- 주문 퍼널 -->
         <div class="bg-white rounded-xl p-6 border border-gray-100">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold"><i class="fas fa-filter mr-2 text-blue-500"></i>주문 처리 퍼널</h3>
@@ -89,7 +124,7 @@ async function renderDashboard(el) {
           </div>
         </div>
         
-        <!-- 지역법인별 현황 — 호버 프리뷰 + 컨텍스트 메뉴 -->
+        <!-- 지역법인별 현황 테이블 -->
         <div class="bg-white rounded-xl p-6 border border-gray-100">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold"><i class="fas fa-building mr-2 text-indigo-500"></i>지역법인별 현황</h3>
@@ -145,6 +180,167 @@ async function renderDashboard(el) {
         </div>
       </div>` : ''}
     </div>`;
+
+  // ─── Chart.js 렌더링 ───
+  _renderDashCharts(funnelRes.funnel || [], dashRes.region_summary || []);
+}
+
+// ─── Chart.js 차트 생성 ───
+function _renderDashCharts(funnel, regionSummary) {
+  // Chart.js 로드 확인
+  if (typeof Chart === 'undefined') {
+    console.warn('Chart.js not loaded');
+    return;
+  }
+
+  const STATUS_COLORS = {
+    RECEIVED: '#94a3b8', VALIDATED: '#60a5fa', DISTRIBUTED: '#818cf8',
+    DISTRIBUTION_PENDING: '#fbbf24', ASSIGNED: '#a78bfa',
+    IN_PROGRESS: '#fb923c', SUBMITTED: '#38bdf8',
+    REGION_APPROVED: '#34d399', REGION_REJECTED: '#f87171',
+    HQ_APPROVED: '#22c55e', HQ_REJECTED: '#ef4444',
+    SETTLEMENT_CONFIRMED: '#10b981', SETTLEMENT_COMPLETE: '#059669',
+  };
+
+  const STATUS_LABELS = {
+    RECEIVED: '수신', VALIDATED: '유효성통과', DISTRIBUTED: '배분완료',
+    DISTRIBUTION_PENDING: '배분보류', ASSIGNED: '배정완료',
+    IN_PROGRESS: '작업중', SUBMITTED: '제출',
+    REGION_APPROVED: '지역승인', REGION_REJECTED: '지역반려',
+    HQ_APPROVED: 'HQ승인', HQ_REJECTED: 'HQ반려',
+    SETTLEMENT_CONFIRMED: '정산확정', SETTLEMENT_COMPLETE: '정산완료',
+  };
+
+  // 1) 상태별 주문 도넛 차트
+  const donutCtx = document.getElementById('chart-status-donut');
+  if (donutCtx && funnel.length > 0) {
+    const labels = funnel.map(f => STATUS_LABELS[f.status] || f.status);
+    const data = funnel.map(f => f.count);
+    const bgColors = funnel.map(f => STATUS_COLORS[f.status] || '#cbd5e1');
+
+    _dashCharts.statusDonut = new Chart(donutCtx, {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{
+          data,
+          backgroundColor: bgColors,
+          borderWidth: 2,
+          borderColor: '#fff',
+          hoverBorderWidth: 3,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '55%',
+        plugins: {
+          legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ` ${ctx.label}: ${ctx.parsed}건 (${((ctx.parsed / data.reduce((a,b)=>a+b,0)) * 100).toFixed(1)}%)`,
+            }
+          }
+        },
+        onClick: (e, elements) => {
+          if (elements.length > 0) {
+            const idx = elements[0].index;
+            const status = funnel[idx].status;
+            window._orderFilters = { status };
+            navigateTo('orders');
+          }
+        }
+      }
+    });
+  }
+
+  // 2) 지역법인별 바 차트
+  const barCtx = document.getElementById('chart-region-bar');
+  if (barCtx && regionSummary.length > 0) {
+    const regionColors = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981'];
+    _dashCharts.regionBar = new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: regionSummary.map(r => r.region_name.replace('지역법인', '')),
+        datasets: [
+          { label: '진행중', data: regionSummary.map(r => r.active_orders), backgroundColor: '#60a5fa', borderRadius: 4 },
+          { label: '검수대기', data: regionSummary.map(r => r.pending_review), backgroundColor: '#fbbf24', borderRadius: 4 },
+          { label: '정산대기', data: regionSummary.map(r => r.ready_for_settlement), backgroundColor: '#34d399', borderRadius: 4 },
+          { label: '정산완료', data: regionSummary.map(r => r.settled), backgroundColor: '#10b981', borderRadius: 4 },
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y}건`,
+            }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+          y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+        },
+        onClick: (e, elements) => {
+          if (elements.length > 0) {
+            const idx = elements[0].index;
+            const r = regionSummary[idx];
+            showRegionDetailModal(r.org_id, r.region_name);
+          }
+        }
+      }
+    });
+  }
+
+  // 3) 상태별 금액 도넛 차트
+  const amountCtx = document.getElementById('chart-amount-donut');
+  if (amountCtx && funnel.length > 0) {
+    const topFunnel = funnel.filter(f => f.total_amount > 0).sort((a, b) => b.total_amount - a.total_amount);
+    const labels = topFunnel.map(f => STATUS_LABELS[f.status] || f.status);
+    const data = topFunnel.map(f => f.total_amount);
+    const bgColors = topFunnel.map(f => STATUS_COLORS[f.status] || '#cbd5e1');
+
+    _dashCharts.amountDonut = new Chart(amountCtx, {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{
+          data,
+          backgroundColor: bgColors,
+          borderWidth: 2,
+          borderColor: '#fff',
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '55%',
+        plugins: {
+          legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const total = data.reduce((a,b)=>a+b,0);
+                const pct = total > 0 ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
+                return ` ${ctx.label}: ${(ctx.parsed/10000).toFixed(1)}만원 (${pct}%)`;
+              },
+            }
+          }
+        },
+        onClick: (e, elements) => {
+          if (elements.length > 0) {
+            const idx = elements[0].index;
+            const status = topFunnel[idx].status;
+            window._orderFilters = { status };
+            navigateTo('orders');
+          }
+        }
+      }
+    });
+  }
 }
 
 // ─── 대시보드 카드 컨텍스트 메뉴 ───
@@ -182,7 +378,7 @@ function showRegionContextMenu(e, orgId, regionName) {
   ], { title: regionName });
 }
 
-// ─── 지역법인 상세 모달 (강화) ───
+// ─── 지역법인 상세 모달 (Chart.js 포함) ───
 async function showRegionDetailModal(orgId, regionName) {
   const [statsRes, leadersRes] = await Promise.all([
     api('GET', `/stats/regions/daily?region_org_id=${orgId}`),
@@ -204,13 +400,11 @@ async function showRegionDetailModal(orgId, regionName) {
           </div>
           <div class="flex gap-2">
             <button onclick="closeModal();window._orderFilters={region_org_id:'${orgId}'};navigateTo('orders')" 
-              class="px-3 py-1.5 bg-purple-200 text-purple-800 rounded-lg text-xs hover:bg-purple-300 transition"
-              data-tooltip="이 법인의 주문 보기">
+              class="px-3 py-1.5 bg-purple-200 text-purple-800 rounded-lg text-xs hover:bg-purple-300 transition">
               <i class="fas fa-list mr-1"></i>주문보기
             </button>
             <button onclick="closeModal();navigateTo('statistics')" 
-              class="px-3 py-1.5 bg-purple-200 text-purple-800 rounded-lg text-xs hover:bg-purple-300 transition"
-              data-tooltip="통계 페이지에서 상세 확인">
+              class="px-3 py-1.5 bg-purple-200 text-purple-800 rounded-lg text-xs hover:bg-purple-300 transition">
               <i class="fas fa-chart-bar mr-1"></i>통계
             </button>
           </div>
@@ -218,6 +412,10 @@ async function showRegionDetailModal(orgId, regionName) {
       </div>
 
       ${stats.length > 0 ? `
+      <div>
+        <h4 class="font-semibold mb-3"><i class="fas fa-chart-line mr-1 text-blue-500"></i>일별 추이</h4>
+        <div style="height:180px;"><canvas id="chart-region-daily"></canvas></div>
+      </div>
       <div>
         <h4 class="font-semibold mb-3"><i class="fas fa-calendar-days mr-1 text-blue-500"></i>일별 현황</h4>
         <table class="w-full text-sm">
@@ -236,7 +434,7 @@ async function showRegionDetailModal(orgId, regionName) {
             </tr>`).join('')}
           </tbody>
         </table>
-      </div>` : ''}
+      </div>` : '<p class="text-gray-400 text-sm text-center py-4">일별 통계 데이터가 없습니다.</p>'}
 
       ${leaders.length > 0 ? `
       <div>
@@ -263,4 +461,34 @@ async function showRegionDetailModal(orgId, regionName) {
 
   showModal(`<i class="fas fa-building text-purple-500 mr-2"></i>${regionName} 상세`, content, 
     `<button onclick="closeModal()" class="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm">닫기</button>`, { large: true });
+
+  // 모달 내 차트 렌더링
+  if (stats.length > 0) {
+    setTimeout(() => {
+      const dailyCtx = document.getElementById('chart-region-daily');
+      if (dailyCtx && typeof Chart !== 'undefined') {
+        const reversed = [...stats].reverse();
+        new Chart(dailyCtx, {
+          type: 'line',
+          data: {
+            labels: reversed.map(s => s.date?.substring(5) || ''),
+            datasets: [
+              { label: '인입', data: reversed.map(s => s.intake_count || 0), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', tension: 0.3, fill: true, pointRadius: 4, pointHoverRadius: 6 },
+              { label: '배정', data: reversed.map(s => s.assigned_to_team_count || 0), borderColor: '#8b5cf6', backgroundColor: 'transparent', tension: 0.3, pointRadius: 3 },
+              { label: '승인', data: reversed.map(s => s.hq_approved_count || 0), borderColor: '#22c55e', backgroundColor: 'transparent', tension: 0.3, pointRadius: 3 },
+              { label: '정산', data: reversed.map(s => s.settlement_confirmed_count || 0), borderColor: '#10b981', backgroundColor: 'transparent', tension: 0.3, pointRadius: 3, borderDash: [5, 3] },
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } } },
+            scales: {
+              x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+              y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+            }
+          }
+        });
+      }
+    }, 200);
+  }
 }

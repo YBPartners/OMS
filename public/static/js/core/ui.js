@@ -183,3 +183,30 @@ function filterItemList(query) {
 function showLoading(el) {
   el.innerHTML = '<div class="flex items-center justify-center h-64"><div class="pulse text-gray-400"><i class="fas fa-spinner fa-spin text-3xl"></i><p class="mt-3">로딩 중...</p></div></div>';
 }
+
+// ─── CSV 내보내기 유틸리티 ───
+function exportToCSV(data, columns, filename) {
+  if (!data || data.length === 0) { showToast('내보낼 데이터가 없습니다.', 'warning'); return; }
+
+  // BOM (한글 엑셀 호환)
+  const BOM = '\uFEFF';
+  const header = columns.map(c => `"${c.label}"`).join(',');
+  const rows = data.map(row =>
+    columns.map(c => {
+      let val = typeof c.value === 'function' ? c.value(row) : (row[c.key] ?? '');
+      if (val === null || val === undefined) val = '';
+      val = String(val).replace(/"/g, '""');
+      return `"${val}"`;
+    }).join(',')
+  );
+  const csv = BOM + header + '\n' + rows.join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(`${data.length}건 CSV 내보내기 완료`, 'success');
+}

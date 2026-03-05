@@ -29,6 +29,7 @@ async function renderOrders(el) {
       <div class="flex items-center justify-between mb-6">
         <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-list-check mr-2 text-blue-600"></i>주문관리</h2>
         <div class="flex gap-2">
+          <button onclick="exportOrdersCSV()" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition"><i class="fas fa-file-csv mr-1"></i>CSV</button>
           <button onclick="showImportModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition"><i class="fas fa-file-import mr-1"></i>일괄 수신</button>
           <button onclick="showNewOrderModal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition"><i class="fas fa-plus mr-1"></i>수동 등록</button>
         </div>
@@ -804,4 +805,32 @@ async function submitOrderBatchDistribute() {
       <div class="text-sm text-gray-600"><i class="fas fa-building mr-1 text-indigo-500"></i>배분 법인: <span class="font-semibold">${res.region_name || ''}</span></div>
     </div>`,
     `<button onclick="closeModal();renderContent()" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">확인</button>`, { large: true });
+}
+
+// ─── 주문 CSV 내보내기 ───
+async function exportOrdersCSV() {
+  showToast('주문 데이터를 가져오는 중...', 'info');
+  const params = new URLSearchParams(window._orderFilters || {});
+  params.set('limit', '1000');
+  params.delete('page');
+  const res = await api('GET', `/orders?${params.toString()}`);
+  if (!res?.orders?.length) { showToast('내보낼 주문이 없습니다.', 'warning'); return; }
+
+  const STATUS_LABELS = {};
+  Object.entries(OMS.STATUS || {}).forEach(([k, v]) => { STATUS_LABELS[k] = v.label; });
+
+  exportToCSV(res.orders, [
+    { label: '주문ID', key: 'order_id' },
+    { label: '외부주문번호', key: 'external_order_no' },
+    { label: '고객명', key: 'customer_name' },
+    { label: '연락처', key: 'customer_phone' },
+    { label: '주소', key: 'address_text' },
+    { label: '행정동코드', key: 'admin_dong_code' },
+    { label: '금액', key: 'base_amount' },
+    { label: '상태', value: (o) => STATUS_LABELS[o.status] || o.status },
+    { label: '지역법인', key: 'region_name' },
+    { label: '담당팀장', key: 'team_leader_name' },
+    { label: '요청일', key: 'requested_date' },
+    { label: '등록일', key: 'created_at' },
+  ], '주문목록');
 }

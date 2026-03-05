@@ -22,13 +22,15 @@
 
 ## 현재 상태 요약
 
-- **전체 Phase**: 0~7.0 완료 (Phase 7.0: 다채널 원장 + 대리점 계층)
+- **전체 Phase**: 0~8 완료 (Phase 8: 데이터 시각화 + CSV 내보내기)
 - **프로덕션 배포**: ✅ https://dahada-oms.pages.dev
 - **로컬 개발**: ✅ PM2 + wrangler pages dev, port 3000
 - **서비스 레이어**: ✅ 5개 서비스, 모듈 간 교차 의존성 해소
 - **v7.0 신규**: ✅ 주문 채널 관리, AGENCY_LEADER 역할/스코프/UI
-- **알려진 이슈**: signup SQL syntax error (1건 미해결), Tailwind CDN 경고 (경미)
-- **총 코드량**: Backend 7,148줄 (45 TS) + Services 620줄 + Frontend 7,814줄 (22 JS) + SQL 930줄 = **16,512줄**
+- **v7.1 신규**: ✅ 배분 기능 완성 (일괄/개별 수동배분, 드로어 빠른액션)
+- **v8.0 신규**: ✅ Dashboard Chart.js 3종 차트, 주문 CSV 내보내기, 공통 exportToCSV
+- **알려진 이슈**: signup SQL 오류 ✅해결 (admin_regions seed 데이터 추가), Tailwind CDN 경고 (경미)
+- **총 코드량**: Backend 7,357줄 (45 TS) + Services 634줄 + Frontend 8,318줄 (22 JS) + SQL 921줄 = **16,596줄**
 
 ---
 
@@ -103,7 +105,7 @@
 - [x] 7개 라우트 파일 리팩터링
 - [x] 빌드 검증 + API 전체 테스트
 
-### ✅ Phase 7.0: 다채널 원장 + 대리점(AGENCY) 계층 (신규)
+### ✅ Phase 7.0: 다채널 원장 + 대리점(AGENCY) 계층
 - [x] 0006_channels_agency.sql — order_channels, agency_team_mappings, AGENCY_LEADER 역할
 - [x] orders.channel_id, order_import_batches.channel_id, commission_policies.updated_at 추가
 - [x] channels-agency.ts (373줄) — 채널 CRUD 3개 + 대리점 API 7개 엔드포인트
@@ -121,6 +123,28 @@
 - [x] app.js — AGENCY 메뉴 그룹
 - [x] seed.sql — 대리점 테스트 데이터
 - [x] index.tsx — 스크립트 태그, 버전 7.0.0
+
+### ✅ Phase 7.1: 배분 기능 완성
+- [x] 주문관리 페이지 일괄배분 버튼 → 실제 모달 구현 (placeholder alert 제거)
+- [x] 배분관리 페이지 선택배분(showBatchDistributeModal) 모달
+- [x] 수동 배분 모달 UI 개선 (주문번호/고객명/주소 표시)
+- [x] 드로어 빠른액션: 미배분 주문에 "수동 배분" 버튼 추가
+- [x] POST /api/orders/batch-distribute 연동 (최대 100건)
+- [x] PATCH /api/orders/:id/distribution 연동 (개별 수동 재배분)
+
+### ✅ Phase 8: 데이터 시각화 + CSV 내보내기
+- [x] Dashboard Chart.js 3종 차트 (도넛/수평바/라인)
+- [x] 차트 영역 토글 (expand/collapse)
+- [x] 데이터 없을 때 빈 상태 표시
+- [x] 주문 목록 CSV 내보내기 (최대 1000건)
+- [x] 공통 exportToCSV 유틸리티 (core/ui.js)
+- [x] 통계 CSV 내보내기 (지역별/팀장별)
+
+### ✅ 이슈 #4 해결: 가입 SQL 오류
+- [x] 원인: admin_regions 테이블 데이터 누락 → FK 제약 위반
+- [x] seed.sql에 20개 행정구역 데이터 추가 (서울/경기/인천/부산)
+- [x] org_region_mappings 시드 데이터 추가
+- [x] 가입 → OTP → 제출 → 승인 전체 플로우 테스트 통과
 
 ---
 
@@ -145,8 +169,8 @@
 ## 기술 스택 참조
 
 - Backend: Hono v4 + TypeScript + Cloudflare Workers + D1
-- Services: 5개 서비스 파일 (620줄) — 교차 도메인 쓰기 일원화
-- Frontend: Vanilla JS + TailwindCSS (CDN) + FontAwesome + Chart.js
+- Services: 5개 서비스 파일 (634줄) — 교차 도메인 쓰기 일원화
+- Frontend: Vanilla JS + TailwindCSS (CDN) + FontAwesome + Chart.js + CSV export
 - Build: Vite + @hono/vite-cloudflare-pages
 - Dev: PM2 + wrangler pages dev --local, port 3000
 - Deploy: Cloudflare Pages (`wrangler pages deploy dist`)
@@ -156,12 +180,14 @@
 ## 파일 경로 참조
 
 - 프로젝트 루트: `/home/user/webapp/`
-- 백엔드 소스: `/home/user/webapp/src/` (45파일, 7,148줄)
-- **서비스 레이어**: `/home/user/webapp/src/services/` (6파일, 620줄)
+- 백엔드 소스: `/home/user/webapp/src/` (45파일, 7,357줄)
+- **서비스 레이어**: `/home/user/webapp/src/services/` (6파일, 634줄)
 - **채널+대리점 API**: `/home/user/webapp/src/routes/hr/channels-agency.ts` (373줄) ← v7.0 신규
-- 프론트엔드: `/home/user/webapp/public/static/js/` (22파일, 7,814줄)
-- **채널 페이지**: `/home/user/webapp/public/static/js/pages/channels.js` (145줄) ← v7.0 신규
-- **대리점 페이지**: `/home/user/webapp/public/static/js/pages/agency.js` (400줄) ← v7.0 신규
+- 프론트엔드: `/home/user/webapp/public/static/js/` (22파일, 8,318줄)
+- **채널 페이지**: `/home/user/webapp/public/static/js/pages/channels.js` (145줄) ← v7.0
+- **대리점 페이지**: `/home/user/webapp/public/static/js/pages/agency.js` (400줄) ← v7.0
+- **대시보드 차트**: `/home/user/webapp/public/static/js/pages/dashboard.js` (~250줄) ← v8.0 Chart.js
+- **CSV 유틸리티**: `/home/user/webapp/public/static/js/core/ui.js` exportToCSV() ← v8.0
 - 마이그레이션: `/home/user/webapp/migrations/` (6파일)
 - 시드 데이터: `/home/user/webapp/seed.sql` + `/home/user/webapp/seed/`
 - 설계 문서: `/home/user/webapp/docs/`
