@@ -310,14 +310,16 @@ async function submitCreateOrg() {
 
 // ─── 수수료(정률/요율) 설정 ───
 async function renderHRCommission(el) {
-  const [commRes, orgsRes, leadersRes] = await Promise.all([
+  const [commRes, orgsRes, leadersRes, chRes] = await Promise.all([
     api('GET', '/hr/commission-policies'),
     api('GET', '/auth/organizations'),
     api('GET', '/auth/team-leaders'),
+    api('GET', '/hr/channels?active_only=1'),
   ]);
   const policies = commRes?.policies || [];
   const orgs = (orgsRes?.organizations || []).filter(o => o.org_type === 'REGION');
   const leaders = leadersRes?.team_leaders || [];
+  const channels = chRes?.channels || [];
 
   el.innerHTML = `
     <div class="bg-white rounded-xl p-4 mb-4 border border-gray-100 flex items-center justify-between">
@@ -332,7 +334,7 @@ async function renderHRCommission(el) {
       <table class="w-full text-sm">
         <thead class="bg-gray-50"><tr>
           <th class="px-4 py-3 text-left">ID</th><th class="px-4 py-3 text-left">지역법인</th>
-          <th class="px-4 py-3 text-left">대상 팀장</th><th class="px-4 py-3 text-center">유형</th>
+          <th class="px-4 py-3 text-left">대상 팀장</th><th class="px-4 py-3 text-left">채널</th><th class="px-4 py-3 text-center">유형</th>
           <th class="px-4 py-3 text-right">값</th><th class="px-4 py-3 text-left">적용시작</th>
           <th class="px-4 py-3 text-center">활성</th><th class="px-4 py-3 text-center">관리</th>
         </tr></thead>
@@ -341,6 +343,7 @@ async function renderHRCommission(el) {
             <td class="px-4 py-3 font-mono text-xs">${p.commission_policy_id}</td>
             <td class="px-4 py-3">${p.org_name}</td>
             <td class="px-4 py-3">${p.team_leader_name || '<span class="text-gray-400">법인 기본</span>'}</td>
+            <td class="px-4 py-3">${p.channel_name || '<span class="text-gray-400">전체</span>'}</td>
             <td class="px-4 py-3 text-center"><span class="status-badge ${p.mode === 'PERCENT' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}">${p.mode === 'PERCENT' ? '정률' : '정액'}</span></td>
             <td class="px-4 py-3 text-right font-bold">${p.mode === 'PERCENT' ? p.value + '%' : formatAmount(p.value)}</td>
             <td class="px-4 py-3 text-xs">${p.effective_from || '-'}</td>
@@ -354,7 +357,7 @@ async function renderHRCommission(el) {
               </div>
             </td>
           </tr>`).join('')}
-          ${policies.length === 0 ? '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-400">수수료 정책이 없습니다.</td></tr>' : ''}
+          ${policies.length === 0 ? '<tr><td colspan="9" class="px-4 py-8 text-center text-gray-400">수수료 정책이 없습니다.</td></tr>' : ''}
         </tbody>
       </table>
     </div>`;
@@ -362,6 +365,7 @@ async function renderHRCommission(el) {
   // 모달에서 사용할 데이터 저장
   window._commOrgs = orgs;
   window._commLeaders = leaders;
+  window._commChannels = channels;
 }
 
 function showCreateCommissionModal() {
@@ -388,7 +392,12 @@ function showCreateCommissionModal() {
           </select></div>
         <div><label class="block text-xs text-gray-500 mb-1">값 * (정률: %, 정액: 원)</label>
           <input name="value" type="number" step="0.1" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="7.5 또는 50000"></div>
-        <div class="col-span-2"><label class="block text-xs text-gray-500 mb-1">적용 시작일</label>
+        <div><label class="block text-xs text-gray-500 mb-1">적용 채널 (비워두면 전체)</label>
+          <select name="channel_id" class="w-full border rounded-lg px-3 py-2 text-sm">
+            <option value="">전체 채널</option>
+            ${(window._commChannels || []).map(ch => `<option value="${ch.channel_id}">${ch.name} (${ch.code})</option>`).join('')}
+          </select></div>
+        <div><label class="block text-xs text-gray-500 mb-1">적용 시작일</label>
           <input name="effective_from" type="date" value="${today}" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
       </div>
     </form>`;
@@ -412,6 +421,8 @@ async function submitCreateCommission() {
   data.value = Number(data.value);
   if (data.team_leader_id) data.team_leader_id = Number(data.team_leader_id);
   else delete data.team_leader_id;
+  if (data.channel_id) data.channel_id = Number(data.channel_id);
+  else delete data.channel_id;
   const res = await api('POST', '/hr/commission-policies', data);
   if (res?.commission_policy_id) { showToast('수수료 정책 등록 완료', 'success'); closeModal(); renderContent(); }
   else showToast(res?.error || '등록 실패', 'error');
@@ -591,9 +602,14 @@ async function renderHRAgency(el) {
         <i class="fas fa-store mr-1 text-teal-500"></i>대리점: <strong>${agencies.length}</strong>개
         <span class="ml-4 text-xs text-gray-400">팀장에게 대리점 권한을 부여하면 하위 팀장을 관리할 수 있습니다.</span>
       </div>
-      <button onclick="showPromoteAgencyModal()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
-        <i class="fas fa-store mr-1"></i>대리점 지정
-      </button>
+      <div class="flex gap-2">
+        <button onclick="showAgencyOnboardingModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">
+          <i class="fas fa-clipboard-list mr-1"></i>온보딩 관리
+        </button>
+        <button onclick="showPromoteAgencyModal()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
+          <i class="fas fa-store mr-1"></i>대리점 지정
+        </button>
+      </div>
     </div>
 
     ${agencies.length > 0 ? `

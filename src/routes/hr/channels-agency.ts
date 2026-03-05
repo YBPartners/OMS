@@ -226,8 +226,7 @@ export function mountAgency(router: Hono<Env>) {
       await db.prepare('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)').bind(user_id, roleRow.role_id).run();
     }
 
-    await createNotification(db, {
-      user_id: user_id,
+    await createNotification(db, user_id, {
       type: 'AGENCY_PROMOTED',
       title: '대리점 권한 부여',
       message: '대리점장 권한이 부여되었습니다. 하위 팀장 배정이 가능합니다.',
@@ -259,8 +258,7 @@ export function mountAgency(router: Hono<Env>) {
     // 하위 팀장 매핑 제거
     await db.prepare('DELETE FROM agency_team_mappings WHERE agency_user_id = ?').bind(user_id).run();
 
-    await createNotification(db, {
-      user_id: user_id,
+    await createNotification(db, user_id, {
       type: 'AGENCY_DEMOTED',
       title: '대리점 권한 해제',
       message: '대리점장 권한이 해제되었습니다.',
@@ -369,5 +367,124 @@ export function mountAgency(router: Hono<Env>) {
     `).bind(agency.parent_org_id, agencyUserId).all();
 
     return c.json({ candidates: result.results });
+  });
+
+  // ─── 대리점 온보딩 목록 조회 ───
+  router.get('/agency-onboarding', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const { status } = c.req.query();
+
+    let q = `
+      SELECT ao.*, u.name as agency_name, u.phone, u.login_id, u.org_id,
+             o.name as org_name, o.parent_org_id, po.name as region_name,
+             approver.name as approved_by_name
+      FROM agency_onboarding ao
+      JOIN users u ON ao.agency_user_id = u.user_id
+      JOIN organizations o ON u.org_id = o.org_id
+      LEFT JOIN organizations po ON o.parent_org_id = po.org_id
+      LEFT JOIN users approver ON ao.approved_by = approver.user_id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    if (status) { q += ' AND ao.status = ?'; params.push(status); }
+    if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
+      q += ' AND o.parent_org_id = ?';
+      params.push(user.org_id);
+    }
+    q += ' ORDER BY ao.created_at DESC';
+
+    const result = await db.prepare(q).bind(...params).all();
+    return c.json({ onboarding_requests: result.results });
+  });
+
+  // ─── 대리점 온보딩 신청 (팀장 → 대리점 전환 신청) ───
+  router.post('/agency-onboarding', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'TEAM_LEADER']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const body = await c.req.json();
+    const targetUserId = body.user_id || user.user_id;
+
+    // 이미 AGENCY_LEADER인지 확인
+    const existingRole = await db.prepare(`
+      SELECT 1 FROM user_roles ur JOIN roles r ON ur.role_id = r.role_id 
+      WHERE ur.user_id = ? AND r.code = 'AGENCY_LEADER'
+    `).bind(targetUserId).first();
+    if (existingRole) return c.json({ error: '이미 대리점 권한이 있습니다.' }, 409);
+
+    // 중복 신청 확인
+    const existing = await db.prepare(
+      "SELECT id FROM agency_onboarding WHERE agency_user_id = ? AND status = 'PENDING'"
+    ).bind(targetUserId).first();
+    if (existing) return c.json({ error: '이미 대기중인 온보딩 신청이 있습니다.' }, 409);
+
+    await db.prepare(`
+      INSERT INTO agency_onboarding (agency_user_id, status, note) VALUES (?, 'PENDING', ?)
+    `).bind(targetUserId, body.note || null).run();
+
+    await writeAuditLog(db, {
+      entity_type: 'USER', entity_id: targetUserId, action: 'AGENCY.ONBOARD_REQUEST',
+      actor_id: user.user_id, detail_json: JSON.stringify({ note: body.note }),
+    });
+
+    return c.json({ ok: true, message: '대리점 온보딩 신청이 접수되었습니다.' }, 201);
+  });
+
+  // ─── 대리점 온보딩 승인/반려 ───
+  router.put('/agency-onboarding/:id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const onboardId = Number(c.req.param('id'));
+    const body = await c.req.json();
+
+    if (!body.status || !['APPROVED', 'REJECTED'].includes(body.status)) {
+      return c.json({ error: 'status는 APPROVED 또는 REJECTED입니다.' }, 400);
+    }
+
+    const req = await db.prepare("SELECT * FROM agency_onboarding WHERE id = ? AND status = 'PENDING'").bind(onboardId).first() as any;
+    if (!req) return c.json({ error: '대기중인 온보딩 신청을 찾을 수 없습니다.' }, 404);
+
+    await db.prepare(`
+      UPDATE agency_onboarding SET status = ?, approved_by = ?, note = COALESCE(?, note), updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(body.status, user.user_id, body.note || null, onboardId).run();
+
+    // 승인 시 자동으로 AGENCY_LEADER 역할 부여
+    if (body.status === 'APPROVED') {
+      const roleRow = await db.prepare("SELECT role_id FROM roles WHERE code = 'AGENCY_LEADER'").first();
+      if (roleRow) {
+        await db.prepare('INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)').bind(req.agency_user_id, roleRow.role_id).run();
+      }
+
+      await createNotification(db, req.agency_user_id, {
+        type: 'AGENCY_PROMOTED',
+        title: '대리점 온보딩 승인',
+        message: '대리점 전환이 승인되었습니다. 하위 팀장 배정이 가능합니다.',
+      });
+    } else {
+      await createNotification(db, req.agency_user_id, {
+        type: 'SYSTEM',
+        title: '대리점 온보딩 반려',
+        message: body.note ? `반려 사유: ${body.note}` : '대리점 전환이 반려되었습니다.',
+      });
+    }
+
+    await writeAuditLog(db, {
+      entity_type: 'USER', entity_id: req.agency_user_id,
+      action: body.status === 'APPROVED' ? 'AGENCY.ONBOARD_APPROVED' : 'AGENCY.ONBOARD_REJECTED',
+      actor_id: user.user_id, detail_json: JSON.stringify({ onboard_id: onboardId, note: body.note }),
+    });
+
+    return c.json({ ok: true, message: `온보딩 ${body.status === 'APPROVED' ? '승인' : '반려'} 처리되었습니다.` });
   });
 }

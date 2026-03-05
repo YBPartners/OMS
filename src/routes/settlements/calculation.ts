@@ -31,7 +31,7 @@ export function mountCalculation(router: Hono<Env>) {
 
     // HQ_APPROVED 주문 조회 (정산 대상)
     const approvedOrders = await db.prepare(`
-      SELECT o.order_id, o.base_amount, o.requested_date,
+      SELECT o.order_id, o.base_amount, o.requested_date, o.channel_id,
              od.region_org_id,
              oa.team_leader_id,
              u.org_id as team_org_id
@@ -55,7 +55,8 @@ export function mountCalculation(router: Hono<Env>) {
 
     const policyMap = new Map<string, any>();
     for (const p of commPolicies.results as any[]) {
-      const key = p.team_leader_id ? `${p.org_id}:${p.team_leader_id}` : `${p.org_id}:null`;
+      const channelPart = p.channel_id ? `:ch${p.channel_id}` : '';
+      const key = p.team_leader_id ? `${p.org_id}:${p.team_leader_id}${channelPart}` : `${p.org_id}:null${channelPart}`;
       if (!policyMap.has(key)) policyMap.set(key, p);
     }
 
@@ -65,8 +66,11 @@ export function mountCalculation(router: Hono<Env>) {
 
     for (const order of approvedOrders.results as any[]) {
       try {
-        // 개인별 정책 → 조직 기본 정책 순서
-        let policy = policyMap.get(`${order.region_org_id}:${order.team_leader_id}`);
+        // 우선순위: 채널+개인 → 채널+조직 → 개인 → 조직 기본
+        const chId = order.channel_id;
+        let policy = chId ? policyMap.get(`${order.region_org_id}:${order.team_leader_id}:ch${chId}`) : null;
+        if (!policy && chId) policy = policyMap.get(`${order.region_org_id}:null:ch${chId}`);
+        if (!policy) policy = policyMap.get(`${order.region_org_id}:${order.team_leader_id}`);
         if (!policy) policy = policyMap.get(`${order.region_org_id}:null`);
 
         const mode: CommissionMode = (policy?.mode || 'PERCENT') as CommissionMode;

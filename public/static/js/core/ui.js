@@ -251,3 +251,25 @@ function throttle(fn, limit = 200) {
     if (now - lastTime >= limit) { lastTime = now; fn.apply(this, args); }
   };
 }
+
+// ─── 엑셀(xlsx) 내보내기 유틸 ───
+function exportToExcel(data, columns, filename, sheetName = 'Sheet1') {
+  if (!data || data.length === 0) { showToast('내보낼 데이터가 없습니다.', 'warning'); return; }
+  if (typeof XLSX === 'undefined') { showToast('엑셀 라이브러리 로딩 중...', 'warning'); return; }
+
+  const headers = columns.map(c => c.label);
+  const rows = data.map(row =>
+    columns.map(c => typeof c.value === 'function' ? c.value(row) : (row[c.key] ?? ''))
+  );
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = columns.map((c, i) => {
+    const maxLen = Math.max(c.label.length, ...rows.map(r => String(r[i] ?? '').length));
+    return { wch: Math.min(Math.max(maxLen + 2, 8), 40) };
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, `${filename}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  showToast(`${data.length}건 엑셀 내보내기 완료`, 'success');
+}

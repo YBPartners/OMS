@@ -17,10 +17,12 @@ export function mountCommission(router: Hono<Env>) {
     const db = c.env.DB;
 
     let query = `
-      SELECT cp.*, o.name as org_name, u.name as team_leader_name, u.login_id as team_leader_login_id
+      SELECT cp.*, o.name as org_name, u.name as team_leader_name, u.login_id as team_leader_login_id,
+             ch.name as channel_name
       FROM commission_policies cp
       JOIN organizations o ON cp.org_id = o.org_id
       LEFT JOIN users u ON cp.team_leader_id = u.user_id
+      LEFT JOIN order_channels ch ON cp.channel_id = ch.channel_id
       WHERE 1=1
     `;
     const params: any[] = [];
@@ -73,9 +75,9 @@ export function mountCommission(router: Hono<Env>) {
     }
 
     const result = await db.prepare(`
-      INSERT INTO commission_policies (org_id, team_leader_id, mode, value, effective_from)
-      VALUES (?, ?, ?, ?, ?)
-    `).bind(Number(body.org_id), teamLeaderId, body.mode, Number(body.value), effectiveFrom).run();
+      INSERT INTO commission_policies (org_id, team_leader_id, channel_id, mode, value, effective_from)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(Number(body.org_id), teamLeaderId, body.channel_id ? Number(body.channel_id) : null, body.mode, Number(body.value), effectiveFrom).run();
 
     await writeAuditLog(db, {
       entity_type: 'COMMISSION_POLICY', entity_id: result.meta.last_row_id as number,

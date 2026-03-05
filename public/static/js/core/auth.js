@@ -15,6 +15,7 @@ async function login(loginId, password) {
   if (res?._status === 200) {
     currentUser = res.user;
     setSessionId(res.session_id);
+    if (typeof startGlobalNotifPolling === 'function') startGlobalNotifPolling();
     render();
   } else {
     showToast(res?.error || '로그인 실패', 'error');
@@ -25,6 +26,8 @@ function logout() {
   api('POST', '/auth/logout');
   currentUser = null;
   setSessionId('');
+  if (typeof stopGlobalNotifPolling === 'function') stopGlobalNotifPolling();
+  if (typeof stopDashboardPolling === 'function') stopDashboardPolling();
   render();
 }
 
@@ -84,8 +87,14 @@ async function renderContent() {
   });
   
   try {
+    // 대시보드 폴링 관리
+    if (typeof stopDashboardPolling === 'function') stopDashboardPolling();
+    
     switch (currentPage) {
-      case 'dashboard': await renderDashboard(el); break;
+      case 'dashboard': 
+        await renderDashboard(el); 
+        if (typeof startDashboardPolling === 'function') startDashboardPolling();
+        break;
       case 'orders': await renderOrders(el); break;
       case 'distribute': await renderDistribute(el); break;
       case 'channels': await renderChannels(el); break;

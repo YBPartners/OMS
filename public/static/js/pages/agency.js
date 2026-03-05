@@ -398,3 +398,103 @@ async function showAgencyTeamOrdersDrawer(teamUserId, teamName) {
     footer: `<button onclick="closeDrawer()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm">닫기</button>`,
   });
 }
+
+// ════════ 대리점 온보딩 관리 (HQ/REGION 전용) ════════
+
+async function showAgencyOnboardingModal() {
+  const res = await api('GET', '/hr/agency-onboarding');
+  if (!res) return;
+  const requests = res.onboarding_requests || [];
+
+  const statusColors = { PENDING: 'bg-yellow-100 text-yellow-700', APPROVED: 'bg-green-100 text-green-700', REJECTED: 'bg-red-100 text-red-700' };
+  const statusLabels = { PENDING: '대기중', APPROVED: '승인', REJECTED: '반려' };
+
+  const content = `
+    <div class="space-y-4">
+      <div class="flex gap-2 mb-4">
+        <button onclick="showAgencyOnboardRequestModal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"><i class="fas fa-plus mr-1"></i>온보딩 신청</button>
+      </div>
+      ${requests.length === 0 ? '<p class="text-center text-gray-400 py-8">온보딩 신청 내역이 없습니다.</p>' : `
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50"><tr>
+          <th class="px-3 py-2 text-left">신청자</th>
+          <th class="px-3 py-2 text-left">소속</th>
+          <th class="px-3 py-2 text-center">상태</th>
+          <th class="px-3 py-2 text-left">비고</th>
+          <th class="px-3 py-2 text-left">신청일</th>
+          <th class="px-3 py-2 text-center">액션</th>
+        </tr></thead>
+        <tbody class="divide-y">${requests.map(r => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-3 py-2 font-medium">${r.agency_name}</td>
+            <td class="px-3 py-2 text-gray-600">${r.region_name || ''} / ${r.org_name}</td>
+            <td class="px-3 py-2 text-center"><span class="px-2 py-0.5 rounded text-xs font-medium ${statusColors[r.status] || 'bg-gray-100'}">${statusLabels[r.status] || r.status}</span></td>
+            <td class="px-3 py-2 text-gray-500 text-xs">${r.note || '-'}</td>
+            <td class="px-3 py-2 text-xs text-gray-500">${formatDate(r.created_at)}</td>
+            <td class="px-3 py-2 text-center">${r.status === 'PENDING' ? `
+              <button onclick="approveOnboarding(${r.id})" class="px-2 py-1 bg-green-500 text-white rounded text-xs mr-1 hover:bg-green-600">승인</button>
+              <button onclick="rejectOnboarding(${r.id})" class="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600">반려</button>
+            ` : `<span class="text-xs text-gray-400">${r.approved_by_name || '-'}</span>`}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`}
+    </div>`;
+
+  showModal('<i class="fas fa-store text-blue-500 mr-2"></i>대리점 온보딩 관리', content,
+    `<button onclick="closeModal()" class="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm">닫기</button>`, { large: true });
+}
+
+async function showAgencyOnboardRequestModal() {
+  closeModal();
+  const usersRes = await api('GET', '/hr/users');
+  const users = (usersRes?.users || []).filter(u => u.status === 'ACTIVE');
+
+  const content = `
+    <div class="space-y-4">
+      <div><label class="block text-sm font-medium mb-1">대상 팀장 선택</label>
+        <select id="onboard-user" class="w-full border rounded-lg px-3 py-2 text-sm">
+          <option value="">선택하세요</option>
+          ${users.map(u => `<option value="${u.user_id}">${u.name} (${u.login_id}) — ${u.org_name || ''}</option>`).join('')}
+        </select>
+      </div>
+      <div><label class="block text-sm font-medium mb-1">메모 (선택)</label>
+        <textarea id="onboard-note" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="온보딩 사유나 메모"></textarea>
+      </div>
+    </div>`;
+
+  const sid = '_onboard_' + Date.now();
+  showModal('<i class="fas fa-user-plus mr-2 text-blue-500"></i>온보딩 신청', content,
+    `<button onclick="closeModal();showAgencyOnboardingModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+     <button id="${sid}" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">신청</button>`);
+  document.getElementById(sid).addEventListener('click', async () => {
+    const userId = document.getElementById('onboard-user').value;
+    const note = document.getElementById('onboard-note').value;
+    if (!userId) { showToast('대상을 선택하세요', 'warning'); return; }
+    const res = await api('POST', '/hr/agency-onboarding', { user_id: Number(userId), note });
+    if (res?.ok) { showToast('온보딩 신청 완료', 'success'); closeModal(); showAgencyOnboardingModal(); }
+    else showToast(res?.error || '신청 실패', 'error');
+  });
+}
+
+async function approveOnboarding(id) {
+  showConfirmModal('온보딩 승인', '이 신청을 승인하면 자동으로 대리점 권한이 부여됩니다. 승인하시겠습니까?', async () => {
+    const res = await api('PUT', `/hr/agency-onboarding/${id}`, { status: 'APPROVED' });
+    if (res?.ok) { showToast('온보딩 승인 완료', 'success'); showAgencyOnboardingModal(); }
+    else showToast(res?.error || '처리 실패', 'error');
+  }, '승인', 'bg-green-600');
+}
+
+async function rejectOnboarding(id) {
+  const content = `<div class="space-y-3"><p class="text-gray-600">반려 사유를 입력해주세요.</p>
+    <textarea id="reject-note" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="반려 사유"></textarea></div>`;
+  const sid = '_reject_' + Date.now();
+  showModal('온보딩 반려', content,
+    `<button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+     <button id="${sid}" class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm">반려</button>`);
+  document.getElementById(sid).addEventListener('click', async () => {
+    const note = document.getElementById('reject-note').value;
+    const res = await api('PUT', `/hr/agency-onboarding/${id}`, { status: 'REJECTED', note });
+    if (res?.ok) { showToast('반려 완료', 'success'); closeModal(); showAgencyOnboardingModal(); }
+    else showToast(res?.error || '처리 실패', 'error');
+  });
+}

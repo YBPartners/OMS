@@ -492,3 +492,73 @@ async function showRegionDetailModal(orgId, regionName) {
     }, 200);
   }
 }
+
+// ════════ 대시보드 자동 폴링 ════════
+let _dashPollTimer = null;
+const _dashPollInterval = 60000; // 60초
+
+function startDashboardPolling() {
+  stopDashboardPolling();
+  _dashPollTimer = setInterval(async () => {
+    if (typeof currentPage !== 'undefined' && currentPage !== 'dashboard') {
+      stopDashboardPolling();
+      return;
+    }
+    try {
+      const [dashRes, unreadRes] = await Promise.all([
+        api('GET', '/stats/dashboard'),
+        api('GET', '/notifications/unread-count'),
+      ]);
+      if (dashRes?.today) _updateDashCards(dashRes);
+      if (unreadRes?.unread_count !== undefined) _updateNotifBadge(unreadRes.unread_count);
+    } catch (e) { /* 폴링 실패 무시 */ }
+  }, _dashPollInterval);
+}
+
+function stopDashboardPolling() {
+  if (_dashPollTimer) { clearInterval(_dashPollTimer); _dashPollTimer = null; }
+}
+
+function _updateDashCards(dashRes) {
+  const d = dashRes.today || {};
+  const values = [
+    d.total || 0, dashRes.today_received || 0, dashRes.pending_review || 0,
+    dashRes.pending_hq_review || 0, d.hq_approved || 0, d.settlement_confirmed || 0,
+    d.rejected || 0, formatAmount(d.total_amount),
+  ];
+  const countEls = document.querySelectorAll('.ix-count-animate');
+  countEls.forEach((el, i) => {
+    if (i < values.length) {
+      const newVal = String(values[i]);
+      if (el.textContent !== newVal) {
+        el.style.transition = 'color 0.3s, transform 0.3s';
+        el.style.color = '#2563eb';
+        el.style.transform = 'scale(1.15)';
+        el.textContent = newVal;
+        setTimeout(() => { el.style.color = ''; el.style.transform = ''; }, 600);
+      }
+    }
+  });
+}
+
+function _updateNotifBadge(count) {
+  document.querySelectorAll('.notif-badge-count').forEach(el => {
+    el.textContent = count > 99 ? '99+' : count;
+    el.style.display = count > 0 ? '' : 'none';
+  });
+}
+
+// ════════ 글로벌 알림 폴링 (30초) ════════
+let _globalNotifTimer = null;
+function startGlobalNotifPolling() {
+  if (_globalNotifTimer) return;
+  _globalNotifTimer = setInterval(async () => {
+    try {
+      const res = await api('GET', '/notifications/unread-count');
+      if (res?.unread_count !== undefined) _updateNotifBadge(res.unread_count);
+    } catch (e) { /* ignore */ }
+  }, 30000);
+}
+function stopGlobalNotifPolling() {
+  if (_globalNotifTimer) { clearInterval(_globalNotifTimer); _globalNotifTimer = null; }
+}

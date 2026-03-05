@@ -98,6 +98,7 @@ function showRunContextMenu(event, run) {
     { divider: true },
     { icon: 'fa-print', label: '보고서 인쇄', action: () => printSettlementReport(r.run_id) },
     { icon: 'fa-file-csv', label: 'CSV 내보내기', action: () => exportSettlementCSV(r.run_id) },
+    { icon: 'fa-file-excel', label: '엑셀 내보내기', action: () => exportSettlementExcel(r.run_id) },
     { divider: true },
     { icon: 'fa-scale-balanced', label: '대사 페이지로 이동', action: () => navigateTo('reconciliation') },
     { icon: 'fa-chart-bar', label: '통계 확인', action: () => navigateTo('statistics') }
@@ -755,4 +756,29 @@ ${st.leaders.map(l => `<div class="section">${l.name} — ${l.count}건</div>
 
   const w = window.open('', '_blank', 'width=900,height=700');
   if (w) { w.document.write(html); w.document.close(); }
+}
+
+// ════════ 정산 엑셀 내보내기 ════════
+async function exportSettlementExcel(runId) {
+  showToast('엑셀 생성 중...', 'info');
+  const res = await api('GET', `/settlements/runs/${runId}/export`);
+  if (!res?.rows) return showToast('내보내기 실패', 'error');
+
+  const columns = [
+    { label: '정산ID', key: 'settlement_id' },
+    { label: '주문ID', key: 'order_id' },
+    { label: '외부주문번호', key: 'external_order_no' },
+    { label: '고객명', key: 'customer_name' },
+    { label: '주소', key: 'address_text' },
+    { label: '기본금액', key: 'base_amount' },
+    { label: '수수료방식', key: 'commission_mode' },
+    { label: '수수료율', key: 'commission_rate' },
+    { label: '수수료', key: 'commission_amount' },
+    { label: '지급액', key: 'payable_amount' },
+    { label: '상태', key: 'status' },
+    { label: '팀장', key: 'team_leader_name' },
+    { label: '지역법인', key: 'region_name' },
+  ];
+
+  exportToExcel(res.rows, columns, `settlement_run_${runId}`, '정산내역');
 }
