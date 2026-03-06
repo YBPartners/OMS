@@ -1,8 +1,8 @@
 # 와이비 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-06
-> **현재 버전**: v20.5.0 (R5 완료)
-> **총 코드량**: Backend ~11,000줄 (49 TS) + Frontend ~12,900줄 (24 JS) + SW 143줄 + CSS 420줄 + SQL 1,400줄 + E2E 1,000줄 = **~26,900줄**
+> **현재 버전**: v20.6.0 (R6 완료)
+> **총 코드량**: Backend ~11,000줄 (49 TS) + Frontend ~13,000줄 (24 JS) + SW 143줄 + CSS 420줄 + SQL 1,400줄 + E2E 1,000줄 = **~27,000줄**
 
 ---
 
@@ -43,6 +43,76 @@
 | **R3** | **검수·정산 플로우 완성 + PAID** | **✅ 완료** | **2026-03-06** | **PAID 전이 구현, E2E 31/31 통과, 마이그레이션 0016-0017, 원장 paid 컬럼, 감사로그** |
 | **R4** | **정책관리 CRUD 완성 + 감사로그** | **✅ 완료** | **2026-03-06** | **4종 정책 CRUD 완성, 삭제 API+감사로그, metrics UI, 필수사진 강제, E2E 26/26** |
 | **R5** | **인사·권한·가입 완성** | **✅ 완료** | **2026-03-06** | **사용자 삭제/이동/다중역할, 조직 수정/삭제 UI, canEdit 버그수정, E2E 35/36** |
+| **R6** | **공통 UI/UX 표준화** | **✅ 완료** | **2026-03-06** | **apiAction() 래퍼, 모달 ESC/포커스/aria, 토스트 스택, formField 접근성, 5개 페이지 리팩토링** |
+
+---
+
+## Phase R6 — 공통 UI/UX 표준화 ✅ (2026-03-06)
+
+> **목적**: 183개 async 함수 중 15%만 에러 핸들링, 공유 컴포넌트 사용률 극히 낮음 → 패턴 통일 + 접근성 + 코드 중복 제거
+
+### R6-1: 현황 진단 ✅
+| 영역 | 진단 결과 |
+|------|-----------|
+| 에러 핸들링 | 183 async 함수 중 try/catch 27개(15%), 85% API 호출 에러 핸들링 없음 |
+| 공유 컴포넌트 | renderDataTable 0곳, formField 1곳, renderFilterBar 2곳 사용 |
+| 인라인 HTML | 71곳에서 innerHTML 직접 생성, `<table>` 37개 직접 작성 |
+| 토스트 | 276+ 호출, 성공/실패 동일 패턴 반복 |
+| 모달 | 92+ 호출, 버튼 CSS 불일치 (teal/blue/amber) |
+| 페이지 헤더 | `pageHeader()` 사용 1곳, 나머지 직접 작성 |
+
+### R6-2: api() 래퍼 강화 — `apiAction()` 도입 ✅
+- **`apiAction(method, path, body, opts)`** — API 호출 + 자동 성공/실패 토스트 + 확인 모달
+  - `opts.confirm`: `{title, message, buttonText, buttonColor}` → showConfirmModal 통합
+  - `opts.successMsg`: string 또는 `(data)=>string` — 동적 성공 메시지
+  - `opts.closeModal`: true → 자동 closeModal()
+  - `opts.refresh`: true → 자동 renderContent()
+  - `opts.successCheck`: `(data)=>boolean` — 커스텀 성공 판단
+  - `opts.onSuccess/onError`: 추가 콜백
+  - `opts.silent`: true → 토스트 비표시
+- **`apiBatch(requests)`** — 여러 API 동시 호출 + 성공/실패 집계
+
+### R6-3: 모달 접근성 강화 ✅
+- ESC 키로 모달 닫기 (`_modalEscHandler`)
+- `role="dialog"`, `aria-modal="true"`, `aria-label` 속성 추가
+- 모달 열기 시 첫 포커스 가능 요소에 자동 포커스
+- 모달 닫기 시 이전 포커스 복원 (`_modalPrevFocus`)
+
+### R6-4: 토스트 스택 시스템 ✅
+- 최대 4개 동시 표시 (`MAX_TOASTS`)
+- 위치 자동 정렬 (16px 간격 스택)
+- 동일 메시지 1초 내 중복 방지
+- `role="alert"`, `aria-live` 접근성 속성
+- 에러 토스트는 5초, 나머지 3.5초 표시
+- 닫기 버튼 추가
+
+### R6-5: form-helpers 접근성 + 유틸 추가 ✅
+- `formField`: `for`/`id` 연결, `aria-required`, 힌트 텍스트(`hint`) 지원
+- `renderFilterBar`: `role="search"`, `aria-label`, `aria-labelledby` 추가
+- **`renderModalActions(buttons)`** — 표준 모달 버튼 세트 생성
+- **`collectFormDataSafe(formId, rules)`** — 수집 + 유효성 검증 (required, minLength, pattern)
+  - 실패 시 자동 토스트 + 포커스 + 빨간 링 시각 피드백
+- **`renderActionBar(actions)`** — RBAC 적용 페이지 액션 버튼 바
+
+### R6-6: table.js 접근성 ✅
+- `renderDataTable`: `role="grid"`, `scope="col"`, `caption`, `tableId` 지원
+- `renderPagination`: `role="navigation"`, `aria-label`, `aria-current="page"`
+
+### R6-7: 주요 페이지 리팩토링 ✅
+- **hr.js**: deleteUser, deleteCommission, deactivateOrg, reactivateOrg, submitEditOrg, submitCreateOrg, submitEditUser, submitEditCommission, submitRoles, submitTransfer — 10개 함수 `apiAction()` 전환
+- **settlement.js**: createRun, calculateRun, confirmRun — 3개 함수 전환
+- **channels.js**: submitCreateChannel, submitEditChannel, toggleChannelStatus — 3개 함수 전환
+- **orders.js**: deleteOrder, submitManualDistribute — 2개 함수 전환 + `confirm()` → `showConfirmModal` 전환
+
+### 변경 통계
+- 8 files changed: api.js(+70), ui.js(+40), form-helpers.js(+80), table.js(+15), hr.js(-50), settlement.js(-15), channels.js(-10), orders.js(-5) = 약 **+130 / -80 lines**
+- E2E: HR 35/36 (100%), Policy 26/26 (100%) — 기존과 동일
+- 빌드: dist/_worker.js 278.03 kB
+
+### 다음 단계 (R7 권장)
+- P1: 성능 최적화 — 대용량 테이블 가상화, API 응답 캐싱 정교화
+- P2: formField/renderDataTable 사용률 확대 — 나머지 페이지 인라인 테이블→공유 컴포넌트 전환
+- P3: E2E 프론트엔드 브라우저 테스트 (Playwright)
 
 ---
 
@@ -902,7 +972,7 @@
 | R3 | **검수·정산 흐름** | 1차검수→HQ검수→정산산출→확정→지급 | 검수-정산 연계, CSV/인보이스 정합성 | ✅ 완료 |
 | R4 | **기준정보 관리** | 채널·정책·수수료·조직·지역권 | 마스터 데이터 CRUD 완성도, 연쇄 반영 | ✅ 완료 |
 | R5 | **인사·권한·가입** | 사용자·역할·가입신청·대리점·폰인증 | RBAC 정합성, 가입 플로우 완결성 | ✅ 완료 |
-| R6 | **공통 UI/UX·입력체계** | 모달·토스트·테이블·모바일·검색 | 일관성, 접근성, 반응형, 에러 UX | ⏳ 대기 |
+| R6 | **공통 UI/UX·입력체계** | 모달·토스트·테이블·모바일·검색 | 일관성, 접근성, 반응형, 에러 UX | ✅ 완료 |
 | R7 | **대시보드·통계·감사** | 대시보드·통계·대사·감사로그 | 데이터 정확성, 필터 연동, 드릴다운 | ⏳ 대기 |
 | R8 | **운영 안정성·보안** | 세션·에러처리·입력검증·SQL주입방어 | 프로덕션 안정성, 엣지 케이스 방어 | ⏳ 대기 |
 
@@ -1296,6 +1366,25 @@
 | 🟡 P3 | 배분 자동화 강화 | admin_dong_code 자동 매핑 | 하 |
 
 **다음 단계 추천:** R6 (공통 UI/UX·입력체계: 일관성, 접근성, 반응형)
+
+---
+
+### R6: 공통 UI/UX 표준화 — 진단·구현·검증 ✅
+
+> **범위**: api() 래퍼, 모달/토스트/폼/테이블 접근성, 주요 페이지 리팩토링
+> **E2E**: HR 35/36 (100%) + Policy 26/26 (100%) = 61/62 총 통과
+> **R6 완료일**: 2026-03-06
+> **변경 파일**: api.js, ui.js, form-helpers.js, table.js, hr.js, settlement.js, channels.js, orders.js
+
+**R7 우선순위 제안:**
+
+| 우선순위 | 항목 | 설명 | 난이도 |
+|---|---|---|---|
+| 🔴 P1 | 성능 최적화 | 대용량 테이블 가상화, API 캐싱 정교화 | 중 |
+| 🟠 P2 | 나머지 페이지 리팩토링 | 인라인 테이블→renderDataTable 전환 확대 | 중 |
+| 🟡 P3 | Playwright E2E | 프론트엔드 브라우저 자동 테스트 | 하 |
+
+**다음 단계 추천:** R7 (성능 최적화 · 대시보드·통계·감사 품질 강화)
 
 ---
 

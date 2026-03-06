@@ -205,9 +205,9 @@ async function submitEditUser(userId) {
   const data = Object.fromEntries(new FormData(document.getElementById('edit-user-form')));
   data.org_id = Number(data.org_id);
   delete data.user_id;
-  const res = await api('PUT', `/hr/users/${userId}`, data);
-  if (res?.ok) { showToast('수정 완료', 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '수정 실패', 'error');
+  await apiAction('PUT', `/hr/users/${userId}`, data, {
+    successMsg: '수정 완료', closeModal: true, refresh: true
+  });
 }
 
 // ─── ID/PW 설정 모달 ───
@@ -320,9 +320,10 @@ async function showCreateOrgModal() {
 
 async function submitCreateOrg() {
   const data = Object.fromEntries(new FormData(document.getElementById('create-org-form')));
-  const res = await api('POST', '/hr/organizations', data);
-  if (res?.org_id) { showToast('조직 등록 완료', 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '등록 실패', 'error');
+  await apiAction('POST', '/hr/organizations', data, {
+    successMsg: '조직 등록 완료', closeModal: true, refresh: true,
+    successCheck: d => !!d?.org_id
+  });
 }
 
 // ─── 조직 수정 모달 ───
@@ -340,23 +341,22 @@ function showEditOrgModal(o) {
 }
 async function submitEditOrg(orgId) {
   const data = { name: document.getElementById('eo-name')?.value, code: document.getElementById('eo-code')?.value || null };
-  const res = await api('PUT', `/hr/organizations/${orgId}`, data);
-  if (res?.ok) { showToast('조직 수정 완료', 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '수정 실패', 'error');
+  await apiAction('PUT', `/hr/organizations/${orgId}`, data, {
+    successMsg: '조직 수정 완료', closeModal: true, refresh: true
+  });
 }
 
 // ─── 조직 비활성화/활성화 ───
 async function deactivateOrg(orgId, orgName) {
-  showConfirmModal('조직 비활성화', `"${orgName}" 조직을 비활성화하시겠습니까?\n(활성 멤버가 있으면 비활성화할 수 없습니다)`, async () => {
-    const res = await api('DELETE', `/hr/organizations/${orgId}`);
-    if (res?.ok) { showToast('비활성화 완료', 'success'); renderContent(); }
-    else showToast(res?.error || '실패', 'error');
+  await apiAction('DELETE', `/hr/organizations/${orgId}`, null, {
+    confirm: { title: '조직 비활성화', message: `"${orgName}" 조직을 비활성화하시겠습니까?\n(활성 멤버가 있으면 비활성화할 수 없습니다)` },
+    successMsg: '비활성화 완료', refresh: true
   });
 }
 async function reactivateOrg(orgId) {
-  const res = await api('PUT', `/hr/organizations/${orgId}`, { status: 'ACTIVE' });
-  if (res?.ok) { showToast('활성화 완료', 'success'); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  await apiAction('PUT', `/hr/organizations/${orgId}`, { status: 'ACTIVE' }, {
+    successMsg: '활성화 완료', refresh: true
+  });
 }
 
 // ─── 수수료(정률/요율) 설정 ───
@@ -507,18 +507,16 @@ function showEditCommissionModal(policyId, policyData) {
 async function submitEditCommission(policyId) {
   const data = Object.fromEntries(new FormData(document.getElementById('edit-comm-form')));
   data.value = Number(data.value);
-  const res = await api('PUT', `/hr/commission-policies/${policyId}`, data);
-  if (res?.ok) { showToast('수수료 정책 수정 완료', 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '수정 실패', 'error');
+  await apiAction('PUT', `/hr/commission-policies/${policyId}`, data, {
+    successMsg: '수수료 정책 수정 완료', closeModal: true, refresh: true
+  });
 }
 
 async function deleteCommission(policyId) {
-  showConfirmModal('수수료 정책 삭제', `정책 #${policyId}를 삭제하시겠습니까?`,
-    async () => {
-      const res = await api('DELETE', `/hr/commission-policies/${policyId}`);
-      if (res?.ok) { showToast('삭제 완료', 'success'); renderContent(); }
-      else showToast(res?.error || '삭제 실패', 'error');
-    }, '삭제', 'bg-red-600');
+  await apiAction('DELETE', `/hr/commission-policies/${policyId}`, null, {
+    confirm: { title: '수수료 정책 삭제', message: `정책 #${policyId}를 삭제하시겠습니까?`, buttonText: '삭제', buttonColor: 'bg-red-600' },
+    successMsg: '삭제 완료', refresh: true
+  });
 }
 
 // ─── 핸드폰 인증 ───
@@ -647,10 +645,9 @@ function showHRUserContextMenu(event, user) {
 
 // ─── HR 사용자 삭제 ───
 async function deleteUser(userId, name) {
-  showConfirmModal('사용자 삭제', `"${name}" 사용자를 삭제하시겠습니까?\n(진행중인 주문이 있으면 삭제할 수 없습니다)`, async () => {
-    const res = await api('DELETE', `/hr/users/${userId}`);
-    if (res?.ok) { showToast(res.message, 'success'); renderContent(); }
-    else showToast(res?.error || '삭제 실패', 'error');
+  await apiAction('DELETE', `/hr/users/${userId}`, null, {
+    confirm: { title: '사용자 삭제', message: `"${name}" 사용자를 삭제하시겠습니까?\n(진행중인 주문이 있으면 삭제할 수 없습니다)`, buttonText: '삭제', buttonColor: 'bg-red-600' },
+    refresh: true
   });
 }
 
@@ -677,9 +674,9 @@ async function showRolesModal(userId, name, currentRoles) {
 async function submitRoles(userId) {
   const checked = [...document.querySelectorAll('.role-cb:checked')].map(cb => cb.value);
   if (checked.length === 0) { showToast('하나 이상의 역할을 선택하세요.', 'warning'); return; }
-  const res = await api('POST', `/hr/users/${userId}/roles`, { roles: checked });
-  if (res?.ok) { showToast(res.message, 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  await apiAction('POST', `/hr/users/${userId}/roles`, { roles: checked }, {
+    closeModal: true, refresh: true
+  });
 }
 
 // ─── 사용자 조직 이동 모달 ───
@@ -699,9 +696,9 @@ async function showTransferModal(userId, name) {
 async function submitTransfer(userId) {
   const orgId = document.getElementById('transfer-org')?.value;
   if (!orgId) { showToast('조직을 선택하세요.', 'warning'); return; }
-  const res = await api('POST', `/hr/users/${userId}/transfer`, { org_id: +orgId });
-  if (res?.ok) { showToast(res.message, 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  await apiAction('POST', `/hr/users/${userId}/transfer`, { org_id: +orgId }, {
+    closeModal: true, refresh: true
+  });
 }
 
 // ─── 대리점(AGENCY) 관리 탭 ───

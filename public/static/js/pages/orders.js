@@ -778,10 +778,10 @@ async function matchEditAdminDongCode(sido, sigungu, dong) {
 
 // ─── 주문 삭제 ───
 async function deleteOrder(orderId, customerName) {
-  if (!confirm(`주문 #${orderId} (${customerName || '고객명 미상'})을(를) 삭제하시겠습니까?\n\n삭제된 주문은 복구할 수 없습니다.`)) return;
-  const res = await api('DELETE', `/orders/${orderId}`);
-  if (res?.ok) { showToast('주문이 삭제되었습니다.', 'success'); renderContent(); }
-  else showToast(res?.error || '삭제 실패', 'error');
+  await apiAction('DELETE', `/orders/${orderId}`, null, {
+    confirm: { title: '주문 삭제', message: `주문 #${orderId} (${customerName || '고객명 미상'})을(를) 삭제하시겠습니까?<br><span class="text-xs text-red-500">삭제된 주문은 복구할 수 없습니다.</span>`, buttonText: '삭제', buttonColor: 'bg-red-600' },
+    successMsg: '주문이 삭제되었습니다.', refresh: true
+  });
 }
 
 // ─── 일괄 수신 모달 ───
@@ -1054,9 +1054,9 @@ async function showManualDistributeModal(orderId, customerName, addressText) {
 }
 async function submitManualDistribute(orderId) {
   const regionOrgId = Number(document.getElementById('manual-region').value);
-  const res = await api('PATCH', `/orders/${orderId}/distribution`, { region_org_id: regionOrgId });
-  if (res?.ok) { showToast('수동 배분 완료', 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '배분 실패', 'error');
+  await apiAction('PATCH', `/orders/${orderId}/distribution`, { region_org_id: regionOrgId }, {
+    successMsg: '수동 배분 완료', closeModal: true, refresh: true
+  });
 }
 
 // ─── 선택 일괄 배분 모달 (배분관리 페이지 — 여러 주문 → 지역총판) ───

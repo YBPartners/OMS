@@ -107,3 +107,71 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function getSessionId() { return _sessionId; }
 function setSessionId(id) { _sessionId = id; if (id) localStorage.setItem('session_id', id); else localStorage.removeItem('session_id'); }
+
+// ─── API 액션 래퍼 (POST/PUT/PATCH/DELETE + 자동 토스트/로딩) ───
+/**
+ * API 호출을 수행하고, 성공/실패를 자동으로 토스트로 표시
+ * @param {string} method - HTTP 메서드 (POST, PUT, PATCH, DELETE)
+ * @param {string} path - API 경로
+ * @param {Object|null} body - 요청 본문
+ * @param {Object} opts - 옵션
+ *   successMsg: 성공 시 토스트 메시지 (string 또는 (data)=>string)
+ *   errorMsg: 실패 시 기본 에러 메시지
+ *   confirm: {title, message, buttonText?, buttonColor?} 확인 모달 표시 후 실행
+ *   onSuccess: (data) => void  성공 시 추가 콜백
+ *   onError: (data) => void  실패 시 추가 콜백
+ *   silent: true 시 토스트 표시 안 함
+ *   refresh: true 시 성공 후 renderContent() 호출
+ *   closeModal: true 시 성공 후 closeModal() 호출
+ *   successCheck: (data) => boolean  성공 여부 판단 (기본: data?.ok 또는 data?._status < 400)
+ * @returns {Promise<Object|null>}
+ */
+async function apiAction(method, path, body = null, opts = {}) {
+  const exec = async () => {
+    const res = await api(method, path, body);
+    if (!res) return null;
+
+    const isSuccess = opts.successCheck
+      ? opts.successCheck(res)
+      : (res.ok || res._status < 400);
+
+    if (isSuccess) {
+      if (!opts.silent) {
+        const msg = typeof opts.successMsg === 'function' ? opts.successMsg(res) : (opts.successMsg || res.message || '완료');
+        showToast(msg, 'success');
+      }
+      if (opts.closeModal) closeModal();
+      if (opts.refresh) renderContent();
+      if (opts.onSuccess) opts.onSuccess(res);
+    } else {
+      if (!opts.silent) {
+        showToast(res.error || opts.errorMsg || '처리에 실패했습니다.', 'error');
+      }
+      if (opts.onError) opts.onError(res);
+    }
+    return res;
+  };
+
+  if (opts.confirm) {
+    return new Promise(resolve => {
+      showConfirmModal(
+        opts.confirm.title || '확인',
+        opts.confirm.message || '계속하시겠습니까?',
+        async () => resolve(await exec()),
+        opts.confirm.buttonText || '확인',
+        opts.confirm.buttonColor || 'bg-blue-600'
+      );
+    });
+  }
+  return exec();
+}
+
+// ─── Batch API (여러 요청 동시 실행 + 결과 집계) ───
+async function apiBatch(requests) {
+  const results = await Promise.allSettled(
+    requests.map(r => api(r.method, r.path, r.body))
+  );
+  const success = results.filter(r => r.status === 'fulfilled' && r.value?.ok).length;
+  const fail = results.length - success;
+  return { success, fail, total: results.length, results };
+}

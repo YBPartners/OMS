@@ -142,34 +142,32 @@ function showCreateRunModal() {
 }
 
 async function createRun() {
-  const res = await api('POST', '/settlements/runs', {
+  await apiAction('POST', '/settlements/runs', {
     period_type: document.getElementById('run-type').value,
     period_start: document.getElementById('run-start').value,
     period_end: document.getElementById('run-end').value,
+  }, {
+    successCheck: d => !!d?.run_id,
+    successMsg: d => `Run #${d.run_id} 생성 완료`,
+    closeModal: true, refresh: true
   });
-  if (res?.run_id) { showToast(`Run #${res.run_id} 생성 완료`, 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '생성 실패', 'error');
 }
 
 async function calculateRun(runId) {
-  showConfirmModal('정산 산출', `Run #${runId}의 정산을 산출하시겠습니까?<br><span class="text-xs text-gray-400">수수료 정책에 따라 자동 계산됩니다.</span>`,
-    async () => {
-      showToast('산출 중...', 'info');
-      const res = await api('POST', `/settlements/runs/${runId}/calculate`);
-      if (res?.run_id) {
-        showToast(`산출 완료 — ${res.total_orders}건, 지급액 ${formatAmount(res.total_payable_amount)}`, 'success');
-        renderContent();
-      } else showToast(res?.error || '산출 실패', 'error');
-    }, '산출 실행', 'bg-blue-600');
+  await apiAction('POST', `/settlements/runs/${runId}/calculate`, null, {
+    confirm: { title: '정산 산출', message: `Run #${runId}의 정산을 산출하시겠습니까?<br><span class="text-xs text-gray-400">수수료 정책에 따라 자동 계산됩니다.</span>`, buttonText: '산출 실행', buttonColor: 'bg-blue-600' },
+    successCheck: d => !!d?.run_id,
+    successMsg: d => `산출 완료 — ${d.total_orders}건, 지급액 ${formatAmount(d.total_payable_amount)}`,
+    refresh: true
+  });
 }
 
 async function confirmRun(runId) {
-  showConfirmModal('정산 확정', `Run #${runId}의 정산을 확정하시겠습니까?<br><span class="text-xs text-red-500">확정 후에는 되돌릴 수 없습니다.</span>`,
-    async () => {
-      const res = await api('POST', `/settlements/runs/${runId}/confirm`);
-      if (res?.ok) { showToast(`확정 완료 — ${res.confirmed_count}건`, 'success'); renderContent(); }
-      else showToast(res?.error || '확정 실패', 'error');
-    }, '확정', 'bg-green-600');
+  await apiAction('POST', `/settlements/runs/${runId}/confirm`, null, {
+    confirm: { title: '정산 확정', message: `Run #${runId}의 정산을 확정하시겠습니까?<br><span class="text-xs text-red-500">확정 후에는 되돌릴 수 없습니다.</span>`, buttonText: '확정', buttonColor: 'bg-green-600' },
+    successMsg: d => `확정 완료 — ${d.confirmed_count}건`,
+    refresh: true
+  });
 }
 
 async function viewRunDetail(runId) {

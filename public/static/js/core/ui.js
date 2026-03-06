@@ -21,39 +21,101 @@ function statusBadge(status) {
   return `<span class="status-badge ${s.color}"><i class="fas ${s.icon} mr-1"></i>${s.label}</span>`;
 }
 
-// ─── 토스트 ───
+// ─── 토스트 (스택 지원, 접근성, 중복 방지) ───
+const _toastStack = [];
+const MAX_TOASTS = 4;
+
 function showToast(msg, type = 'info') {
   const colors = { info: 'bg-blue-500', success: 'bg-green-500', error: 'bg-red-500', warning: 'bg-yellow-500 text-gray-900' };
   const icons = { info: 'fa-info-circle', success: 'fa-check-circle', error: 'fa-exclamation-triangle', warning: 'fa-exclamation-circle' };
-  // 중복 제거
-  document.querySelectorAll('.oms-toast').forEach(el => el.remove());
+
+  // 동일 메시지 중복 방지 (1초 내)
+  const now = Date.now();
+  if (_toastStack.some(t => t.msg === msg && now - t.ts < 1000)) return;
+
+  // 최대 스택 초과 시 가장 오래된 것 제거
+  while (_toastStack.length >= MAX_TOASTS) {
+    const oldest = _toastStack.shift();
+    oldest.el.remove();
+  }
+
   const el = document.createElement('div');
-  el.className = `oms-toast fixed top-4 right-4 z-[60] px-6 py-3 rounded-lg text-white shadow-xl ${colors[type]} fade-in flex items-center gap-2`;
-  el.innerHTML = `<i class="fas ${icons[type]}"></i><span>${msg}</span>`;
+  el.className = `oms-toast fixed right-4 z-[60] px-6 py-3 rounded-lg text-white shadow-xl ${colors[type]} fade-in flex items-center gap-2`;
+  el.setAttribute('role', 'alert');
+  el.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
+  el.innerHTML = `<i class="fas ${icons[type]}"></i><span>${msg}</span>
+    <button onclick="this.parentElement.remove()" class="ml-2 opacity-70 hover:opacity-100" aria-label="닫기"><i class="fas fa-times text-xs"></i></button>`;
+
+  // 스택 위치 계산
+  const topOffset = 16 + _toastStack.length * 56;
+  el.style.top = topOffset + 'px';
+
   document.body.appendChild(el);
-  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 300); }, 3500);
+  const entry = { el, msg, ts: now };
+  _toastStack.push(entry);
+
+  const dismiss = () => {
+    el.style.opacity = '0'; el.style.transition = 'opacity 0.3s';
+    setTimeout(() => {
+      el.remove();
+      const idx = _toastStack.indexOf(entry);
+      if (idx !== -1) _toastStack.splice(idx, 1);
+      // 위치 재정렬
+      _toastStack.forEach((t, i) => { t.el.style.top = (16 + i * 56) + 'px'; });
+    }, 300);
+  };
+  setTimeout(dismiss, type === 'error' ? 5000 : 3500);
 }
 
-// ─── 모달 시스템 (강화) ───
+// ─── 모달 시스템 (강화: ESC닫기, 포커스트랩, aria) ───
+let _modalPrevFocus = null;
+
 function showModal(title, content, actions = '', options = {}) {
   closeModal();
+  _modalPrevFocus = document.activeElement;
   const sizeClass = options.xlarge ? 'max-w-6xl' : options.large ? 'max-w-4xl' : options.small ? 'max-w-md' : 'max-w-2xl';
   const html = `
-    <div id="modal-overlay" class="fixed inset-0 z-50 modal-overlay flex items-center justify-center p-4" onclick="if(event.target===this)closeModal()">
+    <div id="modal-overlay" class="fixed inset-0 z-50 modal-overlay flex items-center justify-center p-4" 
+      onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" aria-label="${title.replace(/<[^>]*>/g, '')}">
       <div class="bg-white rounded-2xl shadow-2xl ${sizeClass} w-full max-h-[85vh] flex flex-col fade-in">
         <div class="flex items-center justify-between px-6 py-4 border-b bg-gray-50 rounded-t-2xl">
           <h3 class="text-lg font-bold text-gray-800">${title}</h3>
-          <button onclick="closeModal()" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition"><i class="fas fa-times"></i></button>
+          <button onclick="closeModal()" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition" aria-label="모달 닫기"><i class="fas fa-times"></i></button>
         </div>
         <div class="flex-1 overflow-y-auto px-6 py-5">${content}</div>
         ${actions ? `<div class="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50 rounded-b-2xl">${actions}</div>` : ''}
       </div>
     </div>`;
   document.body.insertAdjacentHTML('beforeend', html);
+
+  // ESC 키로 닫기
+  document.addEventListener('keydown', _modalEscHandler);
+
+  // 첫 번째 포커스 가능 요소에 포커스
+  requestAnimationFrame(() => {
+    const overlay = document.getElementById('modal-overlay');
+    if (overlay) {
+      const focusable = overlay.querySelector('button, [href], input:not([type=hidden]), select, textarea, [tabindex]:not([tabindex="-1"])');
+      if (focusable) focusable.focus();
+    }
+  });
 }
+
 function closeModal() {
-  // 모든 모달 오버레이 제거 (잔여 DOM 방지)
+  document.removeEventListener('keydown', _modalEscHandler);
   document.querySelectorAll('#modal-overlay').forEach(el => el.remove());
+  // 이전 포커스 복원
+  if (_modalPrevFocus && typeof _modalPrevFocus.focus === 'function') {
+    try { _modalPrevFocus.focus(); } catch(e) {}
+    _modalPrevFocus = null;
+  }
+}
+
+function _modalEscHandler(e) {
+  if (e.key === 'Escape') {
+    e.stopPropagation();
+    closeModal();
+  }
 }
 
 function showConfirmModal(title, message, onConfirm, confirmText = '확인', confirmColor = 'bg-blue-600') {

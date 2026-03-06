@@ -198,9 +198,10 @@ function showCreateChannelModal() {
 async function submitCreateChannel() {
   const data = Object.fromEntries(new FormData(document.getElementById('create-channel-form')));
   data.priority = Number(data.priority) || 0;
-  const res = await api('POST', '/hr/channels', data);
-  if (res?.channel_id) { showToast('채널 등록 완료', 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '등록 실패', 'error');
+  await apiAction('POST', '/hr/channels', data, {
+    successCheck: d => !!d?.channel_id,
+    successMsg: '채널 등록 완료', closeModal: true, refresh: true
+  });
 }
 
 // ════════════════════════════════════════════════════════
@@ -236,19 +237,17 @@ function showEditChannelModal(channelId) {
 async function submitEditChannel(channelId) {
   const data = Object.fromEntries(new FormData(document.getElementById('edit-channel-form')));
   data.priority = Number(data.priority) || 0;
-  const res = await api('PUT', `/hr/channels/${channelId}`, data);
-  if (res?.ok) { showToast('채널 수정 완료', 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '수정 실패', 'error');
+  await apiAction('PUT', `/hr/channels/${channelId}`, data, {
+    successMsg: '채널 수정 완료', closeModal: true, refresh: true
+  });
 }
 
 function toggleChannelStatus(channelId, isCurrentlyActive, name) {
   const action = isCurrentlyActive ? '비활성화' : '활성화';
-  showConfirmModal(`채널 ${action}`, `<strong>${name}</strong> 채널을 ${action}하시겠습니까?`,
-    async () => {
-      const res = await api('PUT', `/hr/channels/${channelId}`, { is_active: !isCurrentlyActive });
-      if (res?.ok) { showToast(`${action} 완료`, 'success'); renderContent(); }
-      else showToast(res?.error || '실패', 'error');
-    }, action, isCurrentlyActive ? 'bg-red-600' : 'bg-green-600');
+  apiAction('PUT', `/hr/channels/${channelId}`, { is_active: !isCurrentlyActive }, {
+    confirm: { title: `채널 ${action}`, message: `<strong>${name}</strong> 채널을 ${action}하시겠습니까?`, buttonText: action, buttonColor: isCurrentlyActive ? 'bg-red-600' : 'bg-green-600' },
+    successMsg: `${action} 완료`, refresh: true
+  });
 }
 
 // ════════════════════════════════════════════════════════

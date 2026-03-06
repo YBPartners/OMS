@@ -1,6 +1,6 @@
 // ============================================================
-// 와이비 OMS — Shared Table Component v3.0
-// 재사용 가능한 테이블, 페이지네이션
+// 와이비 OMS — Shared Table Component v4.0
+// 재사용 가능한 테이블, 페이지네이션, 상태카드, 접근성
 // ============================================================
 
 /**
@@ -9,18 +9,19 @@
  * columns: [{ key, label, align, width, render }]
  */
 function renderDataTable(config) {
-  const { columns, rows = [], onRowClick, emptyText = '데이터가 없습니다.', className = '' } = config;
+  const { columns, rows = [], onRowClick, emptyText = '데이터가 없습니다.', className = '', tableId = '', caption = '' } = config;
   
   return `
     <div class="bg-white rounded-xl border border-gray-100 overflow-hidden ${className}">
       <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="w-full text-sm" ${tableId ? `id="${tableId}"` : ''} role="grid">
+          ${caption ? `<caption class="sr-only">${caption}</caption>` : ''}
           <thead class="bg-gray-50 text-gray-600">
-            <tr>${columns.map(c => `<th class="px-4 py-3 ${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'}" ${c.width ? `style="width:${c.width}"` : ''}>${c.label}</th>`).join('')}</tr>
+            <tr>${columns.map(c => `<th class="px-4 py-3 ${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'} font-medium" ${c.width ? `style="width:${c.width}"` : ''} scope="col">${c.label}</th>`).join('')}</tr>
           </thead>
           <tbody class="divide-y">
             ${rows.length > 0 ? rows.map((row, i) => `
-              <tr class="hover:bg-gray-50 ${onRowClick ? 'cursor-pointer' : ''}" ${onRowClick ? `onclick="${onRowClick}(${row.id || row.order_id || row.user_id || i})"` : ''}>
+              <tr class="hover:bg-gray-50 ${onRowClick ? 'cursor-pointer ix-table-row' : ''}" ${onRowClick ? `onclick="${onRowClick}(${row.id || row.order_id || row.user_id || i})"` : ''}>
                 ${columns.map(c => {
                   const val = c.render ? c.render(row) : (row[c.key] !== undefined ? row[c.key] : '-');
                   return `<td class="px-4 py-3 ${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'}">${val}</td>`;
@@ -39,12 +40,12 @@ function renderDataTable(config) {
 function renderPagination(total, page, limit, onPageChange) {
   const totalPages = Math.ceil(total / limit) || 1;
   return `
-    <div class="flex items-center justify-between px-4 py-3 text-sm text-gray-500">
+    <div class="flex items-center justify-between px-4 py-3 text-sm text-gray-500" role="navigation" aria-label="페이지 네비게이션">
       <span>총 ${formatNumber(total)}건</span>
       <div class="flex gap-2 items-center">
-        ${page > 1 ? `<button onclick="${onPageChange}(${page - 1})" class="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200"><i class="fas fa-chevron-left text-xs"></i> 이전</button>` : ''}
-        <span class="px-3 py-1 font-medium">${page} / ${totalPages}</span>
-        ${page < totalPages ? `<button onclick="${onPageChange}(${page + 1})" class="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200">다음 <i class="fas fa-chevron-right text-xs"></i></button>` : ''}
+        ${page > 1 ? `<button onclick="${onPageChange}(${page - 1})" class="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200" aria-label="이전 페이지"><i class="fas fa-chevron-left text-xs"></i> 이전</button>` : ''}
+        <span class="px-3 py-1 font-medium" aria-current="page">${page} / ${totalPages}</span>
+        ${page < totalPages ? `<button onclick="${onPageChange}(${page + 1})" class="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200" aria-label="다음 페이지">다음 <i class="fas fa-chevron-right text-xs"></i></button>` : ''}
       </div>
     </div>`;
 }
