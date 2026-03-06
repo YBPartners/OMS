@@ -182,6 +182,12 @@ function getIndexHtml(): string {
   <script src="/static/js/pages/review.js"></script>
   <script src="/static/js/pages/settlement.js"></script>
   <script src="/static/js/pages/statistics.js"></script>
+  <script src="/static/js/pages/policies.js"></script>
+  <script src="/static/js/pages/policies-dist.js"></script>
+  <script src="/static/js/pages/policies-report.js"></script>
+  <script src="/static/js/pages/policies-comm.js"></script>
+  <script src="/static/js/pages/policies-territory.js"></script>
+  <script src="/static/js/pages/policies-metrics.js"></script>
   <script src="/static/js/pages/hr.js"></script>
   <script src="/static/js/pages/signup-wizard.js"></script>
   <script src="/static/js/pages/signup-admin.js"></script>

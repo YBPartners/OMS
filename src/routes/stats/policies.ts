@@ -1,7 +1,8 @@
 // ================================================================
-// 와이비 OMS — 정책 조회 + CRUD v7.0 (R4 완성)
+// 와이비 OMS — 정책 조회 + CRUD v8.0 (R13 고도화)
 // 배분·보고서·수수료·지표 정책 + 지역권 매핑
-// v7.0: 삭제 API, 감사로그, 지표(metrics) 정책 CRUD 추가
+// v8.0: 정책 복제, 버전 비교, 영향도 분석, 일괄 매핑,
+//        수수료 시뮬레이션, 정책 변경 이력 API 추가
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -53,7 +54,6 @@ export function mountPolicies(router: Hono<Env>) {
     const { name, rule_json, effective_from } = await c.req.json();
     if (!name) return c.json({ error: '정책명은 필수입니다.' }, 400);
 
-    // 최신 버전 조회
     const latest = await db.prepare('SELECT MAX(version) as max_ver FROM distribution_policies').first();
     const newVersion = ((latest as any)?.max_ver || 0) + 1;
 
@@ -69,6 +69,31 @@ export function mountPolicies(router: Hono<Env>) {
     return c.json({ ok: true, policy_id: result.meta.last_row_id, version: newVersion });
   });
 
+  // ★ 배분 정책 복제
+  router.post('/policies/distribution/:id/clone', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const id = Number(c.req.param('id'));
+
+    const source = await db.prepare('SELECT * FROM distribution_policies WHERE policy_id = ?').bind(id).first() as any;
+    if (!source) return c.json({ error: '원본 정책을 찾을 수 없습니다.' }, 404);
+
+    const latest = await db.prepare('SELECT MAX(version) as max_ver FROM distribution_policies').first();
+    const newVersion = ((latest as any)?.max_ver || 0) + 1;
+
+    const result = await db.prepare(`
+      INSERT INTO distribution_policies (name, version, rule_json, effective_from, is_active)
+      VALUES (?, ?, ?, ?, 0)
+    `).bind(
+      `${source.name} (복제)`, newVersion, source.rule_json,
+      new Date().toISOString().split('T')[0]
+    ).run();
+
+    await writeAuditLog(db, { entity_type: 'DISTRIBUTION_POLICY', entity_id: result.meta.last_row_id as number, action: 'CLONE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ source_id: id, new_version: newVersion }) });
+    return c.json({ ok: true, policy_id: result.meta.last_row_id, version: newVersion, source_id: id });
+  });
+
   // 삭제 (비활성 정책만)
   router.delete('/policies/distribution/:id', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN']);
@@ -81,6 +106,51 @@ export function mountPolicies(router: Hono<Env>) {
     await db.prepare('DELETE FROM distribution_policies WHERE policy_id = ?').bind(id).run();
     await writeAuditLog(db, { entity_type: 'DISTRIBUTION_POLICY', entity_id: id, action: 'DELETE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify(existing) });
     return c.json({ ok: true, message: '배분 정책이 삭제되었습니다.' });
+  });
+
+  // ★ 배분 정책 영향도 분석 (배분 대기 주문 수, 매핑된 지역 수 등)
+  router.get('/policies/distribution/:id/impact', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const id = Number(c.req.param('id'));
+
+    const policy = await db.prepare('SELECT * FROM distribution_policies WHERE policy_id = ?').bind(id).first() as any;
+    if (!policy) return c.json({ error: '정책을 찾을 수 없습니다.' }, 404);
+
+    const [pendingOrders, totalTerritories, mappedTerritories, unmappedTerritories, totalRegions, recentDistributed] = await Promise.all([
+      db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status IN ('NEW','DISTRIBUTION_PENDING')").first(),
+      db.prepare("SELECT COUNT(*) as cnt FROM territories WHERE status='ACTIVE'").first(),
+      db.prepare("SELECT COUNT(DISTINCT t.territory_id) as cnt FROM territories t JOIN org_territories ot ON t.territory_id=ot.territory_id WHERE t.status='ACTIVE' AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now'))").first(),
+      db.prepare("SELECT COUNT(*) as cnt FROM territories t LEFT JOIN org_territories ot ON t.territory_id=ot.territory_id AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now')) WHERE t.status='ACTIVE' AND ot.org_id IS NULL").first(),
+      db.prepare("SELECT COUNT(DISTINCT sido) as sido_cnt, COUNT(*) as total FROM admin_regions WHERE is_active=1").first(),
+      db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status='DISTRIBUTED' AND distributed_at > datetime('now','-7 days')").first(),
+    ]);
+
+    // 시도별 매핑 현황
+    const sidoMapping = await db.prepare(`
+      SELECT t.sido, COUNT(*) as total,
+        SUM(CASE WHEN ot.org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped
+      FROM territories t
+      LEFT JOIN org_territories ot ON t.territory_id=ot.territory_id AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now'))
+      WHERE t.status='ACTIVE'
+      GROUP BY t.sido ORDER BY t.sido
+    `).all();
+
+    return c.json({
+      policy,
+      impact: {
+        pending_orders: (pendingOrders as any)?.cnt || 0,
+        total_territories: (totalTerritories as any)?.cnt || 0,
+        mapped_territories: (mappedTerritories as any)?.cnt || 0,
+        unmapped_territories: (unmappedTerritories as any)?.cnt || 0,
+        total_admin_regions: (totalRegions as any)?.total || 0,
+        sido_count: (totalRegions as any)?.sido_cnt || 0,
+        recent_distributed_7d: (recentDistributed as any)?.cnt || 0,
+        mapping_rate: (totalTerritories as any)?.cnt ? Math.round(((mappedTerritories as any)?.cnt / (totalTerritories as any)?.cnt) * 100) : 0,
+        sido_mapping: sidoMapping.results,
+      },
+    });
   });
 
   // ━━━━━━━━━━ 보고서 정책 ━━━━━━━━━━
@@ -132,7 +202,6 @@ export function mountPolicies(router: Hono<Env>) {
     const latest = await db.prepare('SELECT MAX(version) as max_ver FROM report_policies').first();
     const newVersion = ((latest as any)?.max_ver || 0) + 1;
 
-    // 같은 service_type의 기존 활성 비활성화
     const st = service_type || 'DEFAULT';
     await db.prepare("UPDATE report_policies SET is_active = 0 WHERE service_type = ?").bind(st).run();
 
@@ -149,6 +218,69 @@ export function mountPolicies(router: Hono<Env>) {
 
     await writeAuditLog(db, { entity_type: 'REPORT_POLICY', entity_id: result.meta.last_row_id as number, action: 'CREATE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ name, service_type: st, version: newVersion }) });
     return c.json({ ok: true, policy_id: result.meta.last_row_id, version: newVersion });
+  });
+
+  // ★ 보고서 정책 복제
+  router.post('/policies/report/:id/clone', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const id = Number(c.req.param('id'));
+
+    const source = await db.prepare('SELECT * FROM report_policies WHERE policy_id = ?').bind(id).first() as any;
+    if (!source) return c.json({ error: '원본 정책을 찾을 수 없습니다.' }, 404);
+
+    const latest = await db.prepare('SELECT MAX(version) as max_ver FROM report_policies').first();
+    const newVersion = ((latest as any)?.max_ver || 0) + 1;
+
+    const result = await db.prepare(`
+      INSERT INTO report_policies (name, version, service_type, required_photos_json, required_checklist_json, require_receipt, effective_from, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+    `).bind(
+      `${source.name} (복제)`, newVersion, source.service_type,
+      source.required_photos_json, source.required_checklist_json,
+      source.require_receipt, new Date().toISOString().split('T')[0]
+    ).run();
+
+    await writeAuditLog(db, { entity_type: 'REPORT_POLICY', entity_id: result.meta.last_row_id as number, action: 'CLONE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ source_id: id, new_version: newVersion }) });
+    return c.json({ ok: true, policy_id: result.meta.last_row_id, version: newVersion, source_id: id });
+  });
+
+  // ★ 보고서 정책 영향도 분석
+  router.get('/policies/report/:id/impact', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const id = Number(c.req.param('id'));
+
+    const policy = await db.prepare('SELECT * FROM report_policies WHERE policy_id = ?').bind(id).first() as any;
+    if (!policy) return c.json({ error: '정책을 찾을 수 없습니다.' }, 404);
+
+    const [pendingReports, completedReports, rejectedReports] = await Promise.all([
+      db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status IN ('SUBMITTED','IN_REVIEW')").first(),
+      db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status IN ('HQ_APPROVED','SETTLEMENT_CONFIRMED','PAID') AND submitted_at > datetime('now','-30 days')").first(),
+      db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status='REJECTED' AND updated_at > datetime('now','-30 days')").first(),
+    ]);
+
+    let photos: any = {};
+    try { photos = JSON.parse(policy.required_photos_json || '{}'); } catch {}
+    const totalPhotosRequired = Object.values(photos).reduce((a: number, b: any) => a + Number(b), 0);
+
+    let checklist: any[] = [];
+    try { checklist = JSON.parse(policy.required_checklist_json || '[]'); } catch {}
+
+    return c.json({
+      policy,
+      impact: {
+        pending_reports: (pendingReports as any)?.cnt || 0,
+        completed_30d: (completedReports as any)?.cnt || 0,
+        rejected_30d: (rejectedReports as any)?.cnt || 0,
+        total_photos_required: totalPhotosRequired,
+        photo_categories: Object.keys(photos).length,
+        checklist_items: checklist.length,
+        service_type: policy.service_type || 'DEFAULT',
+      },
+    });
   });
 
   // 삭제 (비활성 정책만)
@@ -183,7 +315,6 @@ export function mountPolicies(router: Hono<Env>) {
     `;
     const params: any[] = [];
 
-    // ★ Scope: REGION은 자기 총판 + 하위 TEAM 정책만
     if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
       query += ' AND (cp.org_id = ? OR cp.org_id IN (SELECT org_id FROM organizations WHERE parent_org_id = ?))';
       params.push(user.org_id, user.org_id);
@@ -200,7 +331,7 @@ export function mountPolicies(router: Hono<Env>) {
     if (authErr) return authErr;
     const db = c.env.DB;
     const id = Number(c.req.param('id'));
-    const { mode, value, is_active, channel_id } = await c.req.json();
+    const { mode, value, is_active, channel_id, effective_from, effective_to, memo } = await c.req.json();
 
     const existing = await db.prepare('SELECT * FROM commission_policies WHERE commission_policy_id = ?').bind(id).first();
     if (!existing) return c.json({ error: '수수료 정책을 찾을 수 없습니다.' }, 404);
@@ -237,6 +368,107 @@ export function mountPolicies(router: Hono<Env>) {
     return c.json({ ok: true, commission_policy_id: result.meta.last_row_id });
   });
 
+  // ★ 수수료 복제
+  router.post('/policies/commission/:id/clone', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const id = Number(c.req.param('id'));
+
+    const source = await db.prepare('SELECT * FROM commission_policies WHERE commission_policy_id = ?').bind(id).first() as any;
+    if (!source) return c.json({ error: '원본 정책을 찾을 수 없습니다.' }, 404);
+
+    const result = await db.prepare(`
+      INSERT INTO commission_policies (org_id, team_leader_id, mode, value, channel_id, effective_from, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, 0)
+    `).bind(source.org_id, source.team_leader_id, source.mode, source.value, source.channel_id, new Date().toISOString().split('T')[0]).run();
+
+    await writeAuditLog(db, { entity_type: 'COMMISSION_POLICY', entity_id: result.meta.last_row_id as number, action: 'CLONE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ source_id: id }) });
+    return c.json({ ok: true, commission_policy_id: result.meta.last_row_id, source_id: id });
+  });
+
+  // ★ 수수료 시뮬레이션 (다양한 금액 기준 시뮬)
+  router.post('/policies/commission/simulate', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const { amounts, org_id } = await c.req.json();
+
+    if (!amounts || !Array.isArray(amounts)) return c.json({ error: '시뮬레이션 금액 배열이 필요합니다.' }, 400);
+
+    let query = `SELECT cp.*, o.name as org_name FROM commission_policies cp JOIN organizations o ON cp.org_id=o.org_id WHERE cp.is_active=1`;
+    const params: any[] = [];
+    if (org_id) { query += ' AND cp.org_id=?'; params.push(org_id); }
+    query += ' ORDER BY cp.org_id';
+
+    const policies = await db.prepare(query).bind(...params).all();
+
+    const simResults = (policies.results as any[]).map((p: any) => {
+      const sims = amounts.map((amt: number) => {
+        let fee = 0;
+        if (p.mode === 'PERCENT') fee = Math.round(amt * p.value / 100);
+        else fee = Number(p.value);
+        return { amount: amt, fee, net: amt - fee, rate: amt > 0 ? ((fee / amt) * 100).toFixed(1) + '%' : '0%' };
+      });
+      return { commission_policy_id: p.commission_policy_id, org_name: p.org_name, team_leader_id: p.team_leader_id, mode: p.mode, value: p.value, simulations: sims };
+    });
+
+    return c.json({ simulations: simResults });
+  });
+
+  // ★ 수수료 영향도 분석
+  router.get('/policies/commission/:id/impact', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const id = Number(c.req.param('id'));
+
+    const policy = await db.prepare(`
+      SELECT cp.*, o.name as org_name, u.name as team_leader_name
+      FROM commission_policies cp JOIN organizations o ON cp.org_id=o.org_id
+      LEFT JOIN users u ON cp.team_leader_id=u.user_id
+      WHERE cp.commission_policy_id=?
+    `).bind(id).first() as any;
+    if (!policy) return c.json({ error: '정책을 찾을 수 없습니다.' }, 404);
+
+    // 해당 총판의 최근 30일 정산 데이터
+    const recentSettlements = await db.prepare(`
+      SELECT COUNT(*) as cnt, SUM(CASE WHEN o.payable_amount IS NOT NULL THEN o.payable_amount ELSE 0 END) as total_amount
+      FROM orders o WHERE o.org_id=? AND o.status IN ('SETTLEMENT_CONFIRMED','PAID')
+      AND o.updated_at > datetime('now','-30 days')
+    `).bind(policy.org_id).first() as any;
+
+    // 동일 총판의 다른 수수료 정책
+    const siblingPolicies = await db.prepare(`
+      SELECT cp.commission_policy_id, cp.mode, cp.value, cp.is_active, cp.team_leader_id, u.name as team_leader_name
+      FROM commission_policies cp LEFT JOIN users u ON cp.team_leader_id=u.user_id
+      WHERE cp.org_id=? AND cp.commission_policy_id!=?
+      ORDER BY cp.is_active DESC, cp.commission_policy_id
+    `).bind(policy.org_id, id).all();
+
+    // 해당 총판 소속 팀장 수
+    const teamLeaders = await db.prepare(`
+      SELECT COUNT(*) as cnt FROM users WHERE org_id=? AND role='TEAM_LEADER' AND status='ACTIVE'
+    `).bind(policy.org_id).first() as any;
+
+    const totalAmt = (recentSettlements as any)?.total_amount || 0;
+    let estimated_fee = 0;
+    if (policy.mode === 'PERCENT') estimated_fee = Math.round(totalAmt * policy.value / 100);
+    else estimated_fee = ((recentSettlements as any)?.cnt || 0) * Number(policy.value);
+
+    return c.json({
+      policy,
+      impact: {
+        recent_orders_30d: (recentSettlements as any)?.cnt || 0,
+        recent_amount_30d: totalAmt,
+        estimated_monthly_fee: estimated_fee,
+        estimated_monthly_net: totalAmt - estimated_fee,
+        team_leader_count: (teamLeaders as any)?.cnt || 0,
+        sibling_policies: siblingPolicies.results,
+      },
+    });
+  });
+
   // 수수료 삭제 (비활성 정책만)
   router.delete('/policies/commission/:id', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN']);
@@ -268,10 +500,8 @@ export function mountPolicies(router: Hono<Env>) {
       db.prepare("SELECT COUNT(*) as total FROM org_region_mappings").first(),
     ]);
 
-    // 배분 정책 적용 중 주문 수
     const ordersDist = await db.prepare("SELECT COUNT(*) as total FROM orders WHERE status IN ('NEW','DISTRIBUTION_PENDING','DISTRIBUTED','ASSIGNED')").first();
 
-    // 최근 정책 변경 이력 (감사로그에서)
     const recentAudit = await db.prepare(`
       SELECT al.*, u.name as actor_name FROM audit_logs al
       LEFT JOIN users u ON al.actor_id = u.user_id
@@ -292,6 +522,28 @@ export function mountPolicies(router: Hono<Env>) {
     });
   });
 
+  // ★ 정책 변경 이력 전체 조회 (타입별 필터)
+  router.get('/policies/audit', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const entityType = c.req.query('type');
+    const limit = Math.min(Number(c.req.query('limit') || 50), 200);
+
+    let query = `
+      SELECT al.*, u.name as actor_name FROM audit_logs al
+      LEFT JOIN users u ON al.actor_id = u.user_id
+      WHERE al.entity_type IN ('DISTRIBUTION_POLICY','REPORT_POLICY','COMMISSION_POLICY','METRICS_POLICY','TERRITORY','ORG_REGION_MAPPING')
+    `;
+    const params: any[] = [];
+    if (entityType) { query += ' AND al.entity_type = ?'; params.push(entityType); }
+    query += ` ORDER BY al.created_at DESC LIMIT ?`;
+    params.push(limit);
+
+    const result = await db.prepare(query).bind(...params).all();
+    return c.json({ audit_logs: result.results, total: result.results.length });
+  });
+
   // ━━━━━━━━━━ 지역권(territory) 검색 ━━━━━━━━━━
 
   router.get('/territories/search', async (c) => {
@@ -300,6 +552,8 @@ export function mountPolicies(router: Hono<Env>) {
 
     const q = c.req.query('q');
     const sido = c.req.query('sido');
+    const sigungu = c.req.query('sigungu');
+    const unmapped_only = c.req.query('unmapped_only');
     const db = c.env.DB;
 
     let query = `
@@ -311,14 +565,98 @@ export function mountPolicies(router: Hono<Env>) {
     `;
     const params: any[] = [];
     if (sido) { query += ' AND t.sido = ?'; params.push(sido); }
+    if (sigungu) { query += ' AND t.sigungu = ?'; params.push(sigungu); }
     if (q && q.length >= 1) {
       query += ' AND (t.sido LIKE ? OR t.sigungu LIKE ? OR t.eupmyeondong LIKE ?)';
       params.push(`%${q}%`, `%${q}%`, `%${q}%`);
     }
-    query += ' ORDER BY t.sido, t.sigungu, t.eupmyeondong LIMIT 100';
+    if (unmapped_only === '1') { query += ' AND ot.org_id IS NULL'; }
+    query += ' ORDER BY t.sido, t.sigungu, t.eupmyeondong LIMIT 200';
 
     const result = await db.prepare(query).bind(...params).all();
     return c.json({ territories: result.results, total: result.results.length });
+  });
+
+  // ★ 지역권 일괄 매핑 (여러 territory를 한 org에 한꺼번에 매핑)
+  router.post('/territories/bulk-mapping', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const { org_id, territory_ids } = await c.req.json();
+
+    if (!org_id) return c.json({ error: '총판 ID는 필수입니다.' }, 400);
+    if (!territory_ids || !Array.isArray(territory_ids) || territory_ids.length === 0) {
+      return c.json({ error: '지역권 ID 목록이 필요합니다.' }, 400);
+    }
+    if (territory_ids.length > 100) return c.json({ error: '한 번에 최대 100건까지 매핑할 수 있습니다.' }, 400);
+
+    let mapped = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const tid of territory_ids) {
+      try {
+        // 기존 매핑 종료
+        await db.prepare(`
+          UPDATE org_territories SET effective_to = datetime('now')
+          WHERE territory_id = ? AND (effective_to IS NULL OR effective_to > datetime('now'))
+        `).bind(tid).run();
+
+        // 새 매핑 생성
+        await db.prepare(`
+          INSERT INTO org_territories (org_id, territory_id, effective_from) VALUES (?, ?, datetime('now'))
+        `).bind(org_id, tid).run();
+        mapped++;
+      } catch (e: any) {
+        errors.push(`ID ${tid}: ${e.message}`);
+        skipped++;
+      }
+    }
+
+    await writeAuditLog(db, { entity_type: 'TERRITORY', action: 'BULK_MAPPING', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ org_id, count: mapped, skipped, total: territory_ids.length }) });
+
+    return c.json({ ok: true, mapped, skipped, total: territory_ids.length, errors: errors.length ? errors : undefined });
+  });
+
+  // ★ 지역권 시도별 통계 (매핑 현황)
+  router.get('/territories/sido-stats', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+
+    const result = await db.prepare(`
+      SELECT t.sido,
+        COUNT(*) as total,
+        SUM(CASE WHEN ot.org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped,
+        COUNT(DISTINCT ot.org_id) as org_count
+      FROM territories t
+      LEFT JOIN org_territories ot ON t.territory_id=ot.territory_id AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now'))
+      WHERE t.status='ACTIVE'
+      GROUP BY t.sido ORDER BY t.sido
+    `).all();
+
+    return c.json({ sido_stats: result.results });
+  });
+
+  // ★ 지역권의 시군구 목록 (2단계 드릴다운)
+  router.get('/territories/sigungu', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+    const sido = c.req.query('sido');
+    if (!sido) return c.json({ error: '시도를 선택해주세요.' }, 400);
+    const db = c.env.DB;
+
+    const result = await db.prepare(`
+      SELECT t.sigungu,
+        COUNT(*) as total,
+        SUM(CASE WHEN ot.org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped
+      FROM territories t
+      LEFT JOIN org_territories ot ON t.territory_id=ot.territory_id AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now'))
+      WHERE t.status='ACTIVE' AND t.sido=?
+      GROUP BY t.sigungu ORDER BY t.sigungu
+    `).bind(sido).all();
+
+    return c.json({ sigungu_list: result.results });
   });
 
   // ━━━━━━━━━━ 지역권 매핑 ━━━━━━━━━━
@@ -331,7 +669,6 @@ export function mountPolicies(router: Hono<Env>) {
     const user = c.get('user')!;
     const db = c.env.DB;
 
-    // 기존 territory 매핑
     let query = `
       SELECT t.*, ot.org_id, o.name as org_name, o.org_type
       FROM territories t
@@ -341,7 +678,6 @@ export function mountPolicies(router: Hono<Env>) {
     `;
     const params: any[] = [];
 
-    // ★ Scope
     if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
       query += ' AND (ot.org_id = ? OR ot.org_id IN (SELECT org_id FROM organizations WHERE parent_org_id = ?))';
       params.push(user.org_id, user.org_id);
@@ -350,7 +686,6 @@ export function mountPolicies(router: Hono<Env>) {
 
     const result = await db.prepare(query).bind(...params).all();
 
-    // 신규 admin_regions 매핑도 함께 반환
     let regionMappingQuery = `
       SELECT ar.region_id, ar.sido, ar.sigungu, ar.eupmyeondong, ar.full_name, ar.admin_code,
              orm.org_id, o.name as org_name, o.org_type
@@ -375,7 +710,7 @@ export function mountPolicies(router: Hono<Env>) {
     });
   });
 
-  // 지역권 매핑 변경 (territory ↔ org)
+  // 지역권 매핑 변경 (territory <-> org)
   router.put('/territories/:territory_id/mapping', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
     if (authErr) return authErr;
@@ -385,19 +720,33 @@ export function mountPolicies(router: Hono<Env>) {
 
     if (!org_id) return c.json({ error: '총판 ID는 필수입니다.' }, 400);
 
-    // 기존 매핑 종료
     await db.prepare(`
       UPDATE org_territories SET effective_to = datetime('now')
       WHERE territory_id = ? AND (effective_to IS NULL OR effective_to > datetime('now'))
     `).bind(territoryId).run();
 
-    // 새 매핑 생성
     await db.prepare(`
       INSERT INTO org_territories (org_id, territory_id, effective_from) VALUES (?, ?, datetime('now'))
     `).bind(org_id, territoryId).run();
 
     await writeAuditLog(db, { entity_type: 'TERRITORY', entity_id: territoryId, action: 'REGION.MAPPED', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ territory_id: territoryId, org_id }) });
     return c.json({ ok: true, territory_id: territoryId, org_id });
+  });
+
+  // ★ 매핑 해제 (territory의 org 매핑 제거)
+  router.delete('/territories/:territory_id/mapping', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const territoryId = Number(c.req.param('territory_id'));
+
+    await db.prepare(`
+      UPDATE org_territories SET effective_to = datetime('now')
+      WHERE territory_id = ? AND (effective_to IS NULL OR effective_to > datetime('now'))
+    `).bind(territoryId).run();
+
+    await writeAuditLog(db, { entity_type: 'TERRITORY', entity_id: territoryId, action: 'REGION.UNMAPPED', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ territory_id: territoryId }) });
+    return c.json({ ok: true, territory_id: territoryId });
   });
 
   // ━━━━━━━━━━ 지표(Metrics) 정책 ━━━━━━━━━━
@@ -450,7 +799,6 @@ export function mountPolicies(router: Hono<Env>) {
       return c.json({ error: '완료 기준(completion_basis)과 지역접수 기준(region_intake_basis)은 필수입니다.' }, 400);
     }
 
-    // 기존 활성 비활성화
     await db.prepare("UPDATE metrics_policies SET is_active = 0").run();
 
     const result = await db.prepare(`
