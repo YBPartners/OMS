@@ -4,6 +4,9 @@
 // v11.0: Airflow Rebranding + Mobile Innovation
 // ============================================================
 
+// ─── 전역 변수 (지연 로딩 모듈에서 재정의됨) ───
+if (typeof _notifUnreadCount === 'undefined') var _notifUnreadCount = 0;
+
 // ─── 모바일 감지 ───
 function isMobile() { return window.innerWidth <= 768; }
 function isSmallMobile() { return window.innerWidth <= 375; }
