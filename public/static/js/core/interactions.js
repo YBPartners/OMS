@@ -559,11 +559,19 @@ function showOrderContextMenu(e, order) {
   e.preventDefault();
   const statusActions = getStatusActions(order);
 
+  // 수정/삭제 가능 여부 판단
+  const editableStatuses = ['RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING', 'DISTRIBUTED'];
+  const canEdit = editableStatuses.includes(order.status);
+  const canDelete = order.status === 'RECEIVED';
+
   const items = [
     { icon: 'fa-eye', label: '상세 보기', shortcut: 'Enter', action: () => showOrderDetail(order.order_id) },
     { divider: true },
     ...statusActions,
     { divider: true },
+    ...(canEdit ? [{ icon: 'fa-pen-to-square', label: '주문 수정', badge: '수정', badgeColor: 'bg-blue-100 text-blue-700', action: () => showEditOrderModal(order.order_id) }] : []),
+    ...(canDelete ? [{ icon: 'fa-trash-can', label: '주문 삭제', danger: true, action: () => deleteOrder(order.order_id, order.customer_name) }] : []),
+    ...((canEdit || canDelete) ? [{ divider: true }] : []),
     { icon: 'fa-clock-rotate-left', label: '상태 이력 보기', action: () => showOrderHistoryDrawer(order.order_id) },
     { icon: 'fa-scroll', label: '감사 로그 보기', action: () => showOrderAuditDrawer(order.order_id) },
   ];

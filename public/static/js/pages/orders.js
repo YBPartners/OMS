@@ -208,7 +208,16 @@ async function showOrderDetailDrawer(orderId) {
           <div class="text-[10px] text-gray-400 uppercase">요청일</div>
           <div class="text-sm mt-1">${o.requested_date || '-'}</div>
         </div>
+        <div class="bg-gray-50 rounded-lg p-3">
+          <div class="text-[10px] text-gray-400 uppercase">예약일</div>
+          <div class="text-sm mt-1">${o.scheduled_date || '<span class="text-gray-300">미정</span>'}</div>
+        </div>
       </div>
+      ${o.memo ? `
+      <div class="bg-amber-50 rounded-lg p-3 border border-amber-200">
+        <div class="text-[10px] text-gray-400 uppercase mb-1"><i class="fas fa-sticky-note mr-1"></i>메모</div>
+        <div class="text-sm text-gray-700">${o.memo}</div>
+      </div>` : ''}
 
       <!-- 보고서 -->
       ${res.reports?.length > 0 ? `
@@ -271,6 +280,15 @@ async function showOrderDetailDrawer(orderId) {
 function _getQuickActions(order) {
   const actions = [];
   const s = order.status;
+
+  // ★ 수정/삭제 버튼 (수정 가능 상태에서만)
+  const editableStatuses = ['RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING', 'DISTRIBUTED'];
+  if (editableStatuses.includes(s)) {
+    actions.push(`<button onclick="closeDrawer();showEditOrderModal(${order.order_id})" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition"><i class="fas fa-pen-to-square mr-1"></i>수정</button>`);
+  }
+  if (s === 'RECEIVED') {
+    actions.push(`<button onclick="closeDrawer();deleteOrder(${order.order_id}, '${(order.customer_name||'').replace(/'/g, "\\'")}')" class="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 transition"><i class="fas fa-trash-can mr-1"></i>삭제</button>`);
+  }
 
   actions.push(`<button onclick="closeDrawer();showOrderHistoryDrawer(${order.order_id})" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200 transition"><i class="fas fa-clock-rotate-left mr-1"></i>이력 타임라인</button>`);
   actions.push(`<button onclick="closeDrawer();showOrderAuditDrawer(${order.order_id})" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200 transition"><i class="fas fa-scroll mr-1"></i>감사 로그</button>`);
@@ -383,6 +401,8 @@ async function showOrderDetail(orderId) {
         <div><label class="text-xs text-gray-500">지역총판</label><div>${o.region_name || '-'}</div></div>
         <div><label class="text-xs text-gray-500">배정팀장</label><div>${o.team_leader_name || '-'}</div></div>
         <div><label class="text-xs text-gray-500">요청일</label><div>${o.requested_date || '-'}</div></div>
+        <div><label class="text-xs text-gray-500">예약일</label><div>${o.scheduled_date || '<span class="text-gray-300">미정</span>'}</div></div>
+        ${o.memo ? `<div class="col-span-2"><label class="text-xs text-gray-500">메모</label><div class="text-sm text-gray-700 bg-gray-50 rounded p-2">${o.memo}</div></div>` : ''}
       </div>
       ${res.reports?.length > 0 ? `
       <div class="border-t pt-4">
@@ -504,6 +524,7 @@ async function showNewOrderModal() {
 
         <div><label class="block text-xs text-gray-500 mb-1">금액(원) *</label><input name="base_amount" type="number" min="10000" step="1000" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="최소 10,000원"></div>
         <div><label class="block text-xs text-gray-500 mb-1">요청일 *</label><input name="requested_date" type="date" required value="${new Date().toISOString().split('T')[0]}" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">예약일 (선택)</label><input name="scheduled_date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
       </div>
     </form>`;
   showModal('주문 수동 등록', content, `
@@ -594,6 +615,88 @@ async function submitNewOrder() {
   const res = await api('POST', '/orders', data);
   if (res?._status === 201) { showToast('주문이 등록되었습니다.', 'success'); closeModal(); renderContent(); }
   else showToast(res?.error || res?.warning || '등록 실패', 'error');
+}
+
+// ─── 주문 수정 모달 ───
+async function showEditOrderModal(orderId) {
+  const res = await api('GET', `/orders/${orderId}`);
+  if (!res?.order) { showToast('주문 정보를 불러올 수 없습니다.', 'error'); return; }
+  const o = res.order;
+
+  // 수정 가능 상태 체크
+  const editableStatuses = ['RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING', 'DISTRIBUTED'];
+  if (!editableStatuses.includes(o.status)) {
+    showToast(`현재 상태(${OMS.STATUS[o.status]?.label || o.status})에서는 수정할 수 없습니다.`, 'warning');
+    return;
+  }
+
+  const channelRes = await api('GET', '/hr/channels?active_only=1');
+  const channels = channelRes?.channels || [];
+
+  const content = `
+    <form id="edit-order-form" class="space-y-4">
+      <input type="hidden" name="order_id" value="${o.order_id}">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">주문 채널</label>
+          <select name="channel_id" class="w-full border rounded-lg px-3 py-2 text-sm">
+            ${channels.map(ch => `<option value="${ch.channel_id}" ${ch.channel_id == o.channel_id ? 'selected' : ''}>${ch.name} (${ch.code})</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">서비스 유형</label>
+          <select name="service_type" class="w-full border rounded-lg px-3 py-2 text-sm">
+            ${SERVICE_TYPES.map(st => `<option value="${st.code}" ${st.code === o.service_type ? 'selected' : ''}>${st.label}</option>`).join('')}
+          </select>
+        </div>
+        <div><label class="block text-xs text-gray-500 mb-1">외부주문번호</label><input name="external_order_no" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.external_order_no || ''}"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">고객명 *</label><input name="customer_name" required class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.customer_name || ''}"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">연락처 *</label><input name="customer_phone" required class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.customer_phone || ''}"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">메모</label><input name="memo" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.memo || ''}"></div>
+        <div class="col-span-2">
+          <label class="block text-xs text-gray-500 mb-1">주소</label>
+          <input name="address_text" class="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50" value="${o.address_text || ''}" readonly>
+          <p class="text-xs text-gray-400 mt-1">* 주소 변경은 신규 등록을 이용하세요</p>
+        </div>
+        <div><label class="block text-xs text-gray-500 mb-1">금액(원) *</label><input name="base_amount" type="number" min="10000" step="1000" required class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.base_amount || ''}"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">요청일</label><input name="requested_date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.requested_date || ''}"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">예약일</label><input name="scheduled_date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.scheduled_date || ''}"></div>
+      </div>
+    </form>`;
+  showModal(`주문 수정 #${o.order_id}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitEditOrder(${o.order_id})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`);
+}
+
+async function submitEditOrder(orderId) {
+  const form = document.getElementById('edit-order-form');
+  const data = Object.fromEntries(new FormData(form));
+  delete data.order_id;
+
+  // 빈 문자열 → undefined 변환 (수정하지 않은 필드)
+  // address_text는 readonly이므로 제외
+  delete data.address_text;
+
+  data.base_amount = Number(data.base_amount);
+  data.channel_id = Number(data.channel_id);
+  if (!data.scheduled_date) data.scheduled_date = null;
+  if (!data.external_order_no) data.external_order_no = null;
+  if (!data.memo) data.memo = null;
+
+  if (!data.customer_name?.trim()) { showToast('고객명을 입력해주세요.', 'warning'); return; }
+  if (data.base_amount < 10000) { showToast('금액은 최소 10,000원 이상이어야 합니다.', 'warning'); return; }
+
+  const res = await api('PATCH', `/orders/${orderId}`, data);
+  if (res?.ok) { showToast('주문이 수정되었습니다.', 'success'); closeModal(); renderContent(); }
+  else showToast(res?.error || '수정 실패', 'error');
+}
+
+// ─── 주문 삭제 ───
+async function deleteOrder(orderId, customerName) {
+  if (!confirm(`주문 #${orderId} (${customerName || '고객명 미상'})을(를) 삭제하시겠습니까?\n\n삭제된 주문은 복구할 수 없습니다.`)) return;
+  const res = await api('DELETE', `/orders/${orderId}`);
+  if (res?.ok) { showToast('주문이 삭제되었습니다.', 'success'); renderContent(); }
+  else showToast(res?.error || '삭제 실패', 'error');
 }
 
 // ─── 일괄 수신 모달 ───

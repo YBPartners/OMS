@@ -1,8 +1,8 @@
 # 와이비 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-06
-> **현재 버전**: v19.0.0
-> **총 코드량**: Backend 10,093줄 (48 TS) + Frontend 12,249줄 (23 JS) + SW 143줄 + CSS 420줄 + SQL 1,245줄 + E2E 386줄 = **24,536줄**
+> **현재 버전**: v20.0.0
+> **총 코드량**: Backend ~10,300줄 (48 TS) + Frontend ~12,500줄 (23 JS) + SW 143줄 + CSS 420줄 + SQL 1,245줄 + E2E 386줄 = **~25,000줄**
 
 ---
 
@@ -38,6 +38,55 @@
 | **D-4** | **SVG 히트맵** | **✅ 완료** | **2026-03-06** | **지역별 히트맵 SVG 시각화** |
 | **D-5** | **딜러 수수료 자동분배 + 인보이스** | **✅ 완료** | **2026-03-06** | **수수료 자동분배, 팀장별 인보이스, 일괄인쇄** |
 | **D-6** | **주문 채널 API 연동 + 브랜드 채널 정리** | **✅ 완료** | **2026-03-06** | **채널별 API 설정/테스트/동기화, 필드매핑, 에어컨 브랜드별 채널, 법인→총판 치환** |
+| **R1** | **주문 CRUD 완성 + 데이터 정합성 고도화** | **✅ 완료** | **2026-03-06** | **주문 수정/삭제 API, 편집모달, 컨텍스트메뉴 연결, D1_TYPE_ERROR 수정, 드로어 정보 보완** |
+
+---
+
+## Phase R1 — 주문 CRUD 완성 + 데이터 정합성 고도화 ✅ (2026-03-06)
+
+> **목적**: 주문 수동 등록 후 수정/삭제 기능이 없어 운영 불편 → CRUD 완성 및 D1 바인딩 안전성 확보
+
+### R1-A: D1_TYPE_ERROR 근본 수정 ✅
+- `crud.ts`: POST /orders — 14개 바인딩 파라미터에 `??` 연산자로 `undefined→null` 안전 변환
+- `report.ts`: POST /orders/:id/reports — 6개 바인딩 파라미터 안전화 (file_hash, mime_type 등)
+- 배치 임포트(POST /orders/import): 동일 패턴 적용
+- 글로벌 에러 핸들러: 스택 트레이스 로깅 추가
+
+### R1-B: 주문 수정 API (PATCH) ✅
+- **PATCH /api/orders/:order_id** — RECEIVED~DISTRIBUTED 상태에서만 수정 허용
+- 수정 가능 필드 13개: customer_name, customer_phone, address_text, address_detail, admin_dong_code, legal_dong_code, base_amount, requested_date, scheduled_date, memo, channel_id, service_type, external_order_no
+- 서비스유형/채널/금액 유효성 검증
+- 감사 로그(order_status_history) 기록 — 변경 필드명 포함
+
+### R1-C: 주문 삭제 API (DELETE) ✅
+- **DELETE /api/orders/:order_id** — RECEIVED 상태에서만 삭제 허용
+- 연관 데이터(order_status_history) 함께 정리
+- audit_logs 테이블에 삭제 감사 기록 (entity_type, action, detail_json)
+- 테이블 스키마 정합성 수정 (event_code → action 등)
+
+### R1-D: 프론트엔드 수정 모달 ✅
+- `showEditOrderModal()` — 기존 값 프리필, 채널/서비스유형 드롭다운 동적 로드
+- `submitEditOrder()` — PATCH API 호출, 빈값→null 변환, 주소 readonly 보호
+- `deleteOrder()` — confirm 확인 후 DELETE API 호출
+
+### R1-E: 컨텍스트 메뉴 + 드로어 연결 ✅
+- **컨텍스트 메뉴**: 수정 가능 상태에서 "주문 수정" 항목 표시, RECEIVED에서 "주문 삭제" 항목 표시
+- **드로어 빠른 액션**: 편집/삭제 버튼 상단에 배치 (수정: 파란색, 삭제: 빨간색)
+- **드로어 정보 보완**: scheduled_date(예약일), memo(메모) 표시 추가
+- **상세 모달**: scheduled_date, memo 이미 포함 확인
+
+### R1-F: 기존 Round 2 수정사항 (이전 세션) ✅
+- 정산 export CSV에 channel_name 조인 추가
+- refreshStats 날짜 필터 정상 동작 확인
+- 칸반/검수/내주문 카드에 채널/서비스유형 표시
+- CSV/Excel 내보내기에 채널/서비스유형 컬럼 포함
+- OMS.SERVICE_TYPES 전역 상수 정의
+
+### 변경 통계
+- 3 files changed: crud.ts(+110), orders.js(+103), interactions.js(+8) = **+221 lines**
+- 이전 세션 포함: 10+ files, **+300 lines**
+- 통합 테스트: 생성→조회→수정→삭제 전체 플로우 검증 통과
+- 에러 로그: 0건 (D1_TYPE_ERROR 완전 해소)
 
 ---
 
@@ -860,26 +909,52 @@
 > **범위**: 주문 수동등록 → 자동배분 → 수동배분 → 칸반(팀장배정) → 주문 목록/상세
 > **상태**: 🔄 진행중
 
-#### R1-1단계: 탐색 및 진단 🔄
+#### R1-1단계: 탐색 및 진단 ✅ 완료
 
 **점검 대상:**
-- [ ] 주문 수동등록 모달 (orders.js `showNewOrderModal`, `submitNewOrder`)
-- [ ] 주문 목록 조회 + 필터 + 정렬 (orders.js `renderOrders`)
-- [ ] 주문 상세 모달 (orders.js `showOrderDetail`)
-- [ ] 자동배분 로직 (distribute.ts, orders.js `renderDistribute`)
-- [ ] 수동배분/재배분 (distribute.ts, orders.js 배분 UI)
-- [ ] 칸반 배정 (kanban.js, assign.ts)
-- [ ] 주문 CRUD 백엔드 (crud.ts) — D1 바인딩 안전성
-- [ ] 주문 상태전이 State Machine 정합성
+- [x] 주문 수동등록 모달 (orders.js `showNewOrderModal`, `submitNewOrder`)
+- [x] 주문 목록 조회 + 필터 + 정렬 (orders.js `renderOrders`)
+- [x] 주문 상세 모달/드로어 (orders.js `showOrderDetail`, `showOrderDetailDrawer`)
+- [x] 자동배분 로직 (distribute.ts, orders.js `renderDistribute`)
+- [x] 수동배분/재배분 (distribute.ts, orders.js 배분 UI)
+- [x] 칸반 배정 (kanban.js, assign.ts) + 드래그앤드롭, 배치배정
+- [x] 주문 CRUD 백엔드 (crud.ts) — D1 바인딩 안전성 (v19.2 에서 수정 완료)
+- [x] 주문 상태전이 State Machine 정합성
+- [x] 수정/삭제/일괄수신 (PATCH/DELETE/POST import)
+- [x] Scope Engine 기반 권한 검증 (HQ/REGION/TEAM)
+- [x] E2E API 테스트 시나리오 실행 (정상 흐름 + 엣지 케이스 17건)
 
 **식별된 문제점:**
 
 | # | 문제 | 위치 | 심각도 | 유형 |
 |---|------|------|--------|------|
-| 1 | 🔴 TBD | — | — | — |
+| 1 | 🔴 **주문 삭제 DB 에러** — audit_logs에 없는 컬럼 `event_code` INSERT 시도 → SQLITE_ERROR. 실제 테이블은 `action` 컬럼 사용 | crud.ts L349-353 | CRITICAL | 버그 |
+| 2 | 🟠 **전화번호 형식 미검증** — `customer_phone`에 "abcdefg" 같은 무의미 문자열도 등록 가능. 프론트/백 모두 format 체크 없음 | crud.ts L144, orders.js L597 | HIGH | 입력검증 |
+| 3 | 🟠 **주문 수정 시 주소 변경 불가** — 수정 모달에서 address_text가 readonly이고 주소 검색 버튼 없음. 주소 오류 수정 시 신규 등록 필요 | orders.js L649 | HIGH | UX결함 |
+| 4 | 🟡 **수동 등록 폼: 금액 step=1000 제한** — 실제 업무에서 15,500원 같은 비정수 금액 입력이 불가능하진 않지만 step 때문에 슬라이더에서 빗나감 | orders.js L516 | MEDIUM | UX |
+| 5 | 🟡 **주문 수정에서 상세주소/행정동 미표시** — 수정 모달에 address_detail, admin_dong_code 표시되지만 변경 불가 (주소 연동이 없어 한계) | orders.js L647-650 | MEDIUM | UX |
+| 6 | 🟡 **칸반: ASSIGNED 상태 드래그 시 단일 카드도 배치 분기 진입** — 이미 배정된 카드를 다른 팀장으로 드래그하면 `isFromAssigned=true`로 배치 경로에 빠지며, DISTRIBUTED 필터링에 의해 배정 가능 주문이 0건이 됨 → 무반응 | kanban.js L478-499 | MEDIUM | UX |
+| 7 | 🟡 **배분 보류(DISTRIBUTION_PENDING) 카드에 "행정동 매칭 실패" 고정 텍스트** — 실제로는 admin_dong_code가 있으나 매핑만 없는 경우도 있는데, 모든 보류 건에 동일 메시지 표시 | orders.js L866 | LOW | UX |
+| 8 | 🟢 **주문 상세에서 address_detail 미표시** — 상세주소가 DB에 저장되지만 상세 드로어/모달에서 보이지 않음 | orders.js L189 | LOW | 누락 |
+| 9 | 🟢 **주문 등록 성공 응답의 _status 판별** — `res?._status === 201` 체크하지만 API 래퍼가 반환하는 구조에 따라 누락 가능 | orders.js L607 | LOW | 잠재버그 |
+| 10 | 🟢 **일괄 수신(Import) JSON 직접 입력** — 실무에서는 Excel/CSV 파일 업로드가 필요하나, 현재 JSON 텍스트 직접 입력만 지원 | orders.js L694-711 | LOW | 기능미비 |
 
-#### R1-2단계: 개선안 정리 ⏳
-#### R1-3단계: 실제 수정 ⏳
+#### R1-2단계: 개선안 정리 🔄
+
+| # | 문제 | 개선안 | 영향 범위 |
+|---|------|--------|-----------|
+| 1 | audit_logs 컬럼 불일치 | INSERT 문을 실제 스키마(action, detail_json)에 맞게 수정 | crud.ts 삭제 로직 |
+| 2 | 전화번호 형식 | 백엔드: 정규식 검증 추가 (`/^0\d{1,3}-?\d{3,4}-?\d{4}$/`), 프론트: 입력 패턴 + 자동 하이픈 | crud.ts, orders.js |
+| 3 | 주문 수정 주소 변경 | 수정 모달에 주소 검색 버튼 추가 + 행정동 재매핑 | orders.js 수정 모달 |
+| 4 | 금액 step 1000 | step="100"으로 변경 (100원 단위) | orders.js 등록/수정 모달 |
+| 5 | 수정 모달 상세주소 | 상세주소 입력 필드 추가 (편집 가능) | orders.js 수정 모달 |
+| 6 | 칸반 재배정 드래그 | ASSIGNED 카드를 다른 팀장에게 드래그 시 unassign→assign 자동 수행 | kanban.js |
+| 7 | 배분보류 메시지 | admin_dong_code 유무에 따라 구체적 메시지 표시 | orders.js |
+| 8 | 상세주소 표시 | 드로어/모달에 address_detail 표시 | orders.js |
+| 9 | 응답 판별 | _status 대신 order_id 존재 여부로 성공 판별 | orders.js |
+| 10 | 일괄 수신 개선 | (R1에서 제외 — 별도 Round에서 CSV 파서 추가 계획) | — |
+
+#### R1-3단계: 실제 수정 🔄
 #### R1-4단계: 검증 ⏳
 #### R1-5단계: 결과 정리 ⏳
 

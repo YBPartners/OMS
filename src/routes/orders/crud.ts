@@ -246,6 +246,116 @@ export function mountCrud(router: Hono<Env>) {
     return c.json({ batch_id: batchId, total: rows.length, success: successCount, fail: failCount, errors });
   });
 
+  // ─── 주문 수정 (RECEIVED ~ DISTRIBUTED 상태에서만) ───
+  router.patch('/:order_id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const orderId = Number(c.req.param('order_id'));
+    let body: any;
+    try { body = await c.req.json(); } catch { return c.json({ error: '잘못된 요청 형식입니다.' }, 400); }
+
+    const order = await db.prepare('SELECT * FROM orders WHERE order_id = ?').bind(orderId).first();
+    if (!order) return c.json({ error: '주문을 찾을 수 없습니다.' }, 404);
+
+    // 수정 가능 상태 체크
+    const editableStatuses = ['RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING', 'DISTRIBUTED'];
+    if (!editableStatuses.includes(order.status as string)) {
+      return c.json({ error: `현재 상태(${order.status})에서는 수정할 수 없습니다. 수신~배분완료 상태에서만 수정 가능합니다.` }, 400);
+    }
+
+    // 수정 가능 필드 목록
+    const allowedFields: Record<string, string> = {
+      customer_name: 'TEXT', customer_phone: 'TEXT', address_text: 'TEXT',
+      address_detail: 'TEXT', admin_dong_code: 'TEXT', legal_dong_code: 'TEXT',
+      base_amount: 'NUMBER', requested_date: 'TEXT', scheduled_date: 'TEXT',
+      memo: 'TEXT', channel_id: 'NUMBER', service_type: 'TEXT',
+      external_order_no: 'TEXT',
+    };
+
+    const updates: string[] = [];
+    const params: any[] = [];
+    for (const [key, type] of Object.entries(allowedFields)) {
+      if (body[key] !== undefined) {
+        updates.push(`${key} = ?`);
+        if (type === 'NUMBER') {
+          params.push(body[key] === null ? null : Number(body[key]));
+        } else {
+          params.push(body[key] === '' ? null : (body[key] ?? null));
+        }
+      }
+    }
+
+    if (updates.length === 0) return c.json({ error: '수정할 항목이 없습니다.' }, 400);
+
+    // service_type 유효성 검증
+    if (body.service_type !== undefined) {
+      const validTypes = ['WALL_AC', 'STAND_AC', 'CEILING_AC', 'SYSTEM_AC', 'WINDOW_AC', 'MULTI_AC', 'DEFAULT'];
+      if (!validTypes.includes(body.service_type)) {
+        return c.json({ error: '유효하지 않은 서비스 유형입니다.' }, 400);
+      }
+    }
+
+    // channel_id 유효성 검증
+    if (body.channel_id !== undefined && body.channel_id !== null) {
+      const ch = await db.prepare('SELECT channel_id, is_active FROM order_channels WHERE channel_id = ?').bind(Number(body.channel_id)).first();
+      if (!ch) return c.json({ error: '유효하지 않은 채널입니다.' }, 400);
+      if (!(ch as any).is_active) return c.json({ error: '비활성화된 채널입니다.' }, 400);
+    }
+
+    // base_amount 검증
+    if (body.base_amount !== undefined && (isNaN(Number(body.base_amount)) || Number(body.base_amount) < 10000)) {
+      return c.json({ error: '금액은 10,000원 이상이어야 합니다.' }, 400);
+    }
+
+    updates.push("updated_at = datetime('now')");
+    params.push(orderId);
+
+    await db.prepare(`UPDATE orders SET ${updates.join(', ')} WHERE order_id = ?`).bind(...params).run();
+
+    // 감사 로그
+    await writeStatusHistory(db, {
+      order_id: orderId, from_status: order.status as string, to_status: order.status as string,
+      actor_id: user.user_id, note: `주문 정보 수정 (${Object.keys(allowedFields).filter(k => body[k] !== undefined).join(', ')})`
+    });
+
+    return c.json({ ok: true, order_id: orderId, updated_fields: Object.keys(allowedFields).filter(k => body[k] !== undefined) });
+  });
+
+  // ─── 주문 취소/삭제 (RECEIVED 상태에서만) ───
+  router.delete('/:order_id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const orderId = Number(c.req.param('order_id'));
+
+    const order = await db.prepare('SELECT * FROM orders WHERE order_id = ?').bind(orderId).first();
+    if (!order) return c.json({ error: '주문을 찾을 수 없습니다.' }, 404);
+
+    // RECEIVED 상태에서만 삭제 가능
+    if (order.status !== 'RECEIVED') {
+      return c.json({ error: `현재 상태(${order.status})에서는 삭제할 수 없습니다. 수신(RECEIVED) 상태에서만 삭제 가능합니다.` }, 400);
+    }
+
+    // 연관 데이터 정리
+    await db.prepare('DELETE FROM order_status_history WHERE order_id = ?').bind(orderId).run();
+    await db.prepare('DELETE FROM orders WHERE order_id = ? AND status = ?').bind(orderId, 'RECEIVED').run();
+
+    // 감사 로그 (audit_logs 테이블)
+    await db.prepare(`
+      INSERT INTO audit_logs (entity_type, entity_id, action, actor_id, detail_json)
+      VALUES ('ORDER', ?, 'ORDER_DELETED', ?, ?)
+    `).bind(orderId, user.user_id,
+      JSON.stringify({ customer_name: order.customer_name, address_text: order.address_text, base_amount: order.base_amount })
+    ).run();
+
+    return c.json({ ok: true, order_id: orderId, message: '주문이 삭제되었습니다.' });
+  });
+
   // ─── 퍼널 현황 (Scope Engine 기반) ───
   router.get('/stats/funnel', async (c) => {
     const authErr = requireAuth(c);
