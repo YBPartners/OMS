@@ -21,7 +21,7 @@ app.onError((err, c) => {
   const method = c.req.method;
   const path = c.req.path;
   const msg = err.message || '';
-  console.error(`[OMS ERROR] ${method} ${path}:`, msg);
+  console.error(`[OMS ERROR] ${method} ${path}:`, msg, err.stack ? `\n${err.stack}` : '');
 
   // 에러 분류
   const isDbError = msg.includes('D1') || msg.includes('SQL') || msg.includes('SQLITE');

@@ -55,6 +55,10 @@ async function renderMyOrders(el) {
               <span class="font-medium text-blue-600">${formatAmount(o.base_amount)}</span>
             </div>
             <div class="text-sm text-gray-500 mb-2">${o.address_text || '-'}</div>
+            <div class="flex items-center gap-1.5 mb-2 flex-wrap">
+              ${o.channel_name ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium"><i class="fas fa-satellite-dish mr-0.5"></i>${o.channel_name}</span>` : ''}
+              ${o.service_type && o.service_type !== 'DEFAULT' ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-600"><i class="fas ${OMS.SERVICE_TYPES[o.service_type]?.icon || 'fa-question'} mr-0.5"></i>${OMS.SERVICE_TYPES[o.service_type]?.label || o.service_type}</span>` : ''}
+            </div>
             ${_renderStatusProgress(o.status)}
             <div class="flex flex-wrap gap-2 mt-3" onclick="event.stopPropagation()">
               <button onclick="showOrderDetailDrawer(${o.order_id})" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200 transition" data-tooltip="드로어에서 상세 보기">

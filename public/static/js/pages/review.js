@@ -62,11 +62,13 @@ async function renderReviewRegion(el) {
               </div>
               <span class="font-medium text-blue-600">${formatAmount(o.base_amount)}</span>
             </div>
-            <div class="text-sm text-gray-500 mb-3">${o.address_text || '-'}</div>
-            <div class="flex items-center gap-2 text-xs text-gray-400 mb-4">
+            <div class="text-sm text-gray-500 mb-2">${o.address_text || '-'}</div>
+            <div class="flex items-center gap-2 text-xs text-gray-400 mb-2 flex-wrap">
               <span><i class="fas fa-user mr-1"></i>팀장: ${o.team_leader_name || '-'}</span>
               <span>·</span>
               <span><i class="fas fa-calendar mr-1"></i>${o.requested_date || '-'}</span>
+              ${o.channel_name ? `<span>·</span><span class="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-medium"><i class="fas fa-satellite-dish mr-0.5"></i>${o.channel_name}</span>` : ''}
+              ${o.service_type && o.service_type !== 'DEFAULT' ? `<span class="px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-600 text-[10px]"><i class="fas ${OMS.SERVICE_TYPES[o.service_type]?.icon || 'fa-question'} mr-0.5"></i>${OMS.SERVICE_TYPES[o.service_type]?.label || o.service_type}</span>` : ''}
             </div>
             ${_renderStatusProgress(o.status)}
             <div class="flex gap-2 mt-4" onclick="event.stopPropagation()">
@@ -142,13 +144,15 @@ async function renderReviewHQ(el) {
               </div>
               <span class="font-medium text-blue-600">${formatAmount(o.base_amount)}</span>
             </div>
-            <div class="text-sm text-gray-500 mb-3">${o.address_text || '-'}</div>
-            <div class="flex items-center gap-2 text-xs text-gray-400 mb-4">
+            <div class="text-sm text-gray-500 mb-2">${o.address_text || '-'}</div>
+            <div class="flex items-center gap-2 text-xs text-gray-400 mb-2 flex-wrap">
               <span><i class="fas fa-building mr-1"></i>${o.region_name || '-'}</span>
               <span>·</span>
               <span><i class="fas fa-user mr-1"></i>팀장: ${o.team_leader_name || '-'}</span>
               <span>·</span>
               <span><i class="fas fa-calendar mr-1"></i>${o.requested_date || '-'}</span>
+              ${o.channel_name ? `<span>·</span><span class="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-medium"><i class="fas fa-satellite-dish mr-0.5"></i>${o.channel_name}</span>` : ''}
+              ${o.service_type && o.service_type !== 'DEFAULT' ? `<span class="px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-600 text-[10px]"><i class="fas ${OMS.SERVICE_TYPES[o.service_type]?.icon || 'fa-question'} mr-0.5"></i>${OMS.SERVICE_TYPES[o.service_type]?.label || o.service_type}</span>` : ''}
             </div>
             ${_renderStatusProgress(o.status)}
             <div class="flex gap-2 mt-4" onclick="event.stopPropagation()">

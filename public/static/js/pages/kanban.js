@@ -321,7 +321,11 @@ function kanbanCardV2(order, leader, isSelected) {
         </div>
       </div>
       <div class="font-medium text-sm mb-0.5">${order.customer_name || '이름없음'}</div>
-      <div class="text-xs text-gray-500 truncate mb-1.5" title="${order.address_text || ''}">${order.address_text?.substring(0, 35) || '-'}</div>
+      <div class="text-xs text-gray-500 truncate mb-1" title="${order.address_text || ''}">${order.address_text?.substring(0, 35) || '-'}</div>
+      <div class="flex items-center gap-1 mb-1.5 flex-wrap">
+        ${order.channel_name ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium"><i class="fas fa-satellite-dish mr-0.5"></i>${order.channel_name}</span>` : ''}
+        ${order.service_type && order.service_type !== 'DEFAULT' ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-600"><i class="fas ${OMS.SERVICE_TYPES[order.service_type]?.icon || 'fa-question'} mr-0.5"></i>${OMS.SERVICE_TYPES[order.service_type]?.label || order.service_type}</span>` : ''}
+      </div>
       <div class="flex items-center justify-between">
         <span class="text-sm font-bold text-blue-600">${formatAmount(order.base_amount)}</span>
         <span class="text-[10px] text-gray-400">${order.requested_date || '-'}</span>

@@ -272,11 +272,13 @@ export function mountReport(router: Hono<Env>) {
       SELECT s.settlement_id, s.order_id, o.external_order_no, o.customer_name, o.address_text,
              o.service_type, s.base_amount, s.commission_mode, s.commission_rate,
              s.commission_amount, s.payable_amount, s.status,
-             u.name as team_leader_name, org.name as region_name
+             u.name as team_leader_name, org.name as region_name,
+             ch.name as channel_name
       FROM settlements s
       JOIN orders o ON s.order_id = o.order_id
       JOIN users u ON s.team_leader_id = u.user_id
       JOIN organizations org ON s.region_org_id = org.org_id
+      LEFT JOIN order_channels ch ON o.channel_id = ch.channel_id
       WHERE s.run_id = ?
     `;
     const params: any[] = [runId];

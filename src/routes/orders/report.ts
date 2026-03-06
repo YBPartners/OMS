@@ -165,8 +165,8 @@ export function mountReport(router: Hono<Env>) {
         const reportResult = await db.prepare(`
           INSERT INTO work_reports (order_id, team_leader_id, policy_id_snapshot, checklist_json, note, version)
           VALUES (?, ?, ?, ?, ?, ?)
-        `).bind(orderId, user.user_id, reportPolicy?.policy_id || null,
-          JSON.stringify(body.checklist || {}), body.note || null, newVersion).run();
+        `).bind(orderId, user.user_id, reportPolicy?.policy_id ?? null,
+          JSON.stringify(body.checklist || {}), body.note ?? null, newVersion).run();
         const reportId = reportResult.meta.last_row_id;
 
         // 사진 첨부 (Base64 Data URL 또는 외부 URL)
@@ -177,9 +177,9 @@ export function mountReport(router: Hono<Env>) {
               INSERT INTO work_report_photos (report_id, category, file_url, file_name, file_size, mime_type, file_hash)
               VALUES (?, ?, ?, ?, ?, ?, ?)
             `).bind(
-              reportId, photo.category || 'ETC', photoUrl,
-              photo.file_name || null, photo.file_size || 0, photo.mime_type || null,
-              photo.file_hash || null
+              reportId, photo.category ?? 'ETC', photoUrl,
+              photo.file_name ?? null, photo.file_size ?? 0, photo.mime_type ?? null,
+              photo.file_hash ?? null
             ).run();
           }
         }
@@ -239,8 +239,8 @@ export function mountReport(router: Hono<Env>) {
               VALUES (?, 'RECEIPT', ?, ?, ?, ?, ?)
             `).bind(
               report.report_id, body.receipt_url,
-              body.file_name || null, body.file_size || 0, body.mime_type || null,
-              body.file_hash || null
+              body.file_name ?? null, body.file_size ?? 0, body.mime_type ?? null,
+              body.file_hash ?? null
             ).run();
           }
         }

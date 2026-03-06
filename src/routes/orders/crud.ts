@@ -158,12 +158,13 @@ export function mountCrud(router: Hono<Env>) {
     const validServiceTypes = ['WALL_AC', 'STAND_AC', 'CEILING_AC', 'SYSTEM_AC', 'WINDOW_AC', 'MULTI_AC', 'DEFAULT'];
     const serviceType = validServiceTypes.includes(body.service_type) ? body.service_type : 'DEFAULT';
 
-    const fpData = `${body.address_text}|${body.requested_date}|${body.service_type || 'DEFAULT'}|${body.base_amount || 0}`;
+    const requestedDate = body.requested_date || new Date().toISOString().split('T')[0];
+    const fpData = `${body.address_text}|${requestedDate}|${body.service_type || 'DEFAULT'}|${body.base_amount || 0}`;
     const fingerprint = await generateFingerprint(fpData);
 
     const dup = await db.prepare(`
       SELECT order_id, status FROM orders WHERE source_fingerprint = ? AND requested_date = ?
-    `).bind(fingerprint, body.requested_date).first();
+    `).bind(fingerprint, requestedDate).first();
     
     if (dup) {
       return c.json({ warning: '동일한 주문이 이미 존재합니다.', existing_order_id: dup.order_id, existing_status: dup.status }, 409);
@@ -174,13 +175,13 @@ export function mountCrud(router: Hono<Env>) {
         address_text, address_detail, admin_dong_code, legal_dong_code, requested_date, scheduled_date, base_amount, memo, channel_id, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
     `).bind(
-      body.external_order_no || null, fingerprint, body.service_type || 'DEFAULT',
-      body.customer_name || null, body.customer_phone || null,
-      body.address_text, body.address_detail || null,
-      body.admin_dong_code || null, body.legal_dong_code || null,
-      body.requested_date || new Date().toISOString().split('T')[0],
-      body.scheduled_date || null, body.base_amount || 0, body.memo || null,
-      body.channel_id || 1
+      body.external_order_no ?? null, fingerprint, serviceType,
+      body.customer_name ?? null, body.customer_phone ?? null,
+      body.address_text ?? '', body.address_detail ?? null,
+      body.admin_dong_code ?? null, body.legal_dong_code ?? null,
+      requestedDate,
+      body.scheduled_date ?? null, Number(body.base_amount) || 0, body.memo ?? null,
+      Number(body.channel_id) || 1
     ).run();
 
     const orderId = result.meta.last_row_id;
@@ -225,11 +226,11 @@ export function mountCrud(router: Hono<Env>) {
             address_text, address_detail, admin_dong_code, requested_date, base_amount, channel_id, status)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
         `).bind(
-          batchId, row.external_order_no || null, fingerprint, rowServiceType,
-          row.customer_name || null, row.customer_phone || null,
-          row.address_text, row.address_detail || null,
-          row.admin_dong_code || null, row.requested_date || new Date().toISOString().split('T')[0],
-          row.base_amount || 0, rowChannelId
+          batchId, row.external_order_no ?? null, fingerprint, rowServiceType,
+          row.customer_name ?? null, row.customer_phone ?? null,
+          row.address_text ?? '', row.address_detail ?? null,
+          row.admin_dong_code ?? null, row.requested_date || new Date().toISOString().split('T')[0],
+          Number(row.base_amount) || 0, rowChannelId
         ).run();
         successCount++;
       } catch (e: any) {

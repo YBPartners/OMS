@@ -149,7 +149,47 @@ function showStatRowContextMenu(event, type, name, id) {
 }
 
 async function refreshStats() {
-  renderContent();
+  const from = document.getElementById('stat-from')?.value || '';
+  const to = document.getElementById('stat-to')?.value || '';
+  
+  const [regionRes, tlRes] = await Promise.all([
+    api('GET', `/stats/regions/daily?from=${from}&to=${to}`),
+    api('GET', `/stats/team-leaders/daily?from=${from}&to=${to}`),
+  ]);
+
+  // 지역총판별 테이블 업데이트
+  const regionBody = document.getElementById('region-stats-body');
+  if (regionBody) {
+    regionBody.innerHTML = (regionRes?.stats || []).map(s => `
+      <tr class="ix-table-row" onclick="drilldownRegionStat('${s.region_name}', '${s.region_org_id || ''}')">
+        <td class="px-3 py-2 text-xs">${s.date}</td>
+        <td class="px-3 py-2 font-medium text-blue-700"><i class="fas fa-building text-[10px] mr-1 text-blue-400"></i>${s.region_name}</td>
+        <td class="px-3 py-2 text-right">${s.intake_count || 0}</td>
+        <td class="px-3 py-2 text-right">${s.assigned_to_team_count || 0}</td>
+        <td class="px-3 py-2 text-right">${s.completed_count || 0}</td>
+        <td class="px-3 py-2 text-right">${s.region_approved_count || 0}</td>
+        <td class="px-3 py-2 text-right">${s.hq_approved_count || 0}</td>
+        <td class="px-3 py-2 text-right font-bold text-green-600">${s.settlement_confirmed_count || 0}</td>
+      </tr>`).join('') || '<tr><td colspan="8" class="px-3 py-4 text-center text-gray-400">데이터 없음</td></tr>';
+  }
+
+  // 팀장별 테이블 업데이트
+  const tlBody = document.getElementById('tl-stats-body');
+  if (tlBody) {
+    tlBody.innerHTML = (tlRes?.stats || []).map(s => `
+      <tr class="ix-table-row" onclick="drilldownTeamLeaderStat('${s.team_leader_name}', '${s.team_leader_id || ''}')">
+        <td class="px-3 py-2 text-xs">${s.date}</td>
+        <td class="px-3 py-2 font-medium">${s.team_leader_name}</td>
+        <td class="px-3 py-2 text-gray-500">${s.org_name || '-'}</td>
+        <td class="px-3 py-2 text-right">${s.intake_count || 0}</td>
+        <td class="px-3 py-2 text-right">${s.submitted_count || 0}</td>
+        <td class="px-3 py-2 text-right">${s.hq_approved_count || 0}</td>
+        <td class="px-3 py-2 text-right">${s.settlement_confirmed_count || 0}</td>
+        <td class="px-3 py-2 text-right font-bold text-green-600">${formatAmount(s.payable_amount_sum)}</td>
+      </tr>`).join('') || '<tr><td colspan="8" class="px-3 py-4 text-center text-gray-400">데이터 없음</td></tr>';
+  }
+
+  showToast('통계가 갱신되었습니다.', 'success');
 }
 
 async function exportCSV(groupBy) {
