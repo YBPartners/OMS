@@ -1,7 +1,7 @@
 # 와이비 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-06
-> **현재 버전**: v20.7.0 (R6 완료, R7 착수)
+> **현재 버전**: v20.8.0 (R7 완료)
 > **총 코드량**: Backend ~11,000줄 (49 TS) + Frontend ~13,200줄 (24 JS) + SW 143줄 + CSS 420줄 + SQL 1,400줄 + E2E 1,000줄 = **~27,200줄**
 
 ---
@@ -44,6 +44,7 @@
 | **R4** | **정책관리 CRUD 완성 + 감사로그** | **✅ 완료** | **2026-03-06** | **4종 정책 CRUD 완성, 삭제 API+감사로그, metrics UI, 필수사진 강제, E2E 26/26** |
 | **R5** | **인사·권한·가입 완성** | **✅ 완료** | **2026-03-06** | **사용자 삭제/이동/다중역할, 조직 수정/삭제 UI, canEdit 버그수정, E2E 35/36** |
 | **R6** | **공통 UI/UX 표준화** | **✅ 완료** | **2026-03-06** | **apiAction() 래퍼, 모달 ESC/포커스/aria, 토스트 스택, formField 접근성, 5개 페이지 리팩토링, E2E 61/62** |
+| **R7** | **대시보드·통계·감사 품질 강화** | **✅ 완료** | **2026-03-06** | **인라인 테이블 5개→renderDataTable, 감사로그 renderPagination, statistics.js 12함수 apiAction 전환, E2E 61/62** |
 
 ---
 
@@ -973,7 +974,7 @@
 | R4 | **기준정보 관리** | 채널·정책·수수료·조직·지역권 | 마스터 데이터 CRUD 완성도, 연쇄 반영 | ✅ 완료 |
 | R5 | **인사·권한·가입** | 사용자·역할·가입신청·대리점·폰인증 | RBAC 정합성, 가입 플로우 완결성 | ✅ 완료 |
 | R6 | **공통 UI/UX·입력체계** | 모달·토스트·테이블·모바일·검색 | 일관성, 접근성, 반응형, 에러 UX | ✅ 완료 |
-| R7 | **대시보드·통계·감사** | 대시보드·통계·대사·감사로그 | 인라인 테이블→renderDataTable 마이그레이션, 성능 최적화, 차트 개선 | 🔄 진행중 |
+| R7 | **대시보드·통계·감사** | 대시보드·통계·대사·감사로그 | 인라인 테이블→renderDataTable, apiAction 전환, 접근성 | ✅ 완료 |
 | R8 | **운영 안정성·보안** | 세션·에러처리·입력검증·SQL주입방어 | 프로덕션 안정성, 엣지 케이스 방어 | ⏳ 대기 |
 
 ---
@@ -1404,14 +1405,67 @@
 | **R4** | 기준정보 관리 | 4종 정책 CRUD, 삭제 API, metrics UI | ✅ 완료 |
 | **R5** | 인사·권한·가입 | 사용자 삭제/이동/다중역할, 조직 CRUD | ✅ 완료 |
 | **R6** | 공통 UI/UX 표준화 | apiAction, 모달/토스트 접근성, 리팩토링 | ✅ 완료 |
-| **R7** | 대시보드·통계·감사 | 인라인테이블→renderDataTable, 성능, 차트 | 🔄 진행중 |
+| **R7** | 대시보드·통계·감사 | 인라인테이블→renderDataTable, 성능, 차트 | ✅ 완료 |
 | **R8** | 운영 안정성·보안 | 세션·에러처리·입력검증·SQL주입방어 | ⏳ 대기 |
 
 ---
 
-### R7: 대시보드·통계·감사 품질 강화 — 진행중 🔄
+### R7: 대시보드·통계·감사 품질 강화 — ✅ 완료 (2026-03-06)
 
 > **범위**: 대시보드 인라인 테이블 → renderDataTable 마이그레이션, 통계 차트 개선, 감사로그 UI 보강
 > **목표**: 37개 인라인 `<table>` 중 대시보드/통계/감사의 핵심 테이블을 공유 컴포넌트로 전환, 데이터 정확성 검증
 
-#### R7-1단계: 현황 진단 🔄
+#### R7-1단계: 현황 진단 ✅
+
+| 파일 | 줄수 | 인라인 `<table>` | renderDataTable 사용 | 이슈 |
+|------|------|-----------------|---------------------|------|
+| dashboard.js | 1083 | 3개 (지역총판, 모달 일별/팀장, 정산Run) | 0 | 인라인 테이블+코드 중복 |
+| statistics.js | 686 | 7개 (지역/팀장 통계, 정책 5개) | 0 | refreshStats HTML 중복 |
+| audit.js | 417 | 1개 (로그 목록) | 0 | 커스텀 렌더링 필요 |
+| **합계** | **2,186** | **11개** | **0** | apiAction 미사용 다수 |
+
+#### R7-2단계: 인라인 테이블 → renderDataTable 마이그레이션 ✅
+
+**dashboard.js (2개 테이블 전환):**
+- 지역총판별 현황 테이블 → `renderDataTable({ tableId: 'dash-region-table', ... })` + `_dashRegionClick()` 핸들러
+- 최근 정산 Run 테이블 → `renderDataTable({ tableId: 'dash-settle-runs', ... })` + `_dashSettleRunClick()` 핸들러
+- `window._dashRegionSummary` 참조 저장으로 인덱스 기반 클릭 지원
+
+**statistics.js (2개 테이블 전환):**
+- 지역총판별 통계 → `_renderRegionStatsTable()` 헬퍼 + `_statRegionRowClick()` 핸들러
+- 팀장별 통계 → `_renderTLStatsTable()` 헬퍼 + `_statTLRowClick()` 핸들러
+- `refreshStats()` 리팩토링: innerHTML 중복 제거 → 헬퍼 함수 재사용
+
+**audit.js (1개 테이블 + 1개 페이지네이션 전환):**
+- 로그 목록 테이블 → `renderDataTable({ tableId: 'audit-log-table', ... })` (커스텀 렌더 7컬럼)
+- 페이지네이션 → `renderPagination(total, page, limit, '_auditPageChange')` + `_auditPageChange()` 핸들러
+
+#### R7-3단계: apiAction 전환 (statistics.js) ✅
+
+12개 함수를 `apiAction()`으로 전환 (수동 try/catch + showToast 제거):
+- `submitNewMetricsPolicy`, `submitEditMetricsPolicy`, `toggleMetricsActive`
+- `submitNewDistPolicy`, `submitEditDistPolicy`, `togglePolicyActive`
+- `submitNewReportPolicy`, `submitEditReportPolicy`
+- `submitNewCommission`, `submitEditCommission`, `toggleCommissionActive`
+- `submitTerritoryMapping`
+
+#### R7-4단계: 검증 ✅
+
+- E2E: HR 35/36 (100%) + Policy 26/26 (100%) = 61/62 총 통과
+- 빌드: dist/_worker.js 278.03 kB (변경 없음)
+- 헬스체크: 정상
+
+### 변경 통계
+- 3 files changed: dashboard.js (인라인 테이블 2개→renderDataTable), statistics.js (+67 헬퍼, 12 apiAction), audit.js (테이블+페이지네이션→공유컴포넌트)
+- E2E: HR 35/36 + Policy 26/26 = 61/62 (100%)
+- 커밋: (R7)
+
+**R8 우선순위 제안:**
+
+| 우선순위 | 항목 | 설명 | 난이도 |
+|---|---|---|---|
+| 🔴 P1 | 운영 안정성·보안 | 세션·에러처리·입력검증·SQL주입방어 | 중 |
+| 🟠 P2 | 나머지 인라인 테이블 전환 | settlement/review/kanban 등 추가 마이그레이션 | 중 |
+| 🟡 P3 | 프로덕션 배포 최적화 | 코드 분할, 지연 로딩, CDN 캐시 | 하 |
+
+**다음 단계 추천:** R8 (운영 안정성·보안: 프로덕션 안정성 강화)

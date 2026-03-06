@@ -41,66 +41,74 @@ async function renderStatistics(el) {
       <!-- 지역총판별 통계 -->
       <div class="bg-white rounded-xl p-5 border border-gray-100 mb-6">
         <h3 class="font-semibold mb-4"><i class="fas fa-building mr-2 text-blue-500"></i>지역총판별 통계</h3>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50"><tr>
-              <th class="px-3 py-2 text-left">날짜</th><th class="px-3 py-2 text-left">지역총판</th>
-              <th class="px-3 py-2 text-right">인입</th><th class="px-3 py-2 text-right">팀장배정</th>
-              <th class="px-3 py-2 text-right">완료</th><th class="px-3 py-2 text-right">지역승인</th>
-              <th class="px-3 py-2 text-right">HQ승인</th><th class="px-3 py-2 text-right">정산확정</th>
-            </tr></thead>
-            <tbody class="divide-y" id="region-stats-body">
-              ${(regionRes?.stats || []).map(s => `
-                <tr class="ix-table-row" 
-                    onclick="drilldownRegionStat('${s.region_name}', '${s.region_org_id || ''}')"
-                    oncontextmenu="showStatRowContextMenu(event, 'region', '${s.region_name}', '${s.region_org_id || ''}')">
-                  <td class="px-3 py-2 text-xs">${s.date}</td>
-                  <td class="px-3 py-2 font-medium text-blue-700"><i class="fas fa-building text-[10px] mr-1 text-blue-400"></i>${s.region_name}</td>
-                  <td class="px-3 py-2 text-right">${s.intake_count || 0}</td>
-                  <td class="px-3 py-2 text-right">${s.assigned_to_team_count || 0}</td>
-                  <td class="px-3 py-2 text-right">${s.completed_count || 0}</td>
-                  <td class="px-3 py-2 text-right">${s.region_approved_count || 0}</td>
-                  <td class="px-3 py-2 text-right">${s.hq_approved_count || 0}</td>
-                  <td class="px-3 py-2 text-right font-bold text-green-600">${s.settlement_confirmed_count || 0}</td>
-                </tr>`).join('')}
-              ${(regionRes?.stats || []).length === 0 ? '<tr><td colspan="8" class="px-3 py-4 text-center text-gray-400">데이터 없음</td></tr>' : ''}
-            </tbody>
-          </table>
+        <div id="region-stats-container">
+          ${_renderRegionStatsTable(regionRes?.stats || [])}
         </div>
       </div>
 
       <!-- 팀장별 통계 -->
       <div class="bg-white rounded-xl p-5 border border-gray-100">
         <h3 class="font-semibold mb-4"><i class="fas fa-users mr-2 text-purple-500"></i>팀장별 통계</h3>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50"><tr>
-              <th class="px-3 py-2 text-left">날짜</th><th class="px-3 py-2 text-left">팀장명</th>
-              <th class="px-3 py-2 text-left">총판</th><th class="px-3 py-2 text-right">수임</th>
-              <th class="px-3 py-2 text-right">제출</th><th class="px-3 py-2 text-right">HQ승인</th>
-              <th class="px-3 py-2 text-right">정산확정</th><th class="px-3 py-2 text-right">지급액합</th>
-            </tr></thead>
-            <tbody class="divide-y" id="tl-stats-body">
-              ${(tlRes?.stats || []).map(s => `
-                <tr class="ix-table-row"
-                    onclick="drilldownTeamLeaderStat('${s.team_leader_name}', '${s.team_leader_id || ''}')"
-                    oncontextmenu="showStatRowContextMenu(event, 'leader', '${s.team_leader_name}', '${s.team_leader_id || ''}')"
-                    data-preview="user" data-preview-id="${s.team_leader_id || ''}" data-preview-title="${s.team_leader_name}">
-                  <td class="px-3 py-2 text-xs">${s.date}</td>
-                  <td class="px-3 py-2 font-medium">${s.team_leader_name}</td>
-                  <td class="px-3 py-2 text-gray-500">${s.org_name || '-'}</td>
-                  <td class="px-3 py-2 text-right">${s.intake_count || 0}</td>
-                  <td class="px-3 py-2 text-right">${s.submitted_count || 0}</td>
-                  <td class="px-3 py-2 text-right">${s.hq_approved_count || 0}</td>
-                  <td class="px-3 py-2 text-right">${s.settlement_confirmed_count || 0}</td>
-                  <td class="px-3 py-2 text-right font-bold text-green-600">${formatAmount(s.payable_amount_sum)}</td>
-                </tr>`).join('')}
-              ${(tlRes?.stats || []).length === 0 ? '<tr><td colspan="8" class="px-3 py-4 text-center text-gray-400">데이터 없음</td></tr>' : ''}
-            </tbody>
-          </table>
+        <div id="tl-stats-container">
+          ${_renderTLStatsTable(tlRes?.stats || [])}
         </div>
       </div>
     </div>`;
+}
+
+// ─── 통계 테이블 헬퍼 (renderDataTable 사용) ───
+function _renderRegionStatsTable(stats) {
+  window._regionStats = stats;
+  return renderDataTable({
+    tableId: 'region-stats-table',
+    caption: '지역총판별 일별 통계',
+    columns: [
+      { key: 'date', label: '날짜', render: s => `<span class="text-xs">${s.date}</span>` },
+      { key: 'region_name', label: '지역총판', render: s => `<span class="font-medium text-blue-700"><i class="fas fa-building text-[10px] mr-1 text-blue-400"></i>${s.region_name}</span>` },
+      { key: 'intake_count', label: '인입', align: 'right', render: s => s.intake_count || 0 },
+      { key: 'assigned_to_team_count', label: '팀장배정', align: 'right', render: s => s.assigned_to_team_count || 0 },
+      { key: 'completed_count', label: '완료', align: 'right', render: s => s.completed_count || 0 },
+      { key: 'region_approved_count', label: '지역승인', align: 'right', render: s => s.region_approved_count || 0 },
+      { key: 'hq_approved_count', label: 'HQ승인', align: 'right', render: s => s.hq_approved_count || 0 },
+      { key: 'settlement_confirmed_count', label: '정산확정', align: 'right', render: s => `<span class="font-bold text-green-600">${s.settlement_confirmed_count || 0}</span>` },
+    ],
+    rows: stats,
+    onRowClick: '_statRegionRowClick',
+    emptyText: '데이터 없음',
+  });
+}
+
+function _renderTLStatsTable(stats) {
+  window._tlStats = stats;
+  return renderDataTable({
+    tableId: 'tl-stats-table',
+    caption: '팀장별 일별 통계',
+    columns: [
+      { key: 'date', label: '날짜', render: s => `<span class="text-xs">${s.date}</span>` },
+      { key: 'team_leader_name', label: '팀장명', render: s => `<span class="font-medium">${s.team_leader_name}</span>` },
+      { key: 'org_name', label: '총판', render: s => `<span class="text-gray-500">${s.org_name || '-'}</span>` },
+      { key: 'intake_count', label: '수임', align: 'right', render: s => s.intake_count || 0 },
+      { key: 'submitted_count', label: '제출', align: 'right', render: s => s.submitted_count || 0 },
+      { key: 'hq_approved_count', label: 'HQ승인', align: 'right', render: s => s.hq_approved_count || 0 },
+      { key: 'settlement_confirmed_count', label: '정산확정', align: 'right', render: s => s.settlement_confirmed_count || 0 },
+      { key: 'payable_amount_sum', label: '지급액합', align: 'right', render: s => `<span class="font-bold text-green-600">${formatAmount(s.payable_amount_sum)}</span>` },
+    ],
+    rows: stats,
+    onRowClick: '_statTLRowClick',
+    emptyText: '데이터 없음',
+  });
+}
+
+function _statRegionRowClick(idx) {
+  const stats = window._regionStats || [];
+  const s = stats[idx];
+  if (s) drilldownRegionStat(s.region_name, s.region_org_id || '');
+}
+
+function _statTLRowClick(idx) {
+  const stats = window._tlStats || [];
+  const s = stats[idx];
+  if (s) drilldownTeamLeaderStat(s.team_leader_name, s.team_leader_id || '');
 }
 
 // ─── 통계 행 드릴다운 ───
@@ -157,36 +165,16 @@ async function refreshStats() {
     api('GET', `/stats/team-leaders/daily?from=${from}&to=${to}`),
   ]);
 
-  // 지역총판별 테이블 업데이트
-  const regionBody = document.getElementById('region-stats-body');
-  if (regionBody) {
-    regionBody.innerHTML = (regionRes?.stats || []).map(s => `
-      <tr class="ix-table-row" onclick="drilldownRegionStat('${s.region_name}', '${s.region_org_id || ''}')">
-        <td class="px-3 py-2 text-xs">${s.date}</td>
-        <td class="px-3 py-2 font-medium text-blue-700"><i class="fas fa-building text-[10px] mr-1 text-blue-400"></i>${s.region_name}</td>
-        <td class="px-3 py-2 text-right">${s.intake_count || 0}</td>
-        <td class="px-3 py-2 text-right">${s.assigned_to_team_count || 0}</td>
-        <td class="px-3 py-2 text-right">${s.completed_count || 0}</td>
-        <td class="px-3 py-2 text-right">${s.region_approved_count || 0}</td>
-        <td class="px-3 py-2 text-right">${s.hq_approved_count || 0}</td>
-        <td class="px-3 py-2 text-right font-bold text-green-600">${s.settlement_confirmed_count || 0}</td>
-      </tr>`).join('') || '<tr><td colspan="8" class="px-3 py-4 text-center text-gray-400">데이터 없음</td></tr>';
+  // 지역총판별 테이블 업데이트 (renderDataTable 사용)
+  const regionContainer = document.getElementById('region-stats-container');
+  if (regionContainer) {
+    regionContainer.innerHTML = _renderRegionStatsTable(regionRes?.stats || []);
   }
 
-  // 팀장별 테이블 업데이트
-  const tlBody = document.getElementById('tl-stats-body');
-  if (tlBody) {
-    tlBody.innerHTML = (tlRes?.stats || []).map(s => `
-      <tr class="ix-table-row" onclick="drilldownTeamLeaderStat('${s.team_leader_name}', '${s.team_leader_id || ''}')">
-        <td class="px-3 py-2 text-xs">${s.date}</td>
-        <td class="px-3 py-2 font-medium">${s.team_leader_name}</td>
-        <td class="px-3 py-2 text-gray-500">${s.org_name || '-'}</td>
-        <td class="px-3 py-2 text-right">${s.intake_count || 0}</td>
-        <td class="px-3 py-2 text-right">${s.submitted_count || 0}</td>
-        <td class="px-3 py-2 text-right">${s.hq_approved_count || 0}</td>
-        <td class="px-3 py-2 text-right">${s.settlement_confirmed_count || 0}</td>
-        <td class="px-3 py-2 text-right font-bold text-green-600">${formatAmount(s.payable_amount_sum)}</td>
-      </tr>`).join('') || '<tr><td colspan="8" class="px-3 py-4 text-center text-gray-400">데이터 없음</td></tr>';
+  // 팀장별 테이블 업데이트 (renderDataTable 사용)
+  const tlContainer = document.getElementById('tl-stats-container');
+  if (tlContainer) {
+    tlContainer.innerHTML = _renderTLStatsTable(tlRes?.stats || []);
   }
 
   showToast('통계가 갱신되었습니다.', 'success');
@@ -424,9 +412,7 @@ function showNewMetricsPolicyModal() {
 }
 async function submitNewMetricsPolicy() {
   const data = { completion_basis: document.getElementById('mp-completion')?.value, region_intake_basis: document.getElementById('mp-intake')?.value, effective_from: document.getElementById('mp-from')?.value };
-  const res = await api('POST', '/stats/policies/metrics', data);
-  if (res?.ok) { showToast('지표 정책 생성 완료', 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  await apiAction('POST', '/stats/policies/metrics', data, { successMsg: '지표 정책 생성 완료', closeModal: true, refresh: true });
 }
 function showEditMetricsPolicyModal(p) {
   const content = `<div class="space-y-4">
@@ -445,14 +431,10 @@ function showEditMetricsPolicyModal(p) {
 }
 async function submitEditMetricsPolicy(id) {
   const data = { completion_basis: document.getElementById('mp-completion')?.value, region_intake_basis: document.getElementById('mp-intake')?.value };
-  const res = await api('PUT', `/stats/policies/metrics/${id}`, data);
-  if (res?.ok) { showToast('지표 정책 수정 완료', 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  await apiAction('PUT', `/stats/policies/metrics/${id}`, data, { successMsg: '지표 정책 수정 완료', closeModal: true, refresh: true });
 }
 async function toggleMetricsActive(id, val) {
-  const res = await api('PUT', `/stats/policies/metrics/${id}`, { is_active: !!val });
-  if (res?.ok) { showToast(val ? '활성화 완료' : '비활성화 완료', 'success'); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  await apiAction('PUT', `/stats/policies/metrics/${id}`, { is_active: !!val }, { successMsg: val ? '활성화 완료' : '비활성화 완료', refresh: true });
 }
 async function deleteMetricsPolicy(id) {
   showConfirmModal('지표 정책 삭제', `#${id} 정책을 삭제하시겠습니까?`, async () => {
@@ -481,9 +463,7 @@ async function submitNewDistPolicy() {
   const rule_json = document.getElementById('dp-rule')?.value || '{}';
   const effective_from = document.getElementById('dp-from')?.value;
   if (!name) { showToast('정책명을 입력하세요.', 'warning'); return; }
-  const res = await api('POST', '/stats/policies/distribution', { name, rule_json, effective_from });
-  if (res?.ok) { showToast(`새 버전 v${res.version} 생성 완료`, 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  await apiAction('POST', '/stats/policies/distribution', { name, rule_json, effective_from }, { successMsg: d => `새 버전 v${d.version} 생성 완료`, closeModal: true, refresh: true });
 }
 
 // 배분 정책 — 수정
@@ -501,16 +481,12 @@ function showEditDistPolicyModal(p) {
 async function submitEditDistPolicy(id) {
   const name = document.getElementById('dp-edit-name')?.value;
   const rule_json = document.getElementById('dp-edit-rule')?.value;
-  const res = await api('PUT', `/stats/policies/distribution/${id}`, { name, rule_json });
-  if (res?.ok) { showToast('수정 완료', 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  await apiAction('PUT', `/stats/policies/distribution/${id}`, { name, rule_json }, { successMsg: '수정 완료', closeModal: true, refresh: true });
 }
 
 // 활성/비활성 토글 (배분/보고서 공용)
 async function togglePolicyActive(type, id, newActive) {
-  const res = await api('PUT', `/stats/policies/${type}/${id}`, { is_active: !!newActive });
-  if (res?.ok) { showToast(newActive ? '활성화 완료' : '비활성화 완료', 'success'); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  await apiAction('PUT', `/stats/policies/${type}/${id}`, { is_active: !!newActive }, { successMsg: newActive ? '활성화 완료' : '비활성화 완료', refresh: true });
 }
 
 // 보고서 정책 — 새 버전 생성
@@ -539,13 +515,11 @@ async function submitNewReportPolicy() {
   if (!name) { showToast('정책명을 입력하세요.', 'warning'); return; }
   const photos = { BEFORE: +document.getElementById('rp-before').value, AFTER: +document.getElementById('rp-after').value, WASH: +document.getElementById('rp-wash').value, RECEIPT: +document.getElementById('rp-receipt').value };
   const checklist = document.getElementById('rp-checklist').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  const res = await api('POST', '/stats/policies/report', {
+  await apiAction('POST', '/stats/policies/report', {
     name, service_type: document.getElementById('rp-type').value || 'DEFAULT',
     required_photos_json: photos, required_checklist_json: checklist,
     require_receipt: document.getElementById('rp-require-receipt').checked,
-  });
-  if (res?.ok) { showToast(`새 버전 v${res.version} 생성 완료`, 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  }, { successMsg: d => `새 버전 v${d.version} 생성 완료`, closeModal: true, refresh: true });
 }
 
 // 보고서 정책 — 수정
@@ -574,13 +548,11 @@ function showEditReportPolicyModal(p) {
 async function submitEditReportPolicy(id) {
   const photos = { BEFORE: +document.getElementById('rp-edit-before').value, AFTER: +document.getElementById('rp-edit-after').value, WASH: +document.getElementById('rp-edit-wash').value, RECEIPT: +document.getElementById('rp-edit-receipt').value };
   const checklist = document.getElementById('rp-edit-checklist').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  const res = await api('PUT', `/stats/policies/report/${id}`, {
+  await apiAction('PUT', `/stats/policies/report/${id}`, {
     name: document.getElementById('rp-edit-name').value,
     required_photos_json: photos, required_checklist_json: checklist,
     require_receipt: document.getElementById('rp-edit-require').checked,
-  });
-  if (res?.ok) { showToast('수정 완료', 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  }, { successMsg: '수정 완료', closeModal: true, refresh: true });
 }
 
 // 수수료 정책 — 새로 추가
@@ -606,13 +578,11 @@ async function showNewCommissionModal() {
 async function submitNewCommission() {
   const orgId = +document.getElementById('cp-org').value;
   const leaderId = document.getElementById('cp-leader').value ? +document.getElementById('cp-leader').value : null;
-  const res = await api('POST', '/stats/policies/commission', {
+  await apiAction('POST', '/stats/policies/commission', {
     org_id: orgId, team_leader_id: leaderId,
     mode: document.getElementById('cp-mode').value,
     value: +document.getElementById('cp-value').value,
-  });
-  if (res?.ok) { showToast('수수료 정책 추가 완료', 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  }, { successMsg: '수수료 정책 추가 완료', closeModal: true, refresh: true });
 }
 
 // 수수료 정책 — 수정
@@ -631,19 +601,15 @@ function showEditCommissionModal(p) {
     <button onclick="submitEditCommission(${p.commission_policy_id})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`);
 }
 async function submitEditCommission(id) {
-  const res = await api('PUT', `/stats/policies/commission/${id}`, {
+  await apiAction('PUT', `/stats/policies/commission/${id}`, {
     mode: document.getElementById('cp-edit-mode').value,
     value: +document.getElementById('cp-edit-value').value,
-  });
-  if (res?.ok) { showToast('수정 완료', 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  }, { successMsg: '수정 완료', closeModal: true, refresh: true });
 }
 
 // 수수료 활성/비활성 토글
 async function toggleCommissionActive(id, newActive) {
-  const res = await api('PUT', `/stats/policies/commission/${id}`, { is_active: !!newActive });
-  if (res?.ok) { showToast(newActive ? '활성화 완료' : '비활성화 완료', 'success'); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  await apiAction('PUT', `/stats/policies/commission/${id}`, { is_active: !!newActive }, { successMsg: newActive ? '활성화 완료' : '비활성화 완료', refresh: true });
 }
 
 // 배분/보고서 정책 삭제
@@ -680,7 +646,5 @@ async function showTerritoryMappingModal(territoryId, currentOrgName) {
 }
 async function submitTerritoryMapping(territoryId) {
   const orgId = +document.getElementById('tm-org').value;
-  const res = await api('PUT', `/stats/territories/${territoryId}/mapping`, { org_id: orgId });
-  if (res?.ok) { showToast('매핑 변경 완료', 'success'); closeModal(); renderContent(); }
-  else showToast(res?.error || '실패', 'error');
+  await apiAction('PUT', `/stats/territories/${territoryId}/mapping`, { org_id: orgId }, { successMsg: '매핑 변경 완료', closeModal: true, refresh: true });
 }

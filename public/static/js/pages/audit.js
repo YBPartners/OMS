@@ -118,79 +118,32 @@ async function renderAuditList(el) {
         </div>
       </div>
       
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50 text-gray-600">
-            <tr>
-              <th class="px-3 py-2.5 text-left w-16">ID</th>
-              <th class="px-3 py-2.5 text-left">시각</th>
-              <th class="px-3 py-2.5 text-left">엔티티</th>
-              <th class="px-3 py-2.5 text-left">액션</th>
-              <th class="px-3 py-2.5 text-left">실행자</th>
-              <th class="px-3 py-2.5 text-left">상세</th>
-              <th class="px-3 py-2.5 text-center w-14">보기</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y">
-            ${logs.map(log => {
-              const entityColor = auditEntityColor(log.entity_type);
-              const actionParts = (log.action || '').split('.');
-              const actionLabel = actionParts.length > 1 ? actionParts[1] : log.action;
-              let detailPreview = '';
-              try {
-                const detail = JSON.parse(log.detail_json || '{}');
-                const keys = Object.keys(detail).slice(0, 3);
-                detailPreview = keys.map(k => `${k}: ${String(detail[k]).substring(0, 20)}`).join(', ');
-              } catch { detailPreview = (log.detail_json || '').substring(0, 50); }
-              
-              return `
-              <tr class="hover:bg-gray-50">
-                <td class="px-3 py-2.5 font-mono text-xs text-gray-400">${log.log_id}</td>
-                <td class="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">${formatDate(log.created_at)}</td>
-                <td class="px-3 py-2.5">
-                  <span class="inline-flex items-center gap-1 ${entityColor.badge} text-xs px-2 py-0.5 rounded-full font-medium">
-                    <i class="fas ${entityColor.icon} text-[10px]"></i>${log.entity_type}
-                  </span>
-                  ${log.entity_id ? `<span class="text-xs text-gray-400 ml-1">#${log.entity_id}</span>` : ''}
-                </td>
-                <td class="px-3 py-2.5">
-                  <span class="text-xs font-mono ${auditActionColor(actionLabel)}">${log.action}</span>
-                </td>
-                <td class="px-3 py-2.5">
-                  <div class="flex items-center gap-1.5">
-                    <div class="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
-                      <i class="fas fa-user text-gray-400 text-[10px]"></i>
-                    </div>
-                    <div>
-                      <div class="text-xs font-medium">${log.actor_name || '시스템'}</div>
-                      <div class="text-[10px] text-gray-400">${log.actor_org_name || ''}</div>
-                    </div>
-                  </div>
-                </td>
-                <td class="px-3 py-2.5 text-xs text-gray-500 max-w-[200px] truncate" title="${detailPreview}">
-                  ${detailPreview || '<span class="text-gray-300">-</span>'}
-                </td>
-                <td class="px-3 py-2.5 text-center">
-                  <button onclick="showAuditDetail(${log.log_id})" class="w-7 h-7 flex items-center justify-center bg-gray-100 rounded-lg hover:bg-indigo-100 text-gray-500 hover:text-indigo-600">
-                    <i class="fas fa-eye text-xs"></i>
-                  </button>
-                </td>
-              </tr>`;
-            }).join('')}
-            ${logs.length === 0 ? '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-scroll text-3xl mb-2 block text-gray-300"></i>감사 로그가 없습니다.</td></tr>' : ''}
-          </tbody>
-        </table>
-      </div>
+      ${renderDataTable({
+        tableId: 'audit-log-table',
+        caption: '감사 로그 목록',
+        columns: [
+          { key: 'log_id', label: 'ID', width: '60px', render: log => `<span class="font-mono text-xs text-gray-400">${log.log_id}</span>` },
+          { key: 'created_at', label: '시각', render: log => `<span class="text-xs text-gray-500 whitespace-nowrap">${formatDate(log.created_at)}</span>` },
+          { key: 'entity_type', label: '엔티티', render: log => {
+            const ec = auditEntityColor(log.entity_type);
+            return `<span class="inline-flex items-center gap-1 ${ec.badge} text-xs px-2 py-0.5 rounded-full font-medium"><i class="fas ${ec.icon} text-[10px]"></i>${log.entity_type}</span>${log.entity_id ? `<span class="text-xs text-gray-400 ml-1">#${log.entity_id}</span>` : ''}`;
+          }},
+          { key: 'action', label: '액션', render: log => {
+            return `<span class="text-xs font-mono ${auditActionColor((log.action || '').split('.').pop())}">${log.action}</span>`;
+          }},
+          { key: 'actor_name', label: '실행자', render: log => `<div class="flex items-center gap-1.5"><div class="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center"><i class="fas fa-user text-gray-400 text-[10px]"></i></div><div><div class="text-xs font-medium">${log.actor_name || '시스템'}</div><div class="text-[10px] text-gray-400">${log.actor_org_name || ''}</div></div></div>` },
+          { key: 'detail_json', label: '상세', render: log => {
+            let detailPreview = '';
+            try { const detail = JSON.parse(log.detail_json || '{}'); const keys = Object.keys(detail).slice(0, 3); detailPreview = keys.map(k => `${k}: ${String(detail[k]).substring(0, 20)}`).join(', '); } catch { detailPreview = (log.detail_json || '').substring(0, 50); }
+            return `<span class="text-xs text-gray-500 max-w-[200px] truncate block" title="${detailPreview}">${detailPreview || '<span class="text-gray-300">-</span>'}</span>`;
+          }},
+          { key: '_view', label: '보기', align: 'center', width: '56px', render: log => `<button onclick="event.stopPropagation();showAuditDetail(${log.log_id})" class="w-7 h-7 flex items-center justify-center bg-gray-100 rounded-lg hover:bg-indigo-100 text-gray-500 hover:text-indigo-600"><i class="fas fa-eye text-xs"></i></button>` },
+        ],
+        rows: logs,
+        emptyText: '<i class="fas fa-scroll text-3xl mb-2 block text-gray-300"></i>감사 로그가 없습니다.',
+      })}
       
-      <!-- 페이지네이션 -->
-      <div class="flex items-center justify-between px-4 py-3 border-t text-sm text-gray-500">
-        <span>총 ${total.toLocaleString()}건</span>
-        <div class="flex gap-2">
-          ${f.page > 1 ? `<button onclick="auditState.filters.page=${f.page - 1};renderContent()" class="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200">이전</button>` : ''}
-          <span class="px-3 py-1 font-medium">${f.page} / ${totalPages}</span>
-          ${f.page < totalPages ? `<button onclick="auditState.filters.page=${f.page + 1};renderContent()" class="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200">다음</button>` : ''}
-        </div>
-      </div>
+      ${renderPagination(total, f.page, f.limit, '_auditPageChange')}
     </div>`;
 }
 
@@ -375,6 +328,11 @@ async function showAuditDetail(logId) {
 }
 
 // ─── 필터 ───
+function _auditPageChange(page) {
+  auditState.filters.page = page;
+  renderContent();
+}
+
 function auditApplyFilter() {
   auditState.filters.entity_type = document.getElementById('af-entity')?.value || '';
   auditState.filters.action = document.getElementById('af-action')?.value || '';

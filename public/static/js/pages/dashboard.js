@@ -49,6 +49,7 @@ async function renderDashboard(el) {
   ];
 
   window._dashCardHandlers = {};
+  window._dashRegionSummary = dashRes.region_summary || [];
   cards.forEach((c, i) => { window._dashCardHandlers[i] = c.click; });
 
   el.innerHTML = `
@@ -148,29 +149,20 @@ async function renderDashboard(el) {
               <i class="fas fa-chart-bar mr-1"></i>통계
             </button>
           </div>
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead><tr class="border-b text-gray-500">
-                <th class="py-2 text-left">지역총판</th><th class="py-2 text-right">진행중</th><th class="py-2 text-right">검수대기</th><th class="py-2 text-right">정산대기</th><th class="py-2 text-right">정산완료</th>
-              </tr></thead>
-              <tbody>
-                ${(dashRes.region_summary || []).map(r => `
-                  <tr class="ix-table-row border-b"
-                      onclick="showRegionDetailModal(${r.org_id}, '${r.region_name}')"
-                      oncontextmenu="showRegionContextMenu(event, ${r.org_id}, '${r.region_name}')"
-                      data-preview="region" data-preview-id="${r.org_id}" data-preview-title="${r.region_name} 최근 현황">
-                    <td class="py-2.5 font-medium text-blue-700">
-                      <i class="fas fa-building text-[10px] mr-1 text-blue-400"></i>${r.region_name}
-                    </td>
-                    <td class="py-2.5 text-right font-medium text-blue-600">${r.active_orders}</td>
-                    <td class="py-2.5 text-right font-medium text-amber-600">${r.pending_review}</td>
-                    <td class="py-2.5 text-right font-medium text-green-600">${r.ready_for_settlement}</td>
-                    <td class="py-2.5 text-right font-medium text-emerald-600">${r.settled}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
+          ${renderDataTable({
+            tableId: 'dash-region-table',
+            caption: '지역총판별 주문 현황',
+            columns: [
+              { key: 'region_name', label: '지역총판', render: r => `<span class="font-medium text-blue-700"><i class="fas fa-building text-[10px] mr-1 text-blue-400"></i>${r.region_name}</span>` },
+              { key: 'active_orders', label: '진행중', align: 'right', render: r => `<span class="font-medium text-blue-600">${r.active_orders}</span>` },
+              { key: 'pending_review', label: '검수대기', align: 'right', render: r => `<span class="font-medium text-amber-600">${r.pending_review}</span>` },
+              { key: 'ready_for_settlement', label: '정산대기', align: 'right', render: r => `<span class="font-medium text-green-600">${r.ready_for_settlement}</span>` },
+              { key: 'settled', label: '정산완료', align: 'right', render: r => `<span class="font-medium text-emerald-600">${r.settled}</span>` },
+            ],
+            rows: dashRes.region_summary || [],
+            onRowClick: '_dashRegionClick',
+            emptyText: '지역총판 데이터 없음',
+          })}
         </div>
         ` : ''}
       </div>
@@ -445,6 +437,16 @@ function _renderDashCharts(funnel, regionSummary) {
 }
 
 // ─── 대시보드 카드 컨텍스트 메뉴 ───
+function _dashRegionClick(idx) {
+  const summary = window._dashRegionSummary || [];
+  const r = summary[idx];
+  if (r) showRegionDetailModal(r.org_id, r.region_name);
+}
+
+function _dashSettleRunClick() {
+  navigateTo('settlement');
+}
+
 function showDashCardContextMenu(e, idx, label) {
   const card = Object.values(window._dashCardHandlers || {});
   showContextMenu(e.clientX, e.clientY, [
@@ -792,33 +794,22 @@ async function renderSettlementSummarySection() {
     ${recentRuns.length > 0 ? `
     <div class="bg-white rounded-xl p-6 border border-gray-100 mb-8">
       <h3 class="text-sm font-semibold mb-4"><i class="fas fa-history mr-2 text-indigo-500"></i>최근 정산 Run</h3>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead><tr class="border-b text-gray-500 text-xs">
-            <th class="py-2 text-left">Run ID</th>
-            <th class="py-2 text-left">기간</th>
-            <th class="py-2 text-center">상태</th>
-            <th class="py-2 text-right">건수</th>
-            <th class="py-2 text-right">기본금액</th>
-            <th class="py-2 text-right">지급액</th>
-            <th class="py-2 text-left">생성일</th>
-          </tr></thead>
-          <tbody class="divide-y">
-            ${recentRuns.map(r => {
-              const st = OMS.RUN_STATUS[r.status] || { label: r.status, color: 'bg-gray-100 text-gray-600' };
-              return `<tr class="hover:bg-gray-50 ix-clickable" onclick="navigateTo('settlement')">
-                <td class="py-2 font-mono text-xs text-blue-600">#${r.run_id}</td>
-                <td class="py-2 text-xs">${r.period_start || ''} ~ ${r.period_end || ''}</td>
-                <td class="py-2 text-center"><span class="status-badge ${st.color}">${st.label}</span></td>
-                <td class="py-2 text-right font-medium">${r.settlement_count}</td>
-                <td class="py-2 text-right text-xs">${formatAmount(r.total_base)}</td>
-                <td class="py-2 text-right font-bold text-green-600">${formatAmount(r.total_payable)}</td>
-                <td class="py-2 text-xs text-gray-500">${formatDate(r.created_at)}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
+      ${renderDataTable({
+        tableId: 'dash-settle-runs',
+        caption: '최근 정산 실행 목록',
+        columns: [
+          { key: 'run_id', label: 'Run ID', render: r => `<span class="font-mono text-xs text-blue-600">#${r.run_id}</span>` },
+          { key: 'period', label: '기간', render: r => `<span class="text-xs">${r.period_start || ''} ~ ${r.period_end || ''}</span>` },
+          { key: 'status', label: '상태', align: 'center', render: r => { const st = OMS.RUN_STATUS[r.status] || { label: r.status, color: 'bg-gray-100 text-gray-600' }; return `<span class="status-badge ${st.color}">${st.label}</span>`; } },
+          { key: 'settlement_count', label: '건수', align: 'right', render: r => `<span class="font-medium">${r.settlement_count}</span>` },
+          { key: 'total_base', label: '기본금액', align: 'right', render: r => `<span class="text-xs">${formatAmount(r.total_base)}</span>` },
+          { key: 'total_payable', label: '지급액', align: 'right', render: r => `<span class="font-bold text-green-600">${formatAmount(r.total_payable)}</span>` },
+          { key: 'created_at', label: '생성일', render: r => `<span class="text-xs text-gray-500">${formatDate(r.created_at)}</span>` },
+        ],
+        rows: recentRuns,
+        onRowClick: '_dashSettleRunClick',
+        emptyText: '정산 기록 없음',
+      })}
     </div>` : ''}`;
 }
 
