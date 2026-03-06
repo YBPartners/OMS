@@ -1,5 +1,5 @@
 // ================================================================
-// 와이비 OMS — Stats Service v1.0
+// Airflow OMS — Stats Service v1.0
 // 통계 도메인의 유일한 쓰기 진입점
 //
 // region_daily_stats, team_leader_daily_stats, team_leader_ledger_daily

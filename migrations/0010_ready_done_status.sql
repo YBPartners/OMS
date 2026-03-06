@@ -1,5 +1,5 @@
 -- ================================================================
--- 와이비 OMS Migration 0010: READY_DONE + DONE 상태 추가
+-- Airflow OMS Migration 0010: READY_DONE + DONE 상태 추가
 -- 팀장 수행 플로우 정규화:
 --   ASSIGNED(준비) → READY_DONE(준비완료) → IN_PROGRESS(수행중)
 --   → SUBMITTED(완료전송) → DONE(최종완료) → REGION검수

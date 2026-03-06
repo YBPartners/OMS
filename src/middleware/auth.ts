@@ -1,5 +1,5 @@
 // ================================================================
-// 와이비 OMS — Auth Middleware v7.0
+// Airflow OMS — Auth Middleware v7.0
 // v7.0: KV Cache 세션 검증 — D1 쿼리 최소화
 // TEAM org_type 지원, 구조화 역할 검증
 // Session Service 위임

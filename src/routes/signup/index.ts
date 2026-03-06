@@ -1,5 +1,5 @@
 // ================================================================
-// 와이비 OMS — 팀장 자가 등록(Self-Signup) API v5.0
+// Airflow OMS — 팀장 자가 등록(Self-Signup) API v5.0
 // 워크플로우: OTP 인증 → 총판·지역 선택 → 가입신청 → 승인/반려
 // 인증 없이 접근 가능한 퍼블릭 API
 // ================================================================
@@ -575,7 +575,7 @@ signup.post('/requests/:request_id/approve', async (c) => {
     try {
       await sendEmailWithLog(db, { apiKey: c.env.RESEND_API_KEY }, {
         to: request.email as string,
-        subject: '[와이비 OMS] 가입이 승인되었습니다',
+        subject: '[Airflow OMS] 가입이 승인되었습니다',
         html: buildSignupApprovedEmailHTML({
           name: request.name as string,
           loginId: request.login_id as string,

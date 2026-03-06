@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'yb-oms',
+      name: 'airflow-oms',
       script: 'npx',
       args: 'wrangler pages dev dist --d1=dahada-production --kv=SESSION_CACHE --local --ip 0.0.0.0 --port 3000',
       cwd: '/home/user/webapp',

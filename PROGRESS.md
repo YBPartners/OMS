@@ -1,4 +1,4 @@
-# 와이비 OMS — 개발 진척도 (Development Progress)
+# Airflow OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-06
 > **현재 버전**: v21.1.0 (R15 완료)
@@ -950,7 +950,7 @@
 - `GET /api/settlements/runs/:run_id/report` — 팀장별 그룹핑 보고서 데이터
 - `printSettlementReport()` — 인쇄용 HTML 새 창 (CSS @media print)
 - 요약 카드 (건수/기본금액/수수료/지급액) + 팀장별 소계 + 개별 명세
-- 인쇄/닫기 버튼, 와이비 OMS 푸터
+- 인쇄/닫기 버튼, Airflow OMS 푸터
 
 ### 11-2: 정산 CSV 내보내기 ✅
 - `GET /api/settlements/runs/:run_id/export` — CSV용 원시 데이터

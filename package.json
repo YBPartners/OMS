@@ -1,5 +1,5 @@
 {
-  "name": "yb-oms",
+  "name": "airflow-oms",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -1,4 +1,4 @@
-# 와이비 OMS 개발 문서 v7.0.0
+# Airflow OMS 개발 문서 v7.0.0
 
 > 주문처리 / 배분 / 검수 / 정산 / 대사 / 통계 시스템  
 > 최종 수정: 2026-03-05  
@@ -249,14 +249,14 @@ npm run db:reset      # DB 리셋 + 시드
 npm run build
 pm2 start ecosystem.config.cjs
 curl http://localhost:3000/api/health
-pm2 logs yb-oms --nostream
+pm2 logs airflow-oms --nostream
 ```
 
 ### 9.2 테스트 계정
 | 역할 | ID | PW | 조직 |
 |------|----|----|------|
-| SUPER_ADMIN | admin | admin123 | 와이비(HQ) |
-| HQ_OPERATOR | hq_operator | admin123 | 와이비(HQ) |
+| SUPER_ADMIN | admin | admin123 | Airflow(HQ) |
+| HQ_OPERATOR | hq_operator | admin123 | Airflow(HQ) |
 | REGION_ADMIN | seoul_admin | admin123 | 서울지역총판 |
 | REGION_ADMIN | gyeonggi_admin | admin123 | 경기지역총판 |
 | TEAM_LEADER | leader_seoul_1 | admin123 | 서울지역총판 |

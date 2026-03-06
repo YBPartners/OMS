@@ -1,5 +1,5 @@
 // ================================================================
-// 와이비 OMS — 정산 보고서 / 대리점 정산 내역서 v11.0
+// Airflow OMS — 정산 보고서 / 대리점 정산 내역서 v11.0
 // 인쇄용 HTML 생성 + CSV 내보내기 + 대리점 수수료
 // ================================================================
 import { Hono } from 'hono';
@@ -449,7 +449,7 @@ export function mountReport(router: Hono<Env>) {
 
       const emailResult = await sendEmailWithLog(db, { apiKey }, {
         to: data.email,
-        subject: `[와이비 OMS] ${periodLabel} 정산서 — ${run.period_start}~${run.period_end}`,
+        subject: `[Airflow OMS] ${periodLabel} 정산서 — ${run.period_start}~${run.period_end}`,
         html,
         templateType: 'SETTLEMENT_REPORT',
         recipientUserId: data.userId,

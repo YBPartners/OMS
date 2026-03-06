@@ -1,4 +1,4 @@
-# 와이비 OMS — 시스템 아키텍처 (v19.0)
+# Airflow OMS — 시스템 아키텍처 (v19.0)
 
 > **최종 업데이트**: 2026-03-06
 > **현재 버전**: v19.0.0
@@ -165,7 +165,7 @@
 ```
 organizations (org_id, org_type, name, code, status, parent_org_id)
   org_type: HQ | REGION | TEAM
-  HQ(와이비 본사) → REGION(서울/경기/인천/부산 지역총판) → TEAM (parent_org_id 참조)
+  HQ(Airflow 본사) → REGION(서울/경기/인천/부산 지역총판) → TEAM (parent_org_id 참조)
   
   AGENCY 계층은 user_roles + agency_team_mappings로 구현
   (별도 org_type 없이, 기존 TEAM 소속 사용자에게 AGENCY_LEADER 역할 부여)

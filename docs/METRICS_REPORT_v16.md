@@ -1,6 +1,6 @@
-# 와이비 OMS v16.0.0 — 소프트웨어 메트릭 보고서
+# Airflow OMS v16.0.0 — 소프트웨어 메트릭 보고서
 
-> **프로젝트**: 와이비 OMS (Order Management System)
+> **프로젝트**: Airflow OMS (Order Management System)
 > **버전**: v17.1.0
 > **측정일**: 2026-03-06
 > **프로덕션**: https://dahada-oms.pages.dev

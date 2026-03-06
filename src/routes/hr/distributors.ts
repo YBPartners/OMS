@@ -1,5 +1,5 @@
 // ================================================================
-// 와이비 OMS — 총판(Distributor) 관리 + 팀(TEAM) 관리 라우트
+// Airflow OMS — 총판(Distributor) 관리 + 팀(TEAM) 관리 라우트
 // 기존 organizations.ts를 확장하여 TEAM org_type, parent_org_id,
 // team_distributor_mappings 지원
 // ================================================================

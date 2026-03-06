@@ -1,9 +1,9 @@
-# 와이비 OMS - 주문관리시스템 (에어컨 세척)
+# Airflow OMS - 주문관리시스템 (에어컨 세척)
 
 ## 프로젝트 개요
-- **명칭**: 와이비 OMS (Order Management System)
+- **명칭**: Airflow OMS (Order Management System)
 - **사업 도메인**: 에어컨 세척 주문 관리 (삼성/엘지/캐리어/아정당/로컬 다채널)
-- **조직 구조**: 원청(채널) → 와이비(HQ) → 총판(4개) → 대리점(AGENCY) → 팀장
+- **조직 구조**: 원청(채널) → Airflow(HQ) → 총판(4개) → 대리점(AGENCY) → 팀장
 - **설계 원칙**: 고품질 / 자동화 / 정합성 / 보안 우선 / 서비스 레이어 분리
 - **기술 스택**: Hono + TypeScript + Cloudflare Workers + D1(SQLite) + KV(Session) + TailwindCSS + Vanilla JS
 
@@ -23,8 +23,8 @@
 
 | 역할 | 아이디 | 비밀번호 | 소속 |
 |------|--------|----------|------|
-| HQ 총괄관리자 | admin | admin123 | 와이비 본사 |
-| HQ 운영자 | hq_operator | admin123 | 와이비 본사 |
+| HQ 총괄관리자 | admin | admin123 | Airflow 본사 |
+| HQ 운영자 | hq_operator | admin123 | Airflow 본사 |
 | 서울 총판 | seoul_admin | admin123 | 서울지역총판 |
 | 경기 총판 | gyeonggi_admin | admin123 | 경기지역총판 |
 | 인천 총판 | incheon_admin | admin123 | 인천지역총판 |

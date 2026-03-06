@@ -1,18 +1,18 @@
 -- ============================================================
--- SEED DATA: 와이비 OMS 초기 데이터
+-- SEED DATA: Airflow OMS 초기 데이터
 -- ============================================================
 
 -- 역할 정의
 INSERT OR IGNORE INTO roles (code, name, description) VALUES
-  ('SUPER_ADMIN', '슈퍼관리자', '전권 - 와이비 HQ'),
+  ('SUPER_ADMIN', '슈퍼관리자', '전권 - Airflow HQ'),
   ('HQ_OPERATOR', 'HQ 운영자', '본사 운영(수신/배분/대사/최종검수/정산/통계)'),
   ('REGION_ADMIN', '파트장', '총판 운영(배정/1차검수/지역정산/통계)'),
   ('TEAM_LEADER', '팀장', '현장 수행/보고서 제출/본인 통계 조회'),
   ('AUDITOR', '감사/조회', '읽기 전용 + 대사/통계 열람');
 
--- 조직: 와이비 HQ
+-- 조직: Airflow HQ
 INSERT OR IGNORE INTO organizations (org_id, org_type, name, code, status) VALUES
-  (1, 'HQ', '와이비 본사', 'DAHADA_HQ', 'ACTIVE');
+  (1, 'HQ', 'Airflow 본사', 'DAHADA_HQ', 'ACTIVE');
 
 -- 조직: 지역총판 4개
 INSERT OR IGNORE INTO organizations (org_id, org_type, name, code, status) VALUES

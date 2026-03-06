@@ -1,5 +1,5 @@
 // ================================================================
-// 와이비 OMS — 감사 로그 & 상태 이력 유틸 v6.0
+// Airflow OMS — 감사 로그 & 상태 이력 유틸 v6.0
 // 구조화된 이벤트 코드 사용
 //
 // NOTE v6.0: createNotification(s)은 services/notification-service.ts로 이동.

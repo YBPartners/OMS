@@ -1,4 +1,4 @@
-# 와이비 OMS — 구현 추적 문서 (Implementation Tracker)
+# Airflow OMS — 구현 추적 문서 (Implementation Tracker)
 
 > **최종 업데이트**: 2026-03-06
 > **버전**: v19.0.0

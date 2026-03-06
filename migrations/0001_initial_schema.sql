@@ -1,5 +1,5 @@
 -- ============================================================
--- 와이비(DAHADA) OMS - Database Schema v1.0
+-- Airflow(DAHADA) OMS - Database Schema v1.0
 -- 주문처리/배분/검수/정산/대사/통계 시스템
 -- ============================================================
 
@@ -169,7 +169,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_admin_dong ON orders(admin_dong_code);
 CREATE INDEX IF NOT EXISTS idx_orders_batch ON orders(batch_id);
 CREATE INDEX IF NOT EXISTS idx_orders_date ON orders(requested_date);
 
--- 13. 주문 배분 (와이비→지역총판)
+-- 13. 주문 배분 (Airflow→지역총판)
 CREATE TABLE IF NOT EXISTS order_distributions (
   distribution_id INTEGER PRIMARY KEY AUTOINCREMENT,
   order_id INTEGER NOT NULL REFERENCES orders(order_id),

@@ -1,4 +1,4 @@
-# 와이비 OMS — 대화 이어가기 컨텍스트 (Conversation Context)
+# Airflow OMS — 대화 이어가기 컨텍스트 (Conversation Context)
 
 > **최종 업데이트**: 2026-03-06
 > **이 문서는 대화창을 클리어하고 새 대화를 시작할 때 컨텍스트 복구용입니다.**
@@ -31,7 +31,7 @@ curl http://localhost:3000/api/health
 
 ## 📌 프로젝트 핵심 정보
 
-- **프로젝트**: 와이비 OMS (에어컨 세척 주문관리시스템)
+- **프로젝트**: Airflow OMS (에어컨 세척 주문관리시스템)
 - **버전**: v19.0.0
 - **프로덕션**: https://dahada-oms.pages.dev
 - **GitHub**: https://github.com/YBPartners/OMS
@@ -49,7 +49,7 @@ curl http://localhost:3000/api/health
 
 **에어컨 세척 주문 관리 흐름**:
 ```
-외부 채널(삼성/엘지/캐리어/아정당/로컬) → 와이비 본사(HQ) → 지역총판(서울/경기/인천/부산) → 대리점 → 팀장
+외부 채널(삼성/엘지/캐리어/아정당/로컬) → Airflow 본사(HQ) → 지역총판(서울/경기/인천/부산) → 대리점 → 팀장
 ```
 
 **조직 계층**: 원청(채널) → HQ → 총판(4개) → 대리점(AGENCY) → 팀장(TEAM)
@@ -152,7 +152,7 @@ pm2 start ecosystem.config.cjs
 
 # 테스트
 curl http://localhost:3000/api/health
-# 결과: {"status":"ok","version":"16.0.0","system":"와이비 OMS"}
+# 결과: {"status":"ok","version":"16.0.0","system":"Airflow OMS"}
 
 # 로그인
 curl -s -X POST http://localhost:3000/api/auth/login \

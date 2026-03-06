@@ -1,5 +1,5 @@
 // ================================================================
-// 와이비 OMS — Email Service v1.0 (Resend 연동)
+// Airflow OMS — Email Service v1.0 (Resend 연동)
 // 정산서 발송, 가입 확인, 시스템 알림 등 이메일 발송 담당
 // ================================================================
 
@@ -34,7 +34,7 @@ export async function sendEmail(
   config: EmailConfig,
   params: SendEmailParams
 ): Promise<{ ok: boolean; messageId?: string; error?: string }> {
-  const from = params.from || `${config.fromName || '와이비 OMS'} <${config.fromAddress || 'noreply@dahada.co.kr'}>`;
+  const from = params.from || `${config.fromName || 'Airflow OMS'} <${config.fromAddress || 'noreply@dahada.co.kr'}>`;
 
   try {
     const response = await fetch('https://api.resend.com/emails', {
@@ -187,7 +187,7 @@ export function buildSettlementEmailHTML(data: {
     </div>
   </div>
   <div class="footer">
-    와이비 OMS | 본 메일은 자동 발송 메일이며 회신되지 않습니다.
+    Airflow OMS | 본 메일은 자동 발송 메일이며 회신되지 않습니다.
   </div>
 </div></body></html>`;
 }
@@ -221,7 +221,7 @@ export function buildSignupApprovedEmailHTML(data: {
   <div class="body">
     <p style="font-size:15px;color:#333;line-height:1.6">
       <strong>${data.name}</strong>님 안녕하세요.<br>
-      와이비 OMS 팀장 가입이 승인되었습니다. 아래 정보로 로그인하세요.
+      Airflow OMS 팀장 가입이 승인되었습니다. 아래 정보로 로그인하세요.
     </p>
     <div class="info-box">
       <div class="info-row"><span class="label">로그인 ID</span><span class="value">${data.loginId}</span></div>
@@ -232,7 +232,7 @@ export function buildSignupApprovedEmailHTML(data: {
     </div>
   </div>
   <div class="footer">
-    와이비 OMS | 본 메일은 자동 발송 메일이며 회신되지 않습니다.
+    Airflow OMS | 본 메일은 자동 발송 메일이며 회신되지 않습니다.
   </div>
 </div></body></html>`;
 }

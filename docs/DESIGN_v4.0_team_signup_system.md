@@ -1,4 +1,4 @@
-# 와이비 OMS — 팀장 가입 & 총판 관리 시스템 설계서 v4.0
+# Airflow OMS — 팀장 가입 & 총판 관리 시스템 설계서 v4.0
 
 > **문서 상태**: 설계 확정 (구현 대기)
 > **작성일**: 2026-03-04
@@ -93,7 +93,7 @@ ALTER TABLE organizations ADD COLUMN parent_org_id INTEGER REFERENCES organizati
 ```
 org_id | org_type | name       | code           | parent_org_id | status
 -------|----------|------------|----------------|---------------|-------
-1      | HQ       | 와이비 본사 | DAHADA_HQ      | NULL          | ACTIVE
+1      | HQ       | Airflow 본사 | DAHADA_HQ      | NULL          | ACTIVE
 2      | REGION   | 서울총판    | REGION_SEOUL   | 1             | ACTIVE
 3      | REGION   | 경기총판    | REGION_GYEONGGI| 1             | ACTIVE
 10     | TEAM     | 강남1팀     | TEAM_10        | 2             | ACTIVE
