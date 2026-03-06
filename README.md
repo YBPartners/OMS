@@ -153,6 +153,37 @@
 | **D-6** | **채널 API 연동** | **✅** | 채널별 API 설정/테스트/동기화, 필드매핑, 브랜드별 채널 |
 | **R1** | **주문 CRUD 완성** | **✅** | 수정/삭제 API, 편집모달, 전화번호 검증, 주소변경 |
 | **R2** | **팀장 수행 흐름 E2E** | **✅** | E2E 28/28 100% 통과, 보고서별 사진 구조 개선, 반려→재보고 |
+| **R3** | **정책UI 모듈분리** | **✅** | statistics.js(78KB) → 7개 모듈(9.8~20.1KB) 분리 |
+| **QA-1** | **실사용자 관점 검수** | **✅** | API 5건 수정, 전체 흐름/권한/연결성 검증 완료 |
+
+---
+
+## QA 검수 결과 (QA-1, 2026-03-06)
+
+### 점검 범위
+| 영역 | 검수 항목 | 결과 |
+|------|-----------|------|
+| **API 연결성** | 프론트엔드 66개 API 호출 ↔ 백엔드 라우트 일치 여부 | ✅ 전체 일치 |
+| **주문 흐름** | 생성→배분→배정→수행→보고→검수→정산→확정 (15단계 FSM) | ✅ 정상 |
+| **권한 제어** | 6개 역할(SA/HQ/RA/AL/TL/AU) × 5개 기능 영역 | ✅ 정상 |
+| **Scope Engine** | REGION_ADMIN(자기 지역만), TEAM_LEADER(자기 주문만), AGENCY_LEADER(+하위 팀장) | ✅ 격리 정상 |
+| **설정값 반영** | 수수료 정책→정산 산출, 배분 정책→주문 배분, 검수 정책→보고서 | ✅ 반영 확인 |
+| **CRUD 흐름** | 주문/사용자/채널/정책 생성→수정→삭제→상태변경 | ✅ 정상 |
+| **대시보드 숫자** | 카드 숫자 ↔ 실제 DB 건수 일치, 카드 클릭 → 해당 페이지 이동 | ✅ 정확 |
+
+### 발견 및 수정된 문제 (P1~P5)
+| # | 문제 | 원인 | 수정 |
+|---|------|------|------|
+| P1 | Impact API 3건 500 Error | `o.payable_amount`, `o.distributed_at`, `o.org_id` 칼럼 부재 | `base_amount`, JOIN, subquery로 교체 |
+| P2 | 지표정책 UI 빈 화면 | 프론트엔드가 `name/metrics_json` 참조, DB에 미존재 | 실제 스키마(`completion_basis/region_intake_basis`)에 맞게 UI 재작성 |
+| P3 | 영역 검색 필드 불일치 | `admin_code` vs `admin_dong_code` | 프론트엔드 필드명 일원화 |
+| P4 | 시군구 API 응답 불일치 | `sigungu_stats` vs `sigungu_list`, `unmapped` 필드 누락 | 양방향 호환 처리 |
+| P5 | 수수료 Impact 팀장 수 에러 | `users.role` 참조, 실제는 `user_roles` + `roles` 테이블 | JOIN 수정 |
+
+### 잔여 리스크
+- **배분 정책 비활성**: 자동 배분(`POST /orders/distribute`)은 활성 정책이 있어야 동작. 현재 시드 정책은 `is_active=0`
+- **정산 Run 중복 방지**: 동일 기간 중복 생성에 대한 백엔드 검증은 있으나, UI에서 경고 없음
+- **Push 알림**: Service Worker 등록됨, 실제 Push 발송은 Cloudflare 환경 제약으로 미확인
 
 ---
 
@@ -163,8 +194,8 @@
 - **Cloudflare 프로젝트명**: dahada-oms
 - **D1 ID**: 0b7aedd5-7510-44d3-8b81-d421b03fffa6
 - **KV ID**: 5024085768aa47ba943e4e65a454795e (SESSION_CACHE)
-- **빌드 크기**: ~263 KB (dist/_worker.js)
-- **코드량**: Backend 48 TS (~10,400줄) + Frontend 24 JS (~12,500줄) + 15 SQL migrations + CSS/SW
+- **빌드 크기**: ~294 KB (dist/_worker.js)
+- **코드량**: Backend 48 TS (~10,400줄) + Frontend 27 JS (~13,500줄) + 15 SQL migrations + CSS/SW
 - **E2E 테스트**: 28/28 PASS (100%) — 정상플로우, 반려재보고, 권한체크, 목록필터, 상세조회
 - **최종 업데이트**: 2026-03-06
 

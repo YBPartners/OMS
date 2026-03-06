@@ -1842,3 +1842,42 @@
 | 🟡 P3 | Playwright E2E | 프론트엔드 브라우저 자동 테스트 | 하 |
 
 **다음 단계 추천:** R9 (나머지 인라인 테이블 전환 + 프로덕션 최적화)
+
+---
+
+## R13: 정책UI 모듈분리 + 실사용자 관점 QA (2026-03-06)
+
+### R13-1: 정책UI 모듈분리 ✅
+
+**작업**: statistics.js(78KB, 1031줄) → 7개 모듈로 분리
+
+| 파일 | 크기 | 담당 |
+|------|------|------|
+| statistics.js | 9.8 KB | 일별/지역/팀장별 통계 |
+| policies.js | 15.6 KB | 정책 탭 라우팅, 요약, 감사이력 |
+| policies-dist.js | 17.3 KB | 배분 정책 CRUD + 영향분석 |
+| policies-report.js | 17.3 KB | 보고서 정책 CRUD + 사진분류 |
+| policies-comm.js | 20.1 KB | 수수료 정책 CRUD + 시뮬레이션 |
+| policies-territory.js | 20.1 KB | 영역매핑 + 시도 드릴다운 |
+| policies-metrics.js | 15.7 KB | 지표 정책 CRUD |
+
+### R13-2: 실사용자 관점 QA ✅
+
+**점검 범위**: 전체 시스템 (13개 페이지, 66개 프론트엔드 API, 120+ 백엔드 라우트)
+
+**발견 및 수정 (P1~P5)**:
+1. **P1**: Impact API 3건 500 Error → DB 칼럼명 교체 (payable_amount→base_amount, org_id→subquery)
+2. **P2**: 지표정책 UI 빈 화면 → 실제 스키마에 맞게 프론트엔드 재작성
+3. **P3**: 행정구역 필드명 불일치 → admin_dong_code로 통일
+4. **P4**: 시군구 API 응답키 불일치 → 양방향 호환
+5. **P5**: 수수료 Impact 팀장 수 쿼리 오류 → user_roles JOIN 수정
+
+**검증 결과**:
+- API 연결성: 66/66 일치 ✅
+- 주문 FSM 15단계: 정상 ✅
+- 권한 6역할×5영역: 정상 ✅
+- Scope Engine 3레벨: 격리 정상 ✅
+- 정산 생성→산출→확정: 정상 ✅
+- HR CRUD: 정상 ✅
+
+**잔여 리스크**: 배분 정책 비활성(시드), 정산 중복경고 UI 미비, Push 미검증
