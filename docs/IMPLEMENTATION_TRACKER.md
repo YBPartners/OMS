@@ -1,7 +1,7 @@
 # 와이비 OMS — 구현 추적 문서 (Implementation Tracker)
 
 > **최종 업데이트**: 2026-03-06
-> **버전**: v17.1.0
+> **버전**: v18.1.0
 > **이 문서는 대화 압축/토큰 초과 시 컨텍스트 복구용입니다.**
 > **항상 이 파일 + ARCHITECTURE.md + PROGRESS.md 를 먼저 읽어 현재 진행 상황을 파악하세요.**
 
@@ -22,12 +22,12 @@
 
 ## 현재 상태 요약
 
-- **전체 Phase**: 0~17.1 완료 (Phase 17.1: 보고서/영수증 모바일 카메라 첨부 + 파일명 규칙화)
-- **프로덕션 배포**: ✅ https://dahada-oms.pages.dev (v17.1.0)
+- **전체 Phase**: 0~18.1 완료 (Phase 18.1: 역할별 대시보드 접근 권한 + TEAM/AGENCY 개인 대시보드)
+- **프로덕션 배포**: ✅ https://dahada-oms.pages.dev (v18.1.0)
 - **로컬 개발**: ✅ PM2 + wrangler pages dev, port 3000
 - **서비스 레이어**: ✅ 5개 서비스, 모듈 간 교차 의존성 해소
 - **E2E 테스트**: ✅ 50/50 통과 (15개 영역, `tests/e2e.sh`)
-- **코드량**: Backend 8,890 + Frontend 11,107 + SW 143 + CSS 419 + SQL 1,184 + E2E 386 = **22,129줄**
+- **코드량**: Backend 9,037 + Frontend 11,031 + SW 143 + CSS 419 + SQL 1,338 + E2E 386 = **22,354줄**
 - **알려진 이슈**: signup SQL 오류 ✅해결, 로그아웃 세션 버그 ✅해결, Tailwind CDN 경고 (경미)
 
 ---
@@ -181,6 +181,22 @@
 - [x] statistics.js 정책관리 4탭 CRUD UI
 - [x] 0010_ready_done_status.sql 마이그레이션
 - [x] 커밋 e32d798, 12파일, +788/-55
+
+### ✅ Phase 18.0: KV 캐시 세션 검증
+- [x] SESSION_CACHE KV 네임스페이스 생성 + wrangler.jsonc 바인딩
+- [x] session-service v2.0 (KV 캐시 레이어: 생성/검증/삭제/무효화)
+- [x] auth middleware, auth.ts, hr/users.ts에 KV 바인딩 전달
+- [x] ecosystem.config.cjs --kv=SESSION_CACHE 로컬 개발 바인딩
+- [x] 세션 검증 D1 쿼리 3→0회, 지연 30ms→5ms
+- [x] 커밋 6cb221d, E2E 50/50 통과
+
+### ✅ Phase 18.1: 역할별 대시보드 접근 권한
+- [x] constants.js: TEAM_LEADER/AGENCY_LEADER에 dashboard 권한 추가
+- [x] constants.js: TEAM_LEADER 메뉴에 대시보드 항목 추가
+- [x] dashboard.js: TEAM 유저 전용 UI (카드/차트/퍼널/테이블 분기)
+- [x] dashboard.ts: org_type → 역할(roles) 기반 region_summary 필터링
+- [x] app.js: TEAM_LEADER 기본 페이지 dashboard 변경
+- [x] 커밋 e6d11db, 4 files, +121/-52
 
 ### ✅ Phase 16: 품질 강화 + 문서 정비 + E2E 테스트
 - [x] 프로덕션 DB 마이그레이션 0006~0010 적용 완료
