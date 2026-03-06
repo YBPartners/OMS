@@ -123,7 +123,7 @@
 ## 데이터 아키텍처
 
 - **Cloudflare D1**: SQLite 기반 (order_channels에 API 연동 필드 16개 포함)
-- **마이그레이션**: 13개 (0001~0013, 최신: 0013_channel_api_integration.sql)
+- **마이그레이션**: 15개 (0001~0015, 최신: 0015_photo_category_expand.sql)
 - **State Machine**: 15단계 주문 상태 전이
 - **Scope Engine v7.0**: 역할별 데이터 가시성 (HQ → 총판 → 대리점 → 팀)
 - **Batch Builder**: D1 batch() 활용 원자적 트랜잭션
@@ -151,6 +151,8 @@
 | **D-4** | **SVG 히트맵** | **✅** | 지역별 히트맵 SVG 시각화 |
 | **D-5** | **딜러 수수료+인보이스** | **✅** | 수수료 자동분배, 팀장별 인보이스, 일괄인쇄 |
 | **D-6** | **채널 API 연동** | **✅** | 채널별 API 설정/테스트/동기화, 필드매핑, 브랜드별 채널 |
+| **R1** | **주문 CRUD 완성** | **✅** | 수정/삭제 API, 편집모달, 전화번호 검증, 주소변경 |
+| **R2** | **팀장 수행 흐름 E2E** | **✅** | E2E 28/28 100% 통과, 보고서별 사진 구조 개선, 반려→재보고 |
 
 ---
 
@@ -161,8 +163,9 @@
 - **Cloudflare 프로젝트명**: dahada-oms
 - **D1 ID**: 0b7aedd5-7510-44d3-8b81-d421b03fffa6
 - **KV ID**: 5024085768aa47ba943e4e65a454795e (SESSION_CACHE)
-- **빌드 크기**: ~258 KB (dist/_worker.js)
-- **코드량**: Backend 47 TS (3,424줄) + Frontend 23 JS (12,249줄) + 13 SQL migrations + CSS/SW
+- **빌드 크기**: ~263 KB (dist/_worker.js)
+- **코드량**: Backend 48 TS (~10,400줄) + Frontend 24 JS (~12,500줄) + 15 SQL migrations + CSS/SW
+- **E2E 테스트**: 28/28 PASS (100%) — 정상플로우, 반려재보고, 권한체크, 목록필터, 상세조회
 - **최종 업데이트**: 2026-03-06
 
 ## 로컬 개발
