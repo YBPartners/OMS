@@ -54,11 +54,8 @@ function renderLoginPage() {
   <div class="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 flex items-center justify-center p-4 login-page-wrapper">
     <div class="bg-white rounded-2xl shadow-2xl p-8 sm:p-10 w-full max-w-md fade-in login-card">
       <div class="text-center mb-8">
-        <div class="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg overflow-hidden" style="box-shadow: 0 8px 24px rgba(13,148,136,0.3)">
-          <img src="/static/img/airflow-logo.png" alt="Airflow" class="w-full h-full object-cover">
-        </div>
-        <h1 class="text-2xl font-bold text-gray-800">Airflow</h1>
-        <p class="text-gray-500 mt-1 text-sm">주문관리시스템</p>
+        <img src="/static/img/airflow-wordmark.png" alt="Airflow" class="h-12 mx-auto mb-3" style="max-width:200px">
+        <p class="text-gray-500 text-sm">주문관리시스템</p>
       </div>
       <form onsubmit="event.preventDefault();login(document.getElementById('lid').value,document.getElementById('lpw').value)">
         <div class="mb-4">
@@ -182,13 +179,8 @@ function renderLayout() {
     <aside class="desktop-sidebar w-64 bg-white border-r border-gray-200 flex flex-col shadow-sm">
       <div class="p-5 border-b">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl flex items-center justify-center shadow-md overflow-hidden">
-            <img src="/static/img/airflow-logo.png" alt="Airflow" class="w-full h-full object-cover">
-          </div>
-          <div>
-            <div class="font-bold text-gray-800">Airflow</div>
-            <div class="text-xs text-gray-400">v25.0 · ${menuKey}</div>
-          </div>
+          <img src="/static/img/airflow-wordmark.png" alt="Airflow" class="h-7" style="max-width:120px">
+          <span class="text-xs text-gray-400">v25.0</span>
         </div>
       </div>
       <nav class="flex-1 p-3 overflow-y-auto">
@@ -223,8 +215,8 @@ function renderLayout() {
 
     <!-- 모바일 헤더 — 글래스모피즘 -->
     <div class="mobile-header" style="display:none">
-      <div class="logo" onclick="navigateTo('${isAgency ? 'agency-dashboard' : 'dashboard'}');updateBottomNav()" style="background:none;box-shadow:none;overflow:hidden;padding:0">
-        <img src="/static/img/airflow-logo.png" alt="Airflow" style="width:100%;height:100%;object-fit:cover;border-radius:12px">
+      <div class="logo" onclick="navigateTo('${isAgency ? 'agency-dashboard' : 'dashboard'}');updateBottomNav()" style="background:none;box-shadow:none;overflow:hidden;padding:4px 0;display:flex;align-items:center">
+        <img src="/static/img/airflow-wordmark.png" alt="Airflow" style="height:24px;max-width:100px;object-fit:contain">
       </div>
       <div class="title">${pageTitle}</div>
       <div class="header-actions">
