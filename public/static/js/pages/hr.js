@@ -321,10 +321,10 @@ async function renderHROrgs(el) {
             <span><i class="fas fa-user-tie mr-1"></i>팀장 ${o.active_leaders || 0}명</span>
             ${o.child_team_count ? `<span><i class="fas fa-sitemap mr-1"></i>하위팀 ${o.child_team_count}개</span>` : ''}
           </div>
-          ${canEdit('admin') && o.org_type !== 'HQ' ? `
+          ${canEdit('admin') ? `
           <div class="flex gap-2 mt-3 pt-3 border-t">
             <button onclick='showEditOrgModal(${JSON.stringify(o).replace(/'/g,"&#39;")})' class="px-3 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit mr-1"></i>수정</button>
-            ${o.status === 'ACTIVE' ? `<button onclick="deactivateOrg(${o.org_id},'${o.name.replace(/'/g,"\\'")}')" class="px-3 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100"><i class="fas fa-ban mr-1"></i>비활성화</button>` : `<button onclick="reactivateOrg(${o.org_id})" class="px-3 py-1 bg-green-50 text-green-600 rounded text-xs hover:bg-green-100"><i class="fas fa-check mr-1"></i>활성화</button>`}
+            ${o.org_type !== 'HQ' ? (o.status === 'ACTIVE' ? `<button onclick="deactivateOrg(${o.org_id},'${o.name.replace(/'/g,"\\'")}')" class="px-3 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100"><i class="fas fa-ban mr-1"></i>비활성화</button>` : `<button onclick="reactivateOrg(${o.org_id})" class="px-3 py-1 bg-green-50 text-green-600 rounded text-xs hover:bg-green-100"><i class="fas fa-check mr-1"></i>활성화</button>`) : ''}
           </div>` : ''}
         </div>
       `).join('')}
