@@ -1,12 +1,14 @@
 // ================================================================
 // 와이비 OMS — 주문 채널 관리 API + 대리점 관리 API
-// Phase 7.0: 다채널 원장 + AGENCY_LEADER 계층
+// Phase 8.0: 채널별 API 연동 설정 + 동기화
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { requireAuth } from '../../middleware/auth';
 import { writeAuditLog } from '../../lib/audit';
 import { createNotification } from '../../services/notification-service';
+import { generateFingerprint } from '../../lib/db-helpers';
+import { writeStatusHistory } from '../../lib/audit';
 
 export function mountChannels(router: Hono<Env>) {
 
@@ -36,11 +38,33 @@ export function mountChannels(router: Hono<Env>) {
 
     const channels = result.results.map((ch: any) => ({
       ...ch,
+      // auth_credentials는 목록에서 마스킹
+      auth_credentials: ch.auth_credentials ? '••••••' : null,
       order_count: statsMap[ch.channel_id]?.order_count || 0,
       total_amount: statsMap[ch.channel_id]?.total_amount || 0,
     }));
 
     return c.json({ channels });
+  });
+
+  // ─── 채널 상세 (API 설정 포함, 관리자만) ───
+  router.get('/channels/:channel_id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+
+    const db = c.env.DB;
+    const channelId = Number(c.req.param('channel_id'));
+
+    const ch = await db.prepare('SELECT * FROM order_channels WHERE channel_id = ?').bind(channelId).first();
+    if (!ch) return c.json({ error: '채널을 찾을 수 없습니다.' }, 404);
+
+    // 통계
+    const stat = await db.prepare(`
+      SELECT COUNT(*) as order_count, COALESCE(SUM(base_amount), 0) as total_amount
+      FROM orders WHERE channel_id = ?
+    `).bind(channelId).first();
+
+    return c.json({ channel: { ...ch, order_count: (stat as any)?.order_count || 0, total_amount: (stat as any)?.total_amount || 0 } });
   });
 
   // ─── 채널 생성 ───
@@ -59,9 +83,21 @@ export function mountChannels(router: Hono<Env>) {
     if (dup) return c.json({ error: '이미 사용 중인 채널 코드입니다.' }, 409);
 
     const result = await db.prepare(`
-      INSERT INTO order_channels (name, code, description, contact_info, is_active, priority)
-      VALUES (?, ?, ?, ?, 1, ?)
-    `).bind(body.name, body.code, body.description || null, body.contact_info || null, body.priority || 0).run();
+      INSERT INTO order_channels (name, code, description, contact_info, is_active, priority,
+        api_endpoint, api_method, auth_type, auth_credentials, request_headers, 
+        request_body_template, response_type, field_mapping, data_path, 
+        polling_interval_min, api_enabled)
+      VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      body.name, body.code, body.description || null, body.contact_info || null, body.priority || 0,
+      body.api_endpoint || null, body.api_method || 'GET', body.auth_type || 'NONE',
+      body.auth_credentials ? JSON.stringify(body.auth_credentials) : null,
+      body.request_headers ? JSON.stringify(body.request_headers) : null,
+      body.request_body_template || null, body.response_type || 'JSON',
+      body.field_mapping ? JSON.stringify(body.field_mapping) : null,
+      body.data_path || null, body.polling_interval_min || 0,
+      body.api_enabled ? 1 : 0
+    ).run();
 
     await writeAuditLog(db, {
       entity_type: 'CHANNEL', entity_id: result.meta.last_row_id as number,
@@ -72,7 +108,7 @@ export function mountChannels(router: Hono<Env>) {
     return c.json({ channel_id: result.meta.last_row_id }, 201);
   });
 
-  // ─── 채널 수정 ───
+  // ─── 채널 수정 (기본 정보 + API 설정) ───
   router.put('/channels/:channel_id', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
     if (authErr) return authErr;
@@ -85,29 +121,334 @@ export function mountChannels(router: Hono<Env>) {
     const existing = await db.prepare('SELECT * FROM order_channels WHERE channel_id = ?').bind(channelId).first();
     if (!existing) return c.json({ error: '채널을 찾을 수 없습니다.' }, 404);
 
-    await db.prepare(`
-      UPDATE order_channels SET
-        name = COALESCE(?, name),
-        description = COALESCE(?, description),
-        contact_info = COALESCE(?, contact_info),
-        is_active = COALESCE(?, is_active),
-        priority = COALESCE(?, priority),
-        updated_at = datetime('now')
-      WHERE channel_id = ?
-    `).bind(
-      body.name || null, body.description || null, body.contact_info || null,
-      body.is_active !== undefined ? (body.is_active ? 1 : 0) : null,
-      body.priority !== undefined ? body.priority : null,
-      channelId
-    ).run();
+    // 기본 정보 업데이트
+    const updates: string[] = [];
+    const binds: any[] = [];
+
+    // 기본 필드
+    if (body.name !== undefined) { updates.push('name = ?'); binds.push(body.name); }
+    if (body.description !== undefined) { updates.push('description = ?'); binds.push(body.description || null); }
+    if (body.contact_info !== undefined) { updates.push('contact_info = ?'); binds.push(body.contact_info || null); }
+    if (body.is_active !== undefined) { updates.push('is_active = ?'); binds.push(body.is_active ? 1 : 0); }
+    if (body.priority !== undefined) { updates.push('priority = ?'); binds.push(body.priority); }
+
+    // API 연동 필드
+    if (body.api_endpoint !== undefined) { updates.push('api_endpoint = ?'); binds.push(body.api_endpoint || null); }
+    if (body.api_method !== undefined) { updates.push('api_method = ?'); binds.push(body.api_method); }
+    if (body.auth_type !== undefined) { updates.push('auth_type = ?'); binds.push(body.auth_type); }
+    if (body.auth_credentials !== undefined) {
+      updates.push('auth_credentials = ?');
+      binds.push(typeof body.auth_credentials === 'object' ? JSON.stringify(body.auth_credentials) : body.auth_credentials || null);
+    }
+    if (body.request_headers !== undefined) {
+      updates.push('request_headers = ?');
+      binds.push(typeof body.request_headers === 'object' ? JSON.stringify(body.request_headers) : body.request_headers || null);
+    }
+    if (body.request_body_template !== undefined) { updates.push('request_body_template = ?'); binds.push(body.request_body_template || null); }
+    if (body.response_type !== undefined) { updates.push('response_type = ?'); binds.push(body.response_type); }
+    if (body.field_mapping !== undefined) {
+      updates.push('field_mapping = ?');
+      binds.push(typeof body.field_mapping === 'object' ? JSON.stringify(body.field_mapping) : body.field_mapping || null);
+    }
+    if (body.data_path !== undefined) { updates.push('data_path = ?'); binds.push(body.data_path || null); }
+    if (body.polling_interval_min !== undefined) { updates.push('polling_interval_min = ?'); binds.push(body.polling_interval_min); }
+    if (body.api_enabled !== undefined) { updates.push('api_enabled = ?'); binds.push(body.api_enabled ? 1 : 0); }
+
+    if (updates.length === 0) return c.json({ error: '변경할 내용이 없습니다.' }, 400);
+
+    updates.push("updated_at = datetime('now')");
+    binds.push(channelId);
+
+    await db.prepare(`UPDATE order_channels SET ${updates.join(', ')} WHERE channel_id = ?`).bind(...binds).run();
 
     await writeAuditLog(db, {
       entity_type: 'CHANNEL', entity_id: channelId, action: 'CHANNEL.UPDATED',
-      actor_id: user.user_id, detail_json: JSON.stringify(body),
+      actor_id: user.user_id, detail_json: JSON.stringify({ fields: Object.keys(body) }),
     });
 
     return c.json({ ok: true });
   });
+
+  // ─── API 연결 테스트 ───
+  router.post('/channels/:channel_id/test-api', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+
+    const db = c.env.DB;
+    const channelId = Number(c.req.param('channel_id'));
+
+    const ch = await db.prepare('SELECT * FROM order_channels WHERE channel_id = ?').bind(channelId).first() as any;
+    if (!ch) return c.json({ error: '채널을 찾을 수 없습니다.' }, 404);
+    if (!ch.api_endpoint) return c.json({ error: 'API 엔드포인트가 설정되지 않았습니다.' }, 400);
+
+    try {
+      const { headers, requestInit } = buildFetchOptions(ch);
+      const startTime = Date.now();
+      const response = await fetch(ch.api_endpoint, { ...requestInit, signal: AbortSignal.timeout(15000) });
+      const elapsed = Date.now() - startTime;
+      const contentType = response.headers.get('content-type') || '';
+      const rawBody = await response.text();
+
+      // 응답 파싱 시도
+      let parsed: any = null;
+      let recordCount = 0;
+      try {
+        parsed = JSON.parse(rawBody);
+        // data_path를 따라가 주문 배열 추출 시도
+        if (ch.data_path) {
+          const arr = getNestedValue(parsed, ch.data_path);
+          if (Array.isArray(arr)) recordCount = arr.length;
+        } else if (Array.isArray(parsed)) {
+          recordCount = parsed.length;
+        }
+      } catch { /* 파싱 실패는 무시 */ }
+
+      return c.json({
+        ok: true,
+        test_result: {
+          status_code: response.status,
+          status_text: response.statusText,
+          content_type: contentType,
+          response_time_ms: elapsed,
+          body_size: rawBody.length,
+          body_preview: rawBody.substring(0, 2000),
+          record_count: recordCount,
+          parsed_ok: parsed !== null,
+        }
+      });
+    } catch (e: any) {
+      return c.json({
+        ok: false,
+        test_result: {
+          error: e.message || 'API 연결 실패',
+          error_type: e.name || 'Unknown',
+        }
+      });
+    }
+  });
+
+  // ─── API 동기화 실행 (채널에서 주문 가져오기) ───
+  router.post('/channels/:channel_id/sync', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const channelId = Number(c.req.param('channel_id'));
+
+    const ch = await db.prepare('SELECT * FROM order_channels WHERE channel_id = ?').bind(channelId).first() as any;
+    if (!ch) return c.json({ error: '채널을 찾을 수 없습니다.' }, 404);
+    if (!ch.api_endpoint) return c.json({ error: 'API 엔드포인트가 설정되지 않았습니다.' }, 400);
+    if (!ch.api_enabled) return c.json({ error: 'API 연동이 비활성화 상태입니다.' }, 400);
+
+    let syncStatus = 'SUCCESS';
+    let syncMessage = '';
+    let syncCount = 0;
+    const errors: string[] = [];
+
+    try {
+      // 1. 외부 API 호출
+      const { requestInit } = buildFetchOptions(ch);
+      const response = await fetch(ch.api_endpoint, { ...requestInit, signal: AbortSignal.timeout(30000) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+      const rawBody = await response.text();
+      let data: any;
+      try { data = JSON.parse(rawBody); } catch { throw new Error('응답 JSON 파싱 실패'); }
+
+      // 2. data_path에서 주문 배열 추출
+      let orders: any[] = [];
+      if (ch.data_path) {
+        orders = getNestedValue(data, ch.data_path);
+        if (!Array.isArray(orders)) throw new Error(`data_path "${ch.data_path}"에서 배열을 찾을 수 없습니다.`);
+      } else if (Array.isArray(data)) {
+        orders = data;
+      } else {
+        throw new Error('응답에서 주문 배열을 찾을 수 없습니다. data_path를 설정하세요.');
+      }
+
+      // 3. 필드 매핑 적용 → 주문 생성
+      const mapping = ch.field_mapping ? (typeof ch.field_mapping === 'string' ? JSON.parse(ch.field_mapping) : ch.field_mapping) : {};
+
+      for (let i = 0; i < orders.length; i++) {
+        try {
+          const raw = orders[i];
+          const mapped = applyFieldMapping(raw, mapping);
+
+          // 중복 검사 (fingerprint)
+          const fpData = `${mapped.address_text || ''}|${mapped.requested_date || ''}|${mapped.service_type || 'DEFAULT'}|${mapped.base_amount || 0}`;
+          const fingerprint = await generateFingerprint(fpData);
+
+          const dup = await db.prepare(
+            'SELECT order_id FROM orders WHERE source_fingerprint = ? AND channel_id = ?'
+          ).bind(fingerprint, channelId).first();
+
+          if (dup) {
+            errors.push(`행 ${i + 1}: 중복 주문 (order_id: ${(dup as any).order_id})`);
+            continue;
+          }
+
+          const result = await db.prepare(`
+            INSERT INTO orders (external_order_no, source_fingerprint, service_type, customer_name, customer_phone,
+              address_text, address_detail, admin_dong_code, legal_dong_code, requested_date, scheduled_date, 
+              base_amount, memo, channel_id, raw_json, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
+          `).bind(
+            mapped.external_order_no || null, fingerprint, mapped.service_type || 'DEFAULT',
+            mapped.customer_name || null, mapped.customer_phone || null,
+            mapped.address_text || '', mapped.address_detail || null,
+            mapped.admin_dong_code || null, mapped.legal_dong_code || null,
+            mapped.requested_date || new Date().toISOString().split('T')[0],
+            mapped.scheduled_date || null, mapped.base_amount || 0,
+            mapped.memo || null, channelId, JSON.stringify(raw), 
+          ).run();
+
+          await writeStatusHistory(db, {
+            order_id: result.meta.last_row_id as number,
+            from_status: null, to_status: 'RECEIVED',
+            actor_id: user.user_id,
+            note: `채널 동기화: ${ch.name} (${ch.code})`,
+          });
+
+          syncCount++;
+        } catch (rowErr: any) {
+          errors.push(`행 ${i + 1}: ${rowErr.message}`);
+        }
+      }
+
+      if (errors.length > 0) {
+        syncStatus = syncCount > 0 ? 'PARTIAL' : 'FAIL';
+        syncMessage = `${syncCount}건 성공, ${errors.length}건 실패`;
+      } else {
+        syncMessage = `${syncCount}건 동기화 완료`;
+      }
+
+    } catch (e: any) {
+      syncStatus = 'FAIL';
+      syncMessage = e.message || 'API 동기화 실패';
+    }
+
+    // 4. 동기화 상태 업데이트
+    await db.prepare(`
+      UPDATE order_channels SET
+        last_sync_at = datetime('now'),
+        last_sync_status = ?,
+        last_sync_message = ?,
+        last_sync_count = ?,
+        total_synced_count = total_synced_count + ?
+      WHERE channel_id = ?
+    `).bind(syncStatus, syncMessage, syncCount, syncCount, channelId).run();
+
+    await writeAuditLog(db, {
+      entity_type: 'CHANNEL', entity_id: channelId, action: 'CHANNEL.SYNCED',
+      actor_id: user.user_id,
+      detail_json: JSON.stringify({ status: syncStatus, count: syncCount, errors: errors.slice(0, 10) }),
+    });
+
+    return c.json({
+      ok: syncStatus !== 'FAIL',
+      sync_result: { status: syncStatus, message: syncMessage, synced_count: syncCount, errors: errors.slice(0, 20) }
+    });
+  });
+
+  // ─── 채널 삭제 (비활성 채널만, 주문이 없는 경우) ───
+  router.delete('/channels/:channel_id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const channelId = Number(c.req.param('channel_id'));
+
+    const ch = await db.prepare('SELECT * FROM order_channels WHERE channel_id = ?').bind(channelId).first() as any;
+    if (!ch) return c.json({ error: '채널을 찾을 수 없습니다.' }, 404);
+
+    const orderCount = await db.prepare('SELECT COUNT(*) as cnt FROM orders WHERE channel_id = ?').bind(channelId).first() as any;
+    if (orderCount?.cnt > 0) return c.json({ error: `해당 채널에 ${orderCount.cnt}건의 주문이 있어 삭제할 수 없습니다. 비활성화를 사용하세요.` }, 409);
+
+    await db.prepare('DELETE FROM order_channels WHERE channel_id = ?').bind(channelId).run();
+
+    await writeAuditLog(db, {
+      entity_type: 'CHANNEL', entity_id: channelId, action: 'CHANNEL.DELETED',
+      actor_id: user.user_id, detail_json: JSON.stringify({ name: ch.name, code: ch.code }),
+    });
+
+    return c.json({ ok: true });
+  });
+}
+
+// ════════════════════════════════════════════════════════
+// Helper: API 호출 옵션 빌드
+// ════════════════════════════════════════════════════════
+function buildFetchOptions(ch: any): { headers: Record<string, string>; requestInit: RequestInit } {
+  const headers: Record<string, string> = { 'Accept': 'application/json' };
+
+  // 인증 설정
+  if (ch.auth_type && ch.auth_type !== 'NONE' && ch.auth_credentials) {
+    const creds = typeof ch.auth_credentials === 'string' ? JSON.parse(ch.auth_credentials) : ch.auth_credentials;
+    switch (ch.auth_type) {
+      case 'API_KEY':
+        headers[creds.header_name || 'X-API-Key'] = creds.api_key || '';
+        break;
+      case 'BEARER':
+        headers['Authorization'] = `Bearer ${creds.token || ''}`;
+        break;
+      case 'BASIC':
+        headers['Authorization'] = `Basic ${btoa(`${creds.username || ''}:${creds.password || ''}`)}`;
+        break;
+      case 'CUSTOM_HEADER':
+        if (creds.header_name && creds.header_value) {
+          headers[creds.header_name] = creds.header_value;
+        }
+        break;
+    }
+  }
+
+  // 추가 헤더
+  if (ch.request_headers) {
+    const extraHeaders = typeof ch.request_headers === 'string' ? JSON.parse(ch.request_headers) : ch.request_headers;
+    if (Array.isArray(extraHeaders)) {
+      for (const h of extraHeaders) {
+        if (h.key && h.value) headers[h.key] = h.value;
+      }
+    }
+  }
+
+  const requestInit: RequestInit = {
+    method: ch.api_method || 'GET',
+    headers,
+  };
+
+  // POST 바디
+  if (ch.api_method === 'POST' && ch.request_body_template) {
+    requestInit.body = ch.request_body_template;
+    headers['Content-Type'] = 'application/json';
+  }
+
+  return { headers, requestInit };
+}
+
+// ════════════════════════════════════════════════════════
+// Helper: 중첩 객체 경로 탐색 (예: "data.orders" → obj.data.orders)
+// ════════════════════════════════════════════════════════
+function getNestedValue(obj: any, path: string): any {
+  return path.split('.').reduce((acc, key) => acc?.[key], obj);
+}
+
+// ════════════════════════════════════════════════════════
+// Helper: 필드 매핑 적용
+// mapping = { "외부필드명": "내부필드명" }
+// 예: { "orderNo": "external_order_no", "addr": "address_text" }
+// ════════════════════════════════════════════════════════
+function applyFieldMapping(rawOrder: any, mapping: Record<string, string>): any {
+  if (!mapping || Object.keys(mapping).length === 0) return rawOrder;
+
+  const result: any = {};
+  for (const [externalKey, internalKey] of Object.entries(mapping)) {
+    const value = getNestedValue(rawOrder, externalKey);
+    if (value !== undefined) result[internalKey] = value;
+  }
+  return result;
 }
 
 // ════════════════════════════════════════════════════════
