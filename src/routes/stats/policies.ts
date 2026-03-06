@@ -251,6 +251,76 @@ export function mountPolicies(router: Hono<Env>) {
     return c.json({ ok: true, message: '수수료 정책이 삭제되었습니다.' });
   });
 
+  // ━━━━━━━━━━ 정책 대시보드(요약) ━━━━━━━━━━
+
+  router.get('/policies/summary', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+
+    const [dist, report, comm, metrics, terr, regions, mappings] = await Promise.all([
+      db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active FROM distribution_policies').first(),
+      db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active FROM report_policies').first(),
+      db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active FROM commission_policies').first(),
+      db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active FROM metrics_policies').first(),
+      db.prepare("SELECT COUNT(*) as total, COUNT(DISTINCT sido) as sido_cnt FROM territories WHERE status='ACTIVE'").first(),
+      db.prepare("SELECT COUNT(*) as total, COUNT(DISTINCT sido) as sido_cnt, COUNT(DISTINCT sigungu) as sigungu_cnt FROM admin_regions WHERE is_active=1").first(),
+      db.prepare("SELECT COUNT(*) as total FROM org_region_mappings").first(),
+    ]);
+
+    // 배분 정책 적용 중 주문 수
+    const ordersDist = await db.prepare("SELECT COUNT(*) as total FROM orders WHERE status IN ('NEW','DISTRIBUTION_PENDING','DISTRIBUTED','ASSIGNED')").first();
+
+    // 최근 정책 변경 이력 (감사로그에서)
+    const recentAudit = await db.prepare(`
+      SELECT al.*, u.name as actor_name FROM audit_logs al
+      LEFT JOIN users u ON al.actor_id = u.user_id
+      WHERE al.entity_type IN ('DISTRIBUTION_POLICY','REPORT_POLICY','COMMISSION_POLICY','METRICS_POLICY','TERRITORY','ORG_REGION_MAPPING')
+      ORDER BY al.created_at DESC LIMIT 10
+    `).all();
+
+    return c.json({
+      distribution: dist,
+      report: report,
+      commission: comm,
+      metrics: metrics,
+      territories: terr,
+      admin_regions: regions,
+      org_region_mappings: mappings,
+      active_orders: (ordersDist as any)?.total || 0,
+      recent_audit: recentAudit.results,
+    });
+  });
+
+  // ━━━━━━━━━━ 지역권(territory) 검색 ━━━━━━━━━━
+
+  router.get('/territories/search', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const q = c.req.query('q');
+    const sido = c.req.query('sido');
+    const db = c.env.DB;
+
+    let query = `
+      SELECT t.*, ot.org_id, o.name as org_name
+      FROM territories t
+      LEFT JOIN org_territories ot ON t.territory_id = ot.territory_id AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now'))
+      LEFT JOIN organizations o ON ot.org_id = o.org_id
+      WHERE t.status = 'ACTIVE'
+    `;
+    const params: any[] = [];
+    if (sido) { query += ' AND t.sido = ?'; params.push(sido); }
+    if (q && q.length >= 1) {
+      query += ' AND (t.sido LIKE ? OR t.sigungu LIKE ? OR t.eupmyeondong LIKE ?)';
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+    }
+    query += ' ORDER BY t.sido, t.sigungu, t.eupmyeondong LIMIT 100';
+
+    const result = await db.prepare(query).bind(...params).all();
+    return c.json({ territories: result.results, total: result.results.length });
+  });
+
   // ━━━━━━━━━━ 지역권 매핑 ━━━━━━━━━━
 
   // 조회 (기존 territories + 신규 admin_regions 통합)
