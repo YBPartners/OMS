@@ -521,44 +521,26 @@ async function showRegionDetailModal(orgId, regionName) {
       </div>
       <div>
         <h4 class="font-semibold mb-3"><i class="fas fa-calendar-days mr-1 text-blue-500"></i>일별 현황</h4>
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50"><tr>
-            <th class="px-3 py-2 text-left">날짜</th><th class="px-3 py-2 text-right">인입</th>
-            <th class="px-3 py-2 text-right">배정</th><th class="px-3 py-2 text-right">승인</th>
-            <th class="px-3 py-2 text-right">정산</th>
-          </tr></thead>
-          <tbody class="divide-y">${stats.map(s => `
-            <tr class="hover:bg-gray-50">
-              <td class="px-3 py-2 text-xs">${s.date}</td>
-              <td class="px-3 py-2 text-right">${s.intake_count || 0}</td>
-              <td class="px-3 py-2 text-right">${s.assigned_to_team_count || 0}</td>
-              <td class="px-3 py-2 text-right">${s.hq_approved_count || 0}</td>
-              <td class="px-3 py-2 text-right font-bold text-green-600">${s.settlement_confirmed_count || 0}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
+        ${renderDataTable({ columns: [
+          { key: 'date', label: '날짜', render: s => `<span class="text-xs">${s.date}</span>` },
+          { key: 'intake_count', label: '인입', align: 'right', render: s => s.intake_count || 0 },
+          { key: 'assigned_to_team_count', label: '배정', align: 'right', render: s => s.assigned_to_team_count || 0 },
+          { key: 'hq_approved_count', label: '승인', align: 'right', render: s => s.hq_approved_count || 0 },
+          { key: 'settlement_confirmed_count', label: '정산', align: 'right', render: s => `<span class="font-bold text-green-600">${s.settlement_confirmed_count || 0}</span>` }
+        ], rows: stats, compact: true, noBorder: true })}
       </div>` : '<p class="text-gray-400 text-sm text-center py-4">일별 통계 데이터가 없습니다.</p>'}
 
       ${leaders.length > 0 ? `
       <div>
         <h4 class="font-semibold mb-3"><i class="fas fa-users mr-1 text-purple-500"></i>소속 팀장 현황</h4>
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50"><tr>
-            <th class="px-3 py-2 text-left">팀장</th><th class="px-3 py-2 text-right">수임</th>
-            <th class="px-3 py-2 text-right">제출</th><th class="px-3 py-2 text-right">승인</th>
-            <th class="px-3 py-2 text-right">지급액</th>
-          </tr></thead>
-          <tbody class="divide-y">${leaders.map(l => `
-            <tr class="ix-table-row"
-                data-preview="user" data-preview-id="${l.team_leader_id || ''}" data-preview-title="${l.team_leader_name}">
-              <td class="px-3 py-2 font-medium">${l.team_leader_name}</td>
-              <td class="px-3 py-2 text-right">${l.intake_count || 0}</td>
-              <td class="px-3 py-2 text-right">${l.submitted_count || 0}</td>
-              <td class="px-3 py-2 text-right">${l.hq_approved_count || 0}</td>
-              <td class="px-3 py-2 text-right font-bold text-green-600">${formatAmount(l.payable_amount_sum)}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
+        ${renderDataTable({ columns: [
+          { key: 'team_leader_name', label: '팀장', render: l => `<span class="font-medium">${escapeHtml(l.team_leader_name)}</span>` },
+          { key: 'intake_count', label: '수임', align: 'right', render: l => l.intake_count || 0 },
+          { key: 'submitted_count', label: '제출', align: 'right', render: l => l.submitted_count || 0 },
+          { key: 'hq_approved_count', label: '승인', align: 'right', render: l => l.hq_approved_count || 0 },
+          { key: 'payable_amount_sum', label: '지급액', align: 'right', render: l => `<span class="font-bold text-green-600">${formatAmount(l.payable_amount_sum)}</span>` }
+        ], rows: leaders, compact: true, noBorder: true,
+           rowAttrs: l => `data-preview="user" data-preview-id="${l.team_leader_id || ''}" data-preview-title="${escapeHtml(l.team_leader_name)}"` })}
       </div>` : ''}
     </div>`;
 

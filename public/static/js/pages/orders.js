@@ -19,7 +19,8 @@ async function renderOrders(el) {
   if (!res) return;
 
   // 선택 상태 정리
-  const currentIds = new Set((res.orders || []).map(o => o.order_id));
+  const orders = res.orders || [];
+  const currentIds = new Set(orders.map(o => o.order_id));
   for (const id of orderListState.selected) {
     if (!currentIds.has(id)) orderListState.selected.delete(id);
   }
@@ -63,64 +64,33 @@ async function renderOrders(el) {
       </div>
 
       <!-- 테이블 -->
-      <div class="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 text-gray-600"><tr>
-              <th class="px-2 py-3 text-center w-8">
-                <input type="checkbox" class="w-3.5 h-3.5 rounded" 
-                  ${orderListState.selected.size === (res.orders || []).length && res.orders?.length > 0 ? 'checked' : ''}
-                  onchange="toggleAllOrderSelection(this.checked)" data-tooltip="전체 선택/해제">
-              </th>
-              <th class="px-3 py-3 text-left">ID</th><th class="px-3 py-3 text-left">주문번호</th><th class="px-3 py-3 text-left">채널</th><th class="px-3 py-3 text-left">고객명</th>
-              <th class="px-3 py-3 text-left">주소</th><th class="px-3 py-3 text-right">금액</th><th class="px-3 py-3 text-left">지역총판</th>
-              <th class="px-3 py-3 text-left">팀장</th><th class="px-3 py-3 text-center">상태</th><th class="px-3 py-3 text-left">요청일</th>
-              <th class="px-3 py-3 text-center">진행</th><th class="px-3 py-3 text-center w-10"></th>
-            </tr></thead>
-            <tbody class="divide-y" id="order-table-body">
-              ${(res.orders || []).map(o => {
-                const sel = orderListState.selected.has(o.order_id);
-                return `
-                <tr class="ix-table-row ${sel ? 'bg-blue-50' : ''}" 
-                    onclick="handleOrderRowClick(event, ${o.order_id})"
-                    oncontextmenu="showOrderContextMenu(event, ${JSON.stringify(o).replace(/"/g, '&quot;')})">
-                  <td class="px-2 py-3 text-center" onclick="event.stopPropagation()">
-                    <input type="checkbox" class="w-3.5 h-3.5 rounded" ${sel ? 'checked' : ''}
-                      onchange="toggleOrderSelection(${o.order_id}, this.checked)">
-                  </td>
-                  <td class="px-3 py-3 text-gray-400 font-mono text-xs"
-                      data-preview="order" data-preview-id="${o.order_id}" data-preview-title="주문 #${o.order_id}">${o.order_id}</td>
-                  <td class="px-3 py-3 font-mono text-xs">${o.external_order_no || '<span class="text-gray-400">미확정</span>'}</td>
-                  <td class="px-3 py-3 text-xs">${o.channel_name ? `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100"><i class="fas fa-satellite-dish text-[10px]"></i>${o.channel_name}</span>` : '<span class="text-gray-300">-</span>'}</td>
-                  <td class="px-3 py-3 font-medium">${o.customer_name || '-'}</td>
-                  <td class="px-3 py-3 text-gray-600 max-w-[180px] truncate" title="${o.address_text || ''}">${o.address_text || '-'}</td>
-                  <td class="px-3 py-3 text-right font-medium">${formatAmount(o.base_amount)}</td>
-                  <td class="px-3 py-3 text-xs">${o.region_name || '<span class="text-gray-400">-</span>'}</td>
-                  <td class="px-3 py-3 text-xs">${o.team_leader_name || '<span class="text-gray-400">-</span>'}</td>
-                  <td class="px-3 py-3 text-center">${statusBadge(o.status)}</td>
-                  <td class="px-3 py-3 text-gray-500 text-xs">${o.requested_date || '-'}</td>
-                  <td class="px-3 py-3">${_renderStatusProgress(o.status)}</td>
-                  <td class="px-3 py-3 text-center">
-                    <button onclick="event.stopPropagation();showOrderActionMenu(event, ${JSON.stringify(o).replace(/"/g, '&quot;')})" 
-                      class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" data-tooltip="액션 메뉴">
-                      <i class="fas fa-ellipsis-vertical"></i>
-                    </button>
-                  </td>
-                </tr>`;
-              }).join('')}
-              ${(res.orders || []).length === 0 ? '<tr><td colspan="13" class="px-4 py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>' : ''}
-            </tbody>
-          </table>
-        </div>
-        <div class="flex items-center justify-between px-4 py-3 border-t text-sm text-gray-500">
-          <span>총 ${res.total}건</span>
-          <div class="flex gap-2">
-            ${Number(res.page) > 1 ? `<button onclick="window._orderFilters={...window._orderFilters||{},page:${Number(res.page)-1}};renderContent()" class="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 transition">이전</button>` : ''}
-            <span class="px-3 py-1">${res.page} / ${Math.ceil(res.total / Number(res.limit)) || 1}</span>
-            ${Number(res.page) < Math.ceil(res.total / Number(res.limit)) ? `<button onclick="window._orderFilters={...window._orderFilters||{},page:${Number(res.page)+1}};renderContent()" class="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 transition">다음</button>` : ''}
-          </div>
-        </div>
-      </div>
+      ${renderDataTable({
+        columns: [
+          { key: '_chk', label: `<input type="checkbox" class="w-3.5 h-3.5 rounded" ${orderListState.selected.size === orders.length && orders.length > 0 ? 'checked' : ''} onchange="toggleAllOrderSelection(this.checked)" data-tooltip="전체 선택/해제">`, align: 'center', width: '2rem',
+            render: o => `<span onclick="event.stopPropagation()"><input type="checkbox" class="w-3.5 h-3.5 rounded" ${orderListState.selected.has(o.order_id) ? 'checked' : ''} onchange="toggleOrderSelection(${o.order_id}, this.checked)"></span>` },
+          { key: 'order_id', label: 'ID', render: o => `<span class="text-gray-400 font-mono text-xs" data-preview="order" data-preview-id="${o.order_id}" data-preview-title="주문 #${o.order_id}">${o.order_id}</span>` },
+          { key: 'external_order_no', label: '주문번호', render: o => `<span class="font-mono text-xs">${escapeHtml(o.external_order_no || '') || '<span class="text-gray-400">미확정</span>'}</span>` },
+          { key: 'channel_name', label: '채널', render: o => o.channel_name ? `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 text-xs"><i class="fas fa-satellite-dish text-[10px]"></i>${escapeHtml(o.channel_name)}</span>` : '<span class="text-gray-300">-</span>' },
+          { key: 'customer_name', label: '고객명', render: o => `<span class="font-medium">${escapeHtml(o.customer_name || '-')}</span>` },
+          { key: 'address_text', label: '주소', tdClass: 'max-w-[180px] truncate text-gray-600', render: o => `<span title="${escapeHtml(o.address_text || '')}">${escapeHtml(o.address_text || '-')}</span>` },
+          { key: 'base_amount', label: '금액', align: 'right', render: o => `<span class="font-medium">${formatAmount(o.base_amount)}</span>` },
+          { key: 'region_name', label: '지역총판', render: o => `<span class="text-xs">${escapeHtml(o.region_name || '') || '<span class="text-gray-400">-</span>'}</span>` },
+          { key: 'team_leader_name', label: '팀장', render: o => `<span class="text-xs">${escapeHtml(o.team_leader_name || '') || '<span class="text-gray-400">-</span>'}</span>` },
+          { key: 'status', label: '상태', align: 'center', render: o => statusBadge(o.status) },
+          { key: 'requested_date', label: '요청일', render: o => `<span class="text-gray-500 text-xs">${o.requested_date || '-'}</span>` },
+          { key: '_progress', label: '진행', align: 'center', render: o => _renderStatusProgress(o.status) },
+          { key: '_actions', label: '', align: 'center', width: '2.5rem',
+            render: o => `<button onclick="event.stopPropagation();showOrderActionMenu(event, ${JSON.stringify(o).replace(/"/g, '&amp;quot;')})" class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" data-tooltip="액션 메뉴"><i class="fas fa-ellipsis-vertical"></i></button>` }
+        ],
+        rows: orders,
+        tbodyId: 'order-table-body',
+        compact: true,
+        caption: '주문 목록',
+        rowClass: o => orderListState.selected.has(o.order_id) ? 'bg-blue-50' : '',
+        rowAttrs: o => `onclick="handleOrderRowClick(event, ${o.order_id})" oncontextmenu="showOrderContextMenu(event, ${JSON.stringify(o).replace(/"/g, '&quot;')})"`,
+        emptyText: '데이터가 없습니다.'
+      })}
+      ${renderPagination(res.total, Number(res.page), Number(res.limit), '_orderPageChange')}
     </div>`;
 
   // 배치 액션 바
@@ -399,6 +369,11 @@ function applyOrderFilter() {
   window._orderFilters = { status: document.getElementById('f-status')?.value, channel_id: document.getElementById('f-channel')?.value, search: document.getElementById('f-search')?.value, from: document.getElementById('f-from')?.value, to: document.getElementById('f-to')?.value, page: 1 };
   Object.keys(window._orderFilters).forEach(k => { if (!window._orderFilters[k]) delete window._orderFilters[k]; });
   orderListState.selected.clear();
+  renderContent();
+}
+
+function _orderPageChange(page) {
+  window._orderFilters = { ...window._orderFilters || {}, page };
   renderContent();
 }
 

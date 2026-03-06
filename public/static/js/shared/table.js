@@ -1,33 +1,70 @@
 // ============================================================
-// 와이비 OMS — Shared Table Component v4.0
+// 와이비 OMS — Shared Table Component v5.0
 // 재사용 가능한 테이블, 페이지네이션, 상태카드, 접근성
+// 체크박스 컬럼, 커스텀 행 속성, 조건부 컬럼, 행 CSS 지원
 // ============================================================
 
 /**
- * 범용 데이터 테이블 생성
- * @param {Object} config - { columns, rows, onRowClick, emptyText, className }
- * columns: [{ key, label, align, width, render }]
+ * 범용 데이터 테이블 생성 v5
+ * @param {Object} config
+ *   columns:    [{ key, label, align, width, render, thClass, tdClass, show }]
+ *               - show: (optional) boolean 또는 () => boolean — false면 컬럼 숨김
+ *               - render: (row, idx) => HTML string
+ *               - thClass / tdClass: 추가 CSS 클래스
+ *   rows:       데이터 배열
+ *   onRowClick: 행 클릭 함수명 문자열
+ *   rowAttrs:   (row, idx) => 추가 속성 문자열 (onclick, oncontextmenu, data-* 등)
+ *   rowClass:   (row, idx) => 추가 CSS 클래스 문자열
+ *   emptyText:  빈 테이블 메시지
+ *   className:  외부 div 추가 클래스
+ *   tableId:    <table> id 속성
+ *   caption:    접근성 캡션 (sr-only)
+ *   tbodyId:    <tbody> id 속성
+ *   compact:    true이면 px-3 py-2 (작은 패딩)
+ *   noBorder:   true이면 외부 border 제거
  */
 function renderDataTable(config) {
-  const { columns, rows = [], onRowClick, emptyText = '데이터가 없습니다.', className = '', tableId = '', caption = '' } = config;
-  
+  const {
+    columns: rawCols, rows = [], onRowClick, rowAttrs, rowClass,
+    emptyText = '데이터가 없습니다.', className = '', tableId = '',
+    caption = '', tbodyId = '', compact = false, noBorder = false
+  } = config;
+
+  // 조건부 컬럼 필터링
+  const columns = rawCols.filter(c => {
+    if (c.show === undefined) return true;
+    return typeof c.show === 'function' ? c.show() : !!c.show;
+  });
+
+  const px = compact ? 'px-3 py-2' : 'px-4 py-3';
+  const border = noBorder ? '' : 'border border-gray-100';
+
   return `
-    <div class="bg-white rounded-xl border border-gray-100 overflow-hidden ${className}">
+    <div class="bg-white rounded-xl ${border} overflow-hidden ${className}">
       <div class="overflow-x-auto">
         <table class="w-full text-sm" ${tableId ? `id="${tableId}"` : ''} role="grid">
           ${caption ? `<caption class="sr-only">${caption}</caption>` : ''}
           <thead class="bg-gray-50 text-gray-600">
-            <tr>${columns.map(c => `<th class="px-4 py-3 ${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'} font-medium" ${c.width ? `style="width:${c.width}"` : ''} scope="col">${c.label}</th>`).join('')}</tr>
+            <tr>${columns.map(c => {
+              const align = c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left';
+              return `<th class="${px} ${align} font-medium ${c.thClass || ''}" ${c.width ? `style="width:${c.width}"` : ''} scope="col">${c.label}</th>`;
+            }).join('')}</tr>
           </thead>
-          <tbody class="divide-y">
-            ${rows.length > 0 ? rows.map((row, i) => `
-              <tr class="hover:bg-gray-50 ${onRowClick ? 'cursor-pointer ix-table-row' : ''}" ${onRowClick ? `onclick="${onRowClick}(${row.id || row.order_id || row.user_id || i})"` : ''}>
+          <tbody class="divide-y" ${tbodyId ? `id="${tbodyId}"` : ''}>
+            ${rows.length > 0 ? rows.map((row, i) => {
+              const extraClass = rowClass ? rowClass(row, i) : '';
+              const extraAttrs = rowAttrs ? rowAttrs(row, i) : '';
+              const clickable = onRowClick ? 'cursor-pointer ix-table-row' : '';
+              const clickAttr = onRowClick ? `onclick="${onRowClick}(${row.id || row.order_id || row.user_id || i})"` : '';
+              return `
+              <tr class="hover:bg-gray-50 ${clickable} ${extraClass}" ${clickAttr} ${extraAttrs}>
                 ${columns.map(c => {
-                  const val = c.render ? c.render(row) : (row[c.key] !== undefined ? row[c.key] : '-');
-                  return `<td class="px-4 py-3 ${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'}">${val}</td>`;
+                  const val = c.render ? c.render(row, i) : (row[c.key] !== undefined ? row[c.key] : '-');
+                  const align = c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left';
+                  return `<td class="${px} ${align} ${c.tdClass || ''}">${val}</td>`;
                 }).join('')}
-              </tr>
-            `).join('') : `<tr><td colspan="${columns.length}" class="px-4 py-8 text-center text-gray-400">${emptyText}</td></tr>`}
+              </tr>`;
+            }).join('') : `<tr><td colspan="${columns.length}" class="px-4 py-8 text-center text-gray-400">${emptyText}</td></tr>`}
           </tbody>
         </table>
       </div>

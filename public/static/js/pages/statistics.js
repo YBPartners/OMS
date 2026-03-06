@@ -234,69 +234,62 @@ async function renderPolicies(el) {
 
 function renderDistPolicyTable(policies) {
   const canEditPolicy = canEdit('policy');
+  const _activeCell = p => p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '<span class="text-gray-400">비활성</span>';
+  const _distActions = p => `<div class="flex gap-1 justify-center">
+    <button onclick='showEditDistPolicyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
+    <button onclick="togglePolicyActive('distribution',${p.policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
+    ${!p.is_active ? `<button onclick="deletePolicy('distribution',${p.policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>` : ''}
+  </div>`;
   return `
     <div class="bg-white rounded-xl p-5 border border-gray-100">
       <div class="flex items-center justify-between mb-4">
         <h3 class="font-semibold">배분 정책 (행정동 기반 자동배분)</h3>
         ${canEditPolicy ? `<button onclick="showNewDistPolicyModal()" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700"><i class="fas fa-plus mr-1"></i>새 버전</button>` : ''}
       </div>
-      <table class="w-full text-sm"><thead class="bg-gray-50"><tr>
-        <th class="px-3 py-2 text-left">ID</th><th class="px-3 py-2 text-left">이름</th>
-        <th class="px-3 py-2 text-center">버전</th><th class="px-3 py-2 text-center">활성</th>
-        <th class="px-3 py-2 text-left">적용일</th>
-        ${canEditPolicy ? '<th class="px-3 py-2 text-center">관리</th>' : ''}
-      </tr></thead><tbody class="divide-y">${policies.map(p => `
-        <tr class="hover:bg-gray-50">
-          <td class="px-3 py-2">${p.policy_id}</td><td class="px-3 py-2">${p.name}</td>
-          <td class="px-3 py-2 text-center">v${p.version}</td>
-          <td class="px-3 py-2 text-center">${p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '<span class="text-gray-400">비활성</span>'}</td>
-          <td class="px-3 py-2 text-xs">${p.effective_from || '-'}</td>
-          ${canEditPolicy ? `<td class="px-3 py-2 text-center"><div class="flex gap-1 justify-center">
-            <button onclick='showEditDistPolicyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
-            <button onclick="togglePolicyActive('distribution',${p.policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
-            ${!p.is_active ? `<button onclick="deletePolicy('distribution',${p.policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>` : ''}
-          </div></td>` : ''}
-        </tr>`).join('')}
-      </tbody></table>
+      ${renderDataTable({ columns: [
+        { key: 'policy_id', label: 'ID' },
+        { key: 'name', label: '이름' },
+        { key: 'version', label: '버전', align: 'center', render: p => `v${p.version}` },
+        { key: 'is_active', label: '활성', align: 'center', render: _activeCell },
+        { key: 'effective_from', label: '적용일', render: p => `<span class="text-xs">${p.effective_from || '-'}</span>` },
+        { key: '_actions', label: '관리', align: 'center', show: canEditPolicy, render: _distActions }
+      ], rows: policies, compact: true, noBorder: true, emptyText: '배분 정책이 없습니다.' })}
     </div>`;
 }
 
 function renderReportPolicyTable(policies) {
   const canEditPolicy = canEdit('policy');
+  const _photosCol = p => { let d = '-'; try { const pj = typeof p.required_photos_json === 'string' ? JSON.parse(p.required_photos_json) : p.required_photos_json; d = Object.entries(pj || {}).map(([k,v]) => `${k}:${v}`).join(', '); } catch { d = p.required_photos_json || '-'; } return `<span class="text-xs">${d}</span>`; };
+  const _reportActions = p => `<div class="flex gap-1 justify-center">
+    <button onclick='showEditReportPolicyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
+    <button onclick="togglePolicyActive('report',${p.policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
+    ${!p.is_active ? `<button onclick="deletePolicy('report',${p.policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>` : ''}
+  </div>`;
   return `
     <div class="bg-white rounded-xl p-5 border border-gray-100">
       <div class="flex items-center justify-between mb-4">
         <h3 class="font-semibold">보고서 필수요건 정책</h3>
         ${canEditPolicy ? `<button onclick="showNewReportPolicyModal()" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700"><i class="fas fa-plus mr-1"></i>새 버전</button>` : ''}
       </div>
-      <table class="w-full text-sm"><thead class="bg-gray-50"><tr>
-        <th class="px-3 py-2 text-left">ID</th><th class="px-3 py-2 text-left">이름</th>
-        <th class="px-3 py-2 text-left">서비스유형</th><th class="px-3 py-2 text-left">필수사진</th>
-        <th class="px-3 py-2 text-center">영수증</th><th class="px-3 py-2 text-center">활성</th>
-        ${canEditPolicy ? '<th class="px-3 py-2 text-center">관리</th>' : ''}
-      </tr></thead><tbody class="divide-y">${policies.map(p => {
-        let photosDisplay = '-';
-        try { const pj = typeof p.required_photos_json === 'string' ? JSON.parse(p.required_photos_json) : p.required_photos_json; photosDisplay = Object.entries(pj || {}).map(([k,v]) => `${k}:${v}`).join(', '); } catch { photosDisplay = p.required_photos_json || '-'; }
-        return `
-        <tr class="hover:bg-gray-50">
-          <td class="px-3 py-2">${p.policy_id}</td><td class="px-3 py-2">${p.name}</td>
-          <td class="px-3 py-2">${p.service_type}</td>
-          <td class="px-3 py-2 text-xs">${photosDisplay}</td>
-          <td class="px-3 py-2 text-center">${p.require_receipt ? '<span class="text-green-600">Y</span>' : 'N'}</td>
-          <td class="px-3 py-2 text-center">${p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '<span class="text-gray-400">비활성</span>'}</td>
-          ${canEditPolicy ? `<td class="px-3 py-2 text-center"><div class="flex gap-1 justify-center">
-            <button onclick='showEditReportPolicyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
-            <button onclick="togglePolicyActive('report',${p.policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
-            ${!p.is_active ? `<button onclick="deletePolicy('report',${p.policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>` : ''}
-          </div></td>` : ''}
-        </tr>`;
-      }).join('')}
-      </tbody></table>
+      ${renderDataTable({ columns: [
+        { key: 'policy_id', label: 'ID' },
+        { key: 'name', label: '이름' },
+        { key: 'service_type', label: '서비스유형' },
+        { key: '_photos', label: '필수사진', render: _photosCol },
+        { key: 'require_receipt', label: '영수증', align: 'center', render: p => p.require_receipt ? '<span class="text-green-600">Y</span>' : 'N' },
+        { key: 'is_active', label: '활성', align: 'center', render: p => p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '<span class="text-gray-400">비활성</span>' },
+        { key: '_actions', label: '관리', align: 'center', show: canEditPolicy, render: _reportActions }
+      ], rows: policies, compact: true, noBorder: true, emptyText: '보고서 정책이 없습니다.' })}
     </div>`;
 }
 
 function renderCommissionPolicyTable(policies) {
   const canEditPolicy = canEdit('policy');
+  const _commActions = p => `<div class="flex gap-1 justify-center">
+    <button onclick='showEditCommissionModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
+    <button onclick="toggleCommissionActive(${p.commission_policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
+    ${!p.is_active ? `<button onclick="deleteCommissionPolicy(${p.commission_policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>` : ''}
+  </div>`;
   return `
     <div class="bg-white rounded-xl p-5 border border-gray-100">
       <div class="flex items-center justify-between mb-4">
@@ -304,51 +297,32 @@ function renderCommissionPolicyTable(policies) {
         ${canEditPolicy ? `<button onclick="showNewCommissionModal()" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700"><i class="fas fa-plus mr-1"></i>추가</button>` : ''}
       </div>
       <p class="text-xs text-gray-500 mb-3">정률(PERCENT): 주문금액의 %를 수수료로 차감 · 정액(FIXED): 건당 고정금액 차감</p>
-      <table class="w-full text-sm"><thead class="bg-gray-50"><tr>
-        <th class="px-3 py-2 text-left">ID</th><th class="px-3 py-2 text-left">지역총판</th>
-        <th class="px-3 py-2 text-left">대상 팀장</th><th class="px-3 py-2 text-center">유형</th>
-        <th class="px-3 py-2 text-right">값</th><th class="px-3 py-2 text-left">적용일</th>
-        <th class="px-3 py-2 text-center">활성</th>
-        ${canEditPolicy ? '<th class="px-3 py-2 text-center">관리</th>' : ''}
-      </tr></thead><tbody class="divide-y">${policies.map(p => `
-        <tr class="hover:bg-gray-50">
-          <td class="px-3 py-2">${p.commission_policy_id}</td>
-          <td class="px-3 py-2">${p.org_name}</td>
-          <td class="px-3 py-2">${p.team_leader_name || '<span class="text-gray-400">총판 기본</span>'}</td>
-          <td class="px-3 py-2 text-center"><span class="status-badge ${p.mode === 'PERCENT' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}">${p.mode === 'PERCENT' ? '정률' : '정액'}</span></td>
-          <td class="px-3 py-2 text-right font-bold">${p.mode === 'PERCENT' ? p.value + '%' : formatAmount(p.value)}</td>
-          <td class="px-3 py-2 text-xs">${p.effective_from || '-'}</td>
-          <td class="px-3 py-2 text-center">${p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '<span class="text-gray-400">비활성</span>'}</td>
-          ${canEditPolicy ? `<td class="px-3 py-2 text-center"><div class="flex gap-1 justify-center">
-            <button onclick='showEditCommissionModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
-            <button onclick="toggleCommissionActive(${p.commission_policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
-            ${!p.is_active ? `<button onclick="deleteCommissionPolicy(${p.commission_policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>` : ''}
-          </div></td>` : ''}
-        </tr>`).join('')}
-      </tbody></table>
+      ${renderDataTable({ columns: [
+        { key: 'commission_policy_id', label: 'ID' },
+        { key: 'org_name', label: '지역총판' },
+        { key: 'team_leader_name', label: '대상 팀장', render: p => escapeHtml(p.team_leader_name || '') || '<span class="text-gray-400">총판 기본</span>' },
+        { key: 'mode', label: '유형', align: 'center', render: p => `<span class="status-badge ${p.mode === 'PERCENT' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}">${p.mode === 'PERCENT' ? '정률' : '정액'}</span>` },
+        { key: 'value', label: '값', align: 'right', render: p => `<span class="font-bold">${p.mode === 'PERCENT' ? p.value + '%' : formatAmount(p.value)}</span>` },
+        { key: 'effective_from', label: '적용일', render: p => `<span class="text-xs">${p.effective_from || '-'}</span>` },
+        { key: 'is_active', label: '활성', align: 'center', render: p => p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '<span class="text-gray-400">비활성</span>' },
+        { key: '_actions', label: '관리', align: 'center', show: canEditPolicy, render: _commActions }
+      ], rows: policies, compact: true, noBorder: true, emptyText: '수수료 정책이 없습니다.' })}
     </div>`;
 }
 
 function renderTerritoryTable(territories) {
+  const canEditPolicy = canEdit('policy');
   return `
     <div class="bg-white rounded-xl p-5 border border-gray-100">
       <h3 class="font-semibold mb-4">지역권 ↔ 지역총판 매핑</h3>
-      <table class="w-full text-sm"><thead class="bg-gray-50"><tr>
-        <th class="px-3 py-2 text-left">시도</th><th class="px-3 py-2 text-left">시군구</th>
-        <th class="px-3 py-2 text-left">읍면동</th><th class="px-3 py-2 text-left">행정동코드</th>
-        <th class="px-3 py-2 text-left">배정 총판</th>
-        ${canEdit('policy') ? '<th class="px-3 py-2 text-center">관리</th>' : ''}
-      </tr></thead><tbody class="divide-y">${territories.map(t => `
-        <tr class="hover:bg-gray-50">
-          <td class="px-3 py-2">${t.sido}</td><td class="px-3 py-2">${t.sigungu}</td>
-          <td class="px-3 py-2">${t.eupmyeondong || '-'}</td>
-          <td class="px-3 py-2 font-mono text-xs">${t.admin_dong_code}</td>
-          <td class="px-3 py-2 font-medium ${t.org_name ? 'text-purple-700' : 'text-red-500'}">${t.org_name || '미매핑'}</td>
-          ${canEdit('policy') ? `<td class="px-3 py-2 text-center">
-            <button onclick="showTerritoryMappingModal(${t.territory_id}, '${(t.org_name||'').replace(/'/g,"\\'")}')" class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit mr-1"></i>변경</button>
-          </td>` : ''}
-        </tr>`).join('')}
-      </tbody></table>
+      ${renderDataTable({ columns: [
+        { key: 'sido', label: '시도' },
+        { key: 'sigungu', label: '시군구' },
+        { key: 'eupmyeondong', label: '읍면동', render: t => escapeHtml(t.eupmyeondong || '-') },
+        { key: 'admin_dong_code', label: '행정동코드', render: t => `<span class="font-mono text-xs">${t.admin_dong_code}</span>` },
+        { key: 'org_name', label: '배정 총판', render: t => `<span class="font-medium ${t.org_name ? 'text-purple-700' : 'text-red-500'}">${escapeHtml(t.org_name || '') || '미매핑'}</span>` },
+        { key: '_actions', label: '관리', align: 'center', show: canEditPolicy, render: t => `<button onclick="showTerritoryMappingModal(${t.territory_id}, '${(t.org_name||'').replace(/'/g,"\\'")}')" class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit mr-1"></i>변경</button>` }
+      ], rows: territories, compact: true, noBorder: true, emptyText: '지역권 매핑이 없습니다.' })}
     </div>`;
 }
 
@@ -357,6 +331,11 @@ function renderTerritoryTable(territories) {
 // ── 지표 정책 테이블 ──
 function renderMetricsPolicyTable(policies) {
   const canEditPolicy = canEdit('policy');
+  const _metricsActions = p => `<div class="flex gap-1 justify-center">
+    <button onclick='showEditMetricsPolicyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
+    <button onclick="toggleMetricsActive(${p.metrics_policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
+    ${!p.is_active ? `<button onclick="deleteMetricsPolicy(${p.metrics_policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>` : ''}
+  </div>`;
   return `
     <div class="bg-white rounded-xl p-5 border border-gray-100">
       <div class="flex items-center justify-between mb-4">
@@ -366,28 +345,14 @@ function renderMetricsPolicyTable(policies) {
         </div>
         ${canEditPolicy ? `<button onclick="showNewMetricsPolicyModal()" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700"><i class="fas fa-plus mr-1"></i>추가</button>` : ''}
       </div>
-      <table class="w-full text-sm"><thead class="bg-gray-50"><tr>
-        <th class="px-3 py-2 text-left">ID</th>
-        <th class="px-3 py-2 text-left">완료 기준</th>
-        <th class="px-3 py-2 text-left">지역접수 기준</th>
-        <th class="px-3 py-2 text-left">적용일</th>
-        <th class="px-3 py-2 text-center">활성</th>
-        ${canEditPolicy ? '<th class="px-3 py-2 text-center">관리</th>' : ''}
-      </tr></thead><tbody class="divide-y">${policies.map(p => `
-        <tr class="hover:bg-gray-50">
-          <td class="px-3 py-2 font-mono text-xs">${p.metrics_policy_id}</td>
-          <td class="px-3 py-2">${p.completion_basis || '-'}</td>
-          <td class="px-3 py-2">${p.region_intake_basis || '-'}</td>
-          <td class="px-3 py-2 text-xs">${p.effective_from || '-'}</td>
-          <td class="px-3 py-2 text-center">${p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '<span class="text-gray-400">비활성</span>'}</td>
-          ${canEditPolicy ? `<td class="px-3 py-2 text-center"><div class="flex gap-1 justify-center">
-            <button onclick='showEditMetricsPolicyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
-            <button onclick="toggleMetricsActive(${p.metrics_policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
-            ${!p.is_active ? `<button onclick="deleteMetricsPolicy(${p.metrics_policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>` : ''}
-          </div></td>` : ''}
-        </tr>`).join('')}
-        ${policies.length === 0 ? '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">지표 정책이 없습니다.</td></tr>' : ''}
-      </tbody></table>
+      ${renderDataTable({ columns: [
+        { key: 'metrics_policy_id', label: 'ID', render: p => `<span class="font-mono text-xs">${p.metrics_policy_id}</span>` },
+        { key: 'completion_basis', label: '완료 기준', render: p => p.completion_basis || '-' },
+        { key: 'region_intake_basis', label: '지역접수 기준', render: p => p.region_intake_basis || '-' },
+        { key: 'effective_from', label: '적용일', render: p => `<span class="text-xs">${p.effective_from || '-'}</span>` },
+        { key: 'is_active', label: '활성', align: 'center', render: p => p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '<span class="text-gray-400">비활성</span>' },
+        { key: '_actions', label: '관리', align: 'center', show: canEditPolicy, render: _metricsActions }
+      ], rows: policies, compact: true, noBorder: true, emptyText: '지표 정책이 없습니다.' })}
     </div>`;
 }
 function showNewMetricsPolicyModal() {

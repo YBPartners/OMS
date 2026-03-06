@@ -381,29 +381,14 @@ async function loadSessionList() {
   const el = document.getElementById('session-list');
   if (!el) return;
 
-  el.innerHTML = sessions.length === 0 ? '<p class="text-gray-400 text-sm">활성 세션이 없습니다.</p>' : `
-    <table class="w-full text-sm">
-      <thead class="bg-gray-50"><tr>
-        <th class="px-3 py-2 text-left">사용자</th>
-        <th class="px-3 py-2 text-left">로그인 ID</th>
-        <th class="px-3 py-2 text-left">생성 시간</th>
-        <th class="px-3 py-2 text-left">만료 시간</th>
-        <th class="px-3 py-2 text-center">액션</th>
-      </tr></thead>
-      <tbody class="divide-y">${sessions.map(s => `
-        <tr class="hover:bg-gray-50">
-          <td class="px-3 py-2 font-medium">${s.user_name}</td>
-          <td class="px-3 py-2 text-gray-600">${s.login_id}</td>
-          <td class="px-3 py-2 text-xs text-gray-500">${formatDate(s.created_at)}</td>
-          <td class="px-3 py-2 text-xs text-gray-500">${formatDate(s.expires_at)}</td>
-          <td class="px-3 py-2 text-center">
-            <button onclick="revokeSession('${s.session_id}')" class="px-2 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100">
-              <i class="fas fa-ban mr-1"></i>강제종료
-            </button>
-          </td>
-        </tr>`).join('')}
-      </tbody>
-    </table>`;
+  el.innerHTML = sessions.length === 0 ? '<p class="text-gray-400 text-sm">활성 세션이 없습니다.</p>' :
+    renderDataTable({ columns: [
+      { key: 'user_name', label: '사용자', render: s => `<span class="font-medium">${escapeHtml(s.user_name)}</span>` },
+      { key: 'login_id', label: '로그인 ID', render: s => `<span class="text-gray-600">${escapeHtml(s.login_id)}</span>` },
+      { key: 'created_at', label: '생성 시간', render: s => `<span class="text-xs text-gray-500">${formatDate(s.created_at)}</span>` },
+      { key: 'expires_at', label: '만료 시간', render: s => `<span class="text-xs text-gray-500">${formatDate(s.expires_at)}</span>` },
+      { key: '_actions', label: '액션', align: 'center', render: s => `<button onclick="revokeSession('${s.session_id}')" class="px-2 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100"><i class="fas fa-ban mr-1"></i>강제종료</button>` }
+    ], rows: sessions, compact: true, caption: '활성 세션 목록' });
 }
 
 async function loadBackupInfo() {

@@ -100,21 +100,13 @@ async function showSignupDetail(requestId) {
       <div>
         <h4 class="text-sm font-semibold text-gray-700 mb-2"><i class="fas fa-map-marker-alt mr-1 text-indigo-500"></i>선택 구역 (${regions.length}개)</h4>
         <div class="max-h-40 overflow-y-auto border rounded">
-          <table class="w-full text-xs">
-            <thead class="bg-gray-50 sticky top-0"><tr>
-              <th class="px-2 py-1 text-left">시/도</th><th class="px-2 py-1 text-left">시/군/구</th><th class="px-2 py-1 text-left">읍/면/동</th>
-              <th class="px-2 py-1 text-center">관할내</th>
-            </tr></thead>
-            <tbody class="divide-y">${regions.map(rg => `
-              <tr class="${rg.is_within_distributor ? '' : 'bg-amber-50'}">
-                <td class="px-2 py-1">${rg.sido}</td>
-                <td class="px-2 py-1">${rg.sigungu}</td>
-                <td class="px-2 py-1">${rg.eupmyeondong}</td>
-                <td class="px-2 py-1 text-center">${rg.is_within_distributor ? '<i class="fas fa-check text-green-500"></i>' : '<i class="fas fa-exclamation-triangle text-amber-500"></i>'}</td>
-              </tr>
-            `).join('')}
-            </tbody>
-          </table>
+          ${renderDataTable({ columns: [
+            { key: 'sido', label: '시/도' },
+            { key: 'sigungu', label: '시/군/구' },
+            { key: 'eupmyeondong', label: '읍/면/동' },
+            { key: 'is_within_distributor', label: '관할내', align: 'center', render: rg => rg.is_within_distributor ? '<i class="fas fa-check text-green-500"></i>' : '<i class="fas fa-exclamation-triangle text-amber-500"></i>' }
+          ], rows: regions, compact: true, noBorder: true,
+             rowClass: rg => rg.is_within_distributor ? '' : 'bg-amber-50' })}
         </div>
       </div>
       
