@@ -4,7 +4,7 @@
 // ★ 타입별 아이콘/색상 + 시간 그룹화 + 일괄 관리
 // ============================================================
 
-let _notifUnreadCount = 0;
+_notifUnreadCount = typeof _notifUnreadCount !== 'undefined' ? _notifUnreadCount : 0;
 let _notifPollTimer = null;
 let _notifCenterOpen = false;
 let _notifCenterData = null;
