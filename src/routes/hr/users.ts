@@ -1,6 +1,7 @@
 // ================================================================
-// 와이비 OMS — HR 사용자(인사) 관리 라우트
+// 와이비 OMS — HR 사용자(인사) 관리 라우트 v2.0
 // CRUD / 상태관리 / 비밀번호 / 자격증명 설정
+// try-catch 강화: 사용자 관리 핵심 라우트 오류 방어
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -163,52 +164,57 @@ export function mountUsers(router: Hono<Env>) {
 
     if (!isValidRole(body.role)) return c.json({ error: '유효하지 않은 역할입니다.' }, 400);
 
-    const phoneDup = await db.prepare('SELECT user_id, name FROM users WHERE phone = ? AND status = ?').bind(normalizePhone(body.phone), 'ACTIVE').first();
-    if (phoneDup) return c.json({ error: `이미 등록된 핸드폰 번호입니다. (${(phoneDup as any).name})` }, 409);
+    try {
+      const phoneDup = await db.prepare('SELECT user_id, name FROM users WHERE phone = ? AND status = ?').bind(normalizePhone(body.phone), 'ACTIVE').first();
+      if (phoneDup) return c.json({ error: `이미 등록된 핸드폰 번호입니다. (${(phoneDup as any).name})` }, 409);
 
-    let loginId = body.login_id;
-    if (loginId) {
-      if (!isValidLoginId(loginId)) return c.json({ error: '로그인 ID는 영문/숫자/밑줄로 3~50자입니다.' }, 400);
-    } else {
-      const phoneLast4 = normalizePhone(body.phone).slice(-4);
-      loginId = `user_${phoneLast4}_${Date.now().toString(36).slice(-4)}`;
+      let loginId = body.login_id;
+      if (loginId) {
+        if (!isValidLoginId(loginId)) return c.json({ error: '로그인 ID는 영문/숫자/밑줄로 3~50자입니다.' }, 400);
+      } else {
+        const phoneLast4 = normalizePhone(body.phone).slice(-4);
+        loginId = `user_${phoneLast4}_${Date.now().toString(36).slice(-4)}`;
+      }
+
+      const loginDup = await db.prepare('SELECT user_id FROM users WHERE login_id = ?').bind(loginId).first();
+      if (loginDup) return c.json({ error: '이미 사용 중인 아이디입니다.' }, 409);
+
+      const initialPassword = body.password || normalizePhone(body.phone).slice(-4) + '!';
+      if (initialPassword.length < 4) return c.json({ error: '비밀번호는 최소 4자 이상이어야 합니다.' }, 400);
+      
+      const passwordHash = await hashPassword(initialPassword);
+
+      const result = await db.prepare(`
+        INSERT INTO users (org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo)
+        VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 0, datetime('now'), ?)
+      `).bind(
+        Number(body.org_id), loginId, passwordHash,
+        body.name, normalizePhone(body.phone), body.email || null, body.memo || null
+      ).run();
+
+      const newUserId = result.meta.last_row_id as number;
+
+      const roleRow = await db.prepare('SELECT role_id FROM roles WHERE code = ?').bind(body.role).first();
+      if (roleRow) {
+        await db.prepare('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)').bind(newUserId, roleRow.role_id).run();
+      }
+
+      await writeAuditLog(db, {
+        entity_type: 'USER', entity_id: newUserId, action: 'CREATE',
+        actor_id: currentUser.user_id,
+        detail_json: JSON.stringify({ name: body.name, org_id: body.org_id, role: body.role, login_id: loginId })
+      });
+
+      return c.json({
+        user_id: newUserId,
+        login_id: loginId,
+        initial_password: initialPassword,
+        message: `사용자 "${body.name}" 등록 완료. 초기 비밀번호: ${initialPassword}`
+      }, 201);
+    } catch (err: any) {
+      console.error('[users] 사용자 등록 실패:', err.message);
+      return c.json({ error: '사용자 등록 중 오류가 발생했습니다.', code: 'USER_ERROR' }, 500);
     }
-
-    const loginDup = await db.prepare('SELECT user_id FROM users WHERE login_id = ?').bind(loginId).first();
-    if (loginDup) return c.json({ error: '이미 사용 중인 아이디입니다.' }, 409);
-
-    const initialPassword = body.password || normalizePhone(body.phone).slice(-4) + '!';
-    if (initialPassword.length < 4) return c.json({ error: '비밀번호는 최소 4자 이상이어야 합니다.' }, 400);
-    
-    const passwordHash = await hashPassword(initialPassword);
-
-    const result = await db.prepare(`
-      INSERT INTO users (org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo)
-      VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 0, datetime('now'), ?)
-    `).bind(
-      Number(body.org_id), loginId, passwordHash,
-      body.name, normalizePhone(body.phone), body.email || null, body.memo || null
-    ).run();
-
-    const newUserId = result.meta.last_row_id as number;
-
-    const roleRow = await db.prepare('SELECT role_id FROM roles WHERE code = ?').bind(body.role).first();
-    if (roleRow) {
-      await db.prepare('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)').bind(newUserId, roleRow.role_id).run();
-    }
-
-    await writeAuditLog(db, {
-      entity_type: 'USER', entity_id: newUserId, action: 'CREATE',
-      actor_id: currentUser.user_id,
-      detail_json: JSON.stringify({ name: body.name, org_id: body.org_id, role: body.role, login_id: loginId })
-    });
-
-    return c.json({
-      user_id: newUserId,
-      login_id: loginId,
-      initial_password: initialPassword,
-      message: `사용자 "${body.name}" 등록 완료. 초기 비밀번호: ${initialPassword}`
-    }, 201);
   });
 
   // ─── 사용자 정보 수정 ───
@@ -253,24 +259,29 @@ export function mountUsers(router: Hono<Env>) {
 
     if (sets.length === 0 && !body.role) return c.json({ error: '변경할 항목이 없습니다.' }, 400);
 
-    if (sets.length > 0) {
-      sets.push("updated_at = datetime('now')");
-      params.push(userId);
-      await db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE user_id = ?`).bind(...params).run();
-    }
-
-    if (body.role) {
-      if (!isValidRole(body.role)) return c.json({ error: '유효하지 않은 역할입니다.' }, 400);
-      await db.prepare('DELETE FROM user_roles WHERE user_id = ?').bind(userId).run();
-      const roleRow = await db.prepare('SELECT role_id FROM roles WHERE code = ?').bind(body.role).first();
-      if (roleRow) {
-        await db.prepare('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)').bind(userId, roleRow.role_id).run();
+    try {
+      if (sets.length > 0) {
+        sets.push("updated_at = datetime('now')");
+        params.push(userId);
+        await db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE user_id = ?`).bind(...params).run();
       }
+
+      if (body.role) {
+        if (!isValidRole(body.role)) return c.json({ error: '유효하지 않은 역할입니다.' }, 400);
+        await db.prepare('DELETE FROM user_roles WHERE user_id = ?').bind(userId).run();
+        const roleRow = await db.prepare('SELECT role_id FROM roles WHERE code = ?').bind(body.role).first();
+        if (roleRow) {
+          await db.prepare('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)').bind(userId, roleRow.role_id).run();
+        }
+      }
+
+      await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: 'UPDATE', actor_id: currentUser.user_id, detail_json: safeAuditDetail(body) });
+
+      return c.json({ ok: true });
+    } catch (err: any) {
+      console.error(`[users] 사용자 수정 실패 user_id=${userId}:`, err.message);
+      return c.json({ error: '사용자 정보 수정 중 오류가 발생했습니다.', code: 'USER_ERROR' }, 500);
     }
-
-    await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: 'UPDATE', actor_id: currentUser.user_id, detail_json: safeAuditDetail(body) });
-
-    return c.json({ ok: true });
   });
 
   // ─── 사용자 활성화/비활성화 ───
@@ -298,16 +309,21 @@ export function mountUsers(router: Hono<Env>) {
       return c.json({ error: '권한이 없습니다.' }, 403);
     }
 
-    await db.prepare("UPDATE users SET status = ?, updated_at = datetime('now') WHERE user_id = ?").bind(status, userId).run();
+    try {
+      await db.prepare("UPDATE users SET status = ?, updated_at = datetime('now') WHERE user_id = ?").bind(status, userId).run();
 
-    if (status === 'INACTIVE') {
-      // ★ Session Service를 통한 세션 무효화 + KV 캐시 제거 (v2.0)
-      await invalidateUserSessions(db, userId, c.env.SESSION_CACHE);
+      if (status === 'INACTIVE') {
+        // ★ Session Service를 통한 세션 무효화 + KV 캐시 제거 (v2.0)
+        await invalidateUserSessions(db, userId, c.env.SESSION_CACHE);
+      }
+
+      await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: status === 'ACTIVE' ? 'ACTIVATE' : 'DEACTIVATE', actor_id: currentUser.user_id });
+
+      return c.json({ ok: true, message: status === 'ACTIVE' ? '활성화되었습니다.' : '비활성화되었습니다. 해당 사용자는 더 이상 로그인할 수 없습니다.' });
+    } catch (err: any) {
+      console.error(`[users] 사용자 상태 변경 실패 user_id=${userId}:`, err.message);
+      return c.json({ error: '사용자 상태 변경 중 오류가 발생했습니다.', code: 'USER_ERROR' }, 500);
     }
-
-    await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: status === 'ACTIVE' ? 'ACTIVATE' : 'DEACTIVATE', actor_id: currentUser.user_id });
-
-    return c.json({ ok: true, message: status === 'ACTIVE' ? '활성화되었습니다.' : '비활성화되었습니다. 해당 사용자는 더 이상 로그인할 수 없습니다.' });
   });
 
   // ─── 비밀번호 초기화 (관리자) ───
@@ -456,20 +472,25 @@ export function mountUsers(router: Hono<Env>) {
       return c.json({ error: `진행중인 주문 배정이 ${activeAssignments.cnt}건 있어 삭제할 수 없습니다. 먼저 주문을 재배정하세요.` }, 400);
     }
 
-    // 소프트 삭제: INACTIVE + login_id 변경(유니크 해제) + 역할 제거 + 세션 무효화
-    const deletedLoginId = `__deleted_${userId}_${Date.now().toString(36)}`;
-    await db.prepare("UPDATE users SET status = 'INACTIVE', login_id = ?, memo = COALESCE(memo,'') || ' [DELETED:' || ? || ']', updated_at = datetime('now') WHERE user_id = ?")
-      .bind(deletedLoginId, target.login_id, userId).run();
-    await db.prepare('DELETE FROM user_roles WHERE user_id = ?').bind(userId).run();
-    await invalidateUserSessions(db, userId, c.env.SESSION_CACHE);
+    try {
+      // 소프트 삭제: INACTIVE + login_id 변경(유니크 해제) + 역할 제거 + 세션 무효화
+      const deletedLoginId = `__deleted_${userId}_${Date.now().toString(36)}`;
+      await db.prepare("UPDATE users SET status = 'INACTIVE', login_id = ?, memo = COALESCE(memo,'') || ' [DELETED:' || ? || ']', updated_at = datetime('now') WHERE user_id = ?")
+        .bind(deletedLoginId, target.login_id, userId).run();
+      await db.prepare('DELETE FROM user_roles WHERE user_id = ?').bind(userId).run();
+      await invalidateUserSessions(db, userId, c.env.SESSION_CACHE);
 
-    await writeAuditLog(db, {
-      entity_type: 'USER', entity_id: userId, action: 'DELETE',
-      actor_id: currentUser.user_id,
-      detail_json: JSON.stringify({ name: target.name, login_id: target.login_id, org_id: target.org_id })
-    });
+      await writeAuditLog(db, {
+        entity_type: 'USER', entity_id: userId, action: 'DELETE',
+        actor_id: currentUser.user_id,
+        detail_json: JSON.stringify({ name: target.name, login_id: target.login_id, org_id: target.org_id })
+      });
 
-    return c.json({ ok: true, message: `사용자 "${target.name}"이(가) 삭제되었습니다.` });
+      return c.json({ ok: true, message: `사용자 "${target.name}"이(가) 삭제되었습니다.` });
+    } catch (err: any) {
+      console.error(`[users] 사용자 삭제 실패 user_id=${userId}:`, err.message);
+      return c.json({ error: '사용자 삭제 중 오류가 발생했습니다.', code: 'USER_ERROR' }, 500);
+    }
   });
 
   // ─── 다중 역할 할당 (기존 역할 교체 대신 추가/제거) ───

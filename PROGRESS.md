@@ -1,8 +1,8 @@
 # 와이비 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-06
-> **현재 버전**: v25.0.0 (R14 완료)
-> **총 코드량**: Backend ~11,100줄 (49 TS) + Frontend ~15,000줄 (27 JS) + SW 143줄 + CSS 420줄 + SQL 4,500줄 + E2E 1,500줄 = **~32,660줄**
+> **현재 버전**: v21.1.0 (R15 완료)
+> **총 코드량**: Backend ~11,100줄 (49 TS) + Frontend ~15,000줄 (27 JS) + SW 143줄 + CSS 620줄 + SQL 4,500줄 + E2E 1,500줄 = **~32,860줄**
 
 ---
 
@@ -52,6 +52,73 @@
 | **R12** | **품질 안정화 + 성능 최적화 + UI E2E** | **✅ 완료** | **2026-03-06** | **R11 구문 오류 수정, table.js v6 가상 스크롤, api.js v5 SWR 캐시, notifications.js apiAction 변환, E2E UI 60건 추가, 콘솔 에러 16→0** |
 | **R13** | **전국 행정구역 + 정책관리 UI 대폭 고도화** | **✅ 완료** | **2026-03-06** | **전국 2,726개 읍면동 + 264개 지역권 데이터, 정책 요약 대시보드, 5개 정책 상세 모달, 수수료 계산 미리보기, 지역권 검색/필터, 행정구역 관리 탭, E2E 115/122** |
 | **R14** | **보안 강화 + 성능 최적화 + 품질 개선** | **✅ 완료** | **2026-03-06** | **SQL 인젝션 3건 수정, JS 지연 로딩(689KB→코어만 즉시), 스켈레톤 UI, 캐시 헤더, 에러 재시도 UX** |
+| **R15** | **프로덕션 보안 강화 + 운영 안정성** | **✅ 완료** | **2026-03-06** | **보안 헤더, CORS 제한, Body 크기 제한, 핵심 라우트 try-catch 30개, 인쇄 스타일** |
+
+---
+
+## Phase R15 — 프로덕션 보안 강화 + 운영 안정성 ✅ (2026-03-06)
+
+> **목적**: 500명 규모 사용자 대상 프로덕션 보안/안정성 품질 강화
+> **배경**: R14 자율 점검에서 발견된 P0급 보안 미비 사항 해소
+
+### R15-1: 보안 헤더 미들웨어 ✅
+- CSP (Content-Security-Policy): 인라인 스크립트/CDN 허용, 나머지 제한
+- X-Frame-Options: DENY (Clickjacking 방어)
+- X-Content-Type-Options: nosniff (MIME sniffing 방어)
+- Referrer-Policy: strict-origin-when-cross-origin
+- Permissions-Policy: 불필요한 브라우저 기능 차단
+
+### R15-2: CORS 도메인 제한 ✅
+- 이전: `cors()` — 모든 origin 허용
+- 이후: `dahada-oms.pages.dev`, `localhost:3000` 만 허용
+- 개발/프로덕션 환경 자동 전환
+
+### R15-3: Request Body 크기 제한 ✅
+- 일반 API: 1MB 제한
+- 파일 업로드(사진): 5MB 제한
+- 일괄 임포트: 10MB 제한
+- Content-Length 헤더 기반 조기 거부
+
+### R15-4: 핵심 비즈니스 라우트 try-catch 보강 ✅
+- 7개 파일, 30개 try-catch 블록 추가
+  - `distribute.ts` (5): 자동배분, 수동배분, 일괄배분 + 개별 주문 실패 격리
+  - `review.ts` (4): 지역/HQ 검수 + 알림 전송 실패 격리 (검수 결과에 영향 없음)
+  - `notifications.ts` (8): 전체 CRUD 보호
+  - `audit.ts` (3): 목록/통계/상세 조회 보호
+  - `organizations.ts` (4): CRUD 보호
+  - `users.ts` (4): 등록/수정/상태변경/삭제 보호
+  - `admin-regions.ts` (2): 매핑 추가/삭제 보호
+- 배치 연산: 개별 항목 실패 시 전체 중단 없이 계속 진행 (부분 성공)
+- 비즈니스 컨텍스트 에러 로깅: `[route-name] 동작 실패 id=X: 에러메시지` 형식
+
+### R15-5: 인쇄 스타일 CSS ✅
+- `public/static/css/print.css` (200줄) 신규 생성
+- @media print: 사이드바/네비/버튼/차트 숨김
+- 정산서/인보이스: 전용 인쇄 헤더/총액/서명란 스타일
+- 테이블: thead 반복, page-break-inside avoid
+- 칸반 보드: 세로 레이아웃 전환
+- `.print-only` / `.print-header` / `.print-footer`: 인쇄 전용 표시 요소
+
+### R15-6: 버전 업데이트
+- `v21.0.0` → `v21.1.0`
+
+### 변경 파일 (9개)
+| 파일 | 변경 내용 |
+|------|----------|
+| `src/index.tsx` | 보안 헤더, CORS 제한, Body 크기 제한, print.css 링크 |
+| `src/routes/orders/distribute.ts` | try-catch 5개 (v2.0) |
+| `src/routes/orders/review.ts` | try-catch 4개, 알림 실패 격리 (v7.0) |
+| `src/routes/notifications.ts` | try-catch 8개 (v11.0) |
+| `src/routes/audit.ts` | try-catch 3개 (v6.0) |
+| `src/routes/hr/organizations.ts` | try-catch 4개 (v6.0) |
+| `src/routes/hr/users.ts` | try-catch 4개 (v2.0) |
+| `src/routes/hr/admin-regions.ts` | try-catch 2개 (v2.0) |
+| `public/static/css/print.css` | 신규: 인쇄 스타일 200줄 |
+
+### 빌드 결과
+- dist/_worker.js: 303.90 KB (R14: 296.40 KB → +7.5 KB, 보안/에러처리 코드 증가)
+- API 테스트: health ✅, notifications ✅, audit ✅, organizations ✅, users ✅, regions ✅, preferences ✅
+- 에러 로그: 0건
 
 ---
 

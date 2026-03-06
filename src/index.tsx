@@ -63,8 +63,72 @@ app.onError((err, c) => {
   }, status);
 });
 
-// ─── 미들웨어 ───
-app.use('*', cors());
+// ─── 보안 헤더 미들웨어 v1.0 (R15) ───
+app.use('*', async (c, next) => {
+  await next();
+  // Clickjacking 방어
+  c.res.headers.set('X-Frame-Options', 'DENY');
+  // MIME sniffing 방어
+  c.res.headers.set('X-Content-Type-Options', 'nosniff');
+  // Referrer 정보 제한
+  c.res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // 불필요한 브라우저 기능 차단
+  c.res.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), payment=()');
+  // CSP: CDN 자산 + 인라인 스타일/스크립트(Tailwind/Chart.js) 허용
+  if (!c.req.path.startsWith('/api/')) {
+    c.res.headers.set('Content-Security-Policy', [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://t1.daumcdn.net",
+      "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
+      "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com",
+      "img-src 'self' data: blob:",
+      "connect-src 'self'",
+      "frame-src 'none'",
+      "object-src 'none'",
+      "base-uri 'self'",
+    ].join('; '));
+  }
+});
+
+// ─── CORS 도메인 제한 v1.0 (R15) ───
+app.use('*', cors({
+  origin: (origin) => {
+    if (!origin) return '*'; // 서버-to-서버, curl 등 origin 없는 요청 허용
+    const allowed = [
+      'https://dahada-oms.pages.dev',
+      /^https:\/\/[a-z0-9-]+\.dahada-oms\.pages\.dev$/,  // 프리뷰 배포 (branch.project.pages.dev)
+      'http://localhost:3000',
+      'http://localhost:8788',
+    ];
+    for (const a of allowed) {
+      if (typeof a === 'string' && a === origin) return origin;
+      if (a instanceof RegExp && a.test(origin)) return origin;
+    }
+    return 'https://dahada-oms.pages.dev'; // 허용되지 않은 origin → 기본값
+  },
+  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'X-Session-Id'],
+  maxAge: 86400,
+}));
+
+// ─── Request Body 크기 제한 v1.0 (R15) ───
+app.use('/api/*', async (c, next) => {
+  if (['POST', 'PUT', 'PATCH'].includes(c.req.method)) {
+    const contentLength = parseInt(c.req.header('Content-Length') || '0', 10);
+    const path = c.req.path;
+    // 사진 업로드: 5MB
+    const isUpload = path.includes('/upload') || path.includes('/reports');
+    // 일괄 임포트/복원: 10MB
+    const isBulk = path.includes('/import') || path.includes('/snapshot') || path.includes('/batch');
+    const maxBytes = isBulk ? 10_485_760 : isUpload ? 5_242_880 : 1_048_576; // 10MB / 5MB / 1MB
+
+    if (contentLength > maxBytes) {
+      const maxMB = Math.round(maxBytes / 1_048_576);
+      return c.json({ error: `요청 크기가 ${maxMB}MB 제한을 초과합니다.`, code: 'PAYLOAD_TOO_LARGE' }, 413);
+    }
+  }
+  await next();
+});
 
 // ─── 정적 자산 캐시 헤더 (JS/CSS 파일 장기 캐싱) ───
 app.use('/static/*', async (c, next) => {
@@ -111,7 +175,7 @@ app.route('/api/audit', auditRoutes);
 app.route('/api/system', systemRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '21.0.0', system: '와이비 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '21.1.0', system: '와이비 OMS' }));
 
 // ─── API 404 표준화 — 존재하지 않는 API 경로에 대해 명확한 JSON 응답 ───
 app.all('/api/*', (c) => {
@@ -155,6 +219,7 @@ function getIndexHtml(): string {
   <link href="/static/css/tailwind.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.0/css/all.min.css" rel="stylesheet">
   <link href="/static/css/mobile.css" rel="stylesheet">
+  <link href="/static/css/print.css" rel="stylesheet" media="print">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>

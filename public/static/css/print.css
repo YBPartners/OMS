@@ -1,0 +1,246 @@
+/* ============================================================
+   와이비 OMS — Print Styles v1.0
+   정산서, 주문 보고서, 감사 로그 등 인쇄 최적화
+   ============================================================ */
+
+@media print {
+  /* ─── 기본 레이아웃: 불필요 요소 숨김 ─── */
+  .desktop-sidebar,
+  .mobile-header,
+  .bottom-nav,
+  .breadcrumb-separator,
+  .modal-overlay,
+  .tooltip,
+  #offlineBanner,
+  [data-no-print],
+  nav,
+  .sidebar,
+  .tab-bar,
+  .toast-container,
+  button:not(.print-visible),
+  .btn:not(.print-visible),
+  .fab,
+  .skeleton,
+  .skeleton-text,
+  .skeleton-circle {
+    display: none !important;
+  }
+
+  /* ─── 페이지 설정 ─── */
+  @page {
+    margin: 15mm 10mm;
+    size: A4;
+  }
+
+  @page :first {
+    margin-top: 10mm;
+  }
+
+  /* ─── 본문 스타일 ─── */
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt !important;
+    line-height: 1.5 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* ─── 메인 컨텐츠 영역 확장 ─── */
+  .layout-root,
+  .main-content,
+  #mainContent,
+  .content-area {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* ─── 카드/컨테이너 ─── */
+  .card,
+  .bg-white,
+  .glass-card {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 8pt !important;
+  }
+
+  /* ─── 테이블 스타일 (감사 로그, 정산 목록 등) ─── */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 9pt !important;
+    page-break-inside: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  th, td {
+    border: 1px solid #999 !important;
+    padding: 4pt 6pt !important;
+    text-align: left !important;
+    background: white !important;
+  }
+
+  th {
+    background: #f0f0f0 !important;
+    font-weight: bold !important;
+  }
+
+  /* 상태 배지 - 인쇄 시 텍스트만 */
+  .badge,
+  .status-badge,
+  [class*="bg-green"],
+  [class*="bg-red"],
+  [class*="bg-yellow"],
+  [class*="bg-blue"] {
+    background: transparent !important;
+    color: black !important;
+    border: 1px solid #999 !important;
+    padding: 1pt 4pt !important;
+    font-size: 8pt !important;
+  }
+
+  /* ─── 정산서(Invoice) 전용 스타일 ─── */
+  .invoice-header,
+  .settlement-header {
+    text-align: center !important;
+    border-bottom: 2px solid black !important;
+    padding-bottom: 8pt !important;
+    margin-bottom: 12pt !important;
+  }
+
+  .invoice-title {
+    font-size: 18pt !important;
+    font-weight: bold !important;
+  }
+
+  .invoice-meta {
+    font-size: 10pt !important;
+    color: #333 !important;
+  }
+
+  .invoice-total,
+  .settlement-total {
+    font-size: 14pt !important;
+    font-weight: bold !important;
+    border-top: 2px solid black !important;
+    padding-top: 8pt !important;
+    margin-top: 8pt !important;
+  }
+
+  /* ─── 차트/그래프 숨김 (인쇄 불가) ─── */
+  canvas,
+  .chart-container,
+  [data-chart] {
+    display: none !important;
+  }
+
+  /* ─── 링크 URL 표시 ─── */
+  a[href]:after {
+    content: none !important;  /* OMS 내부 시스템이므로 URL 표시 불필요 */
+  }
+
+  /* ─── 페이지 나눔 제어 ─── */
+  h1, h2, h3, h4 {
+    page-break-after: avoid;
+    color: black !important;
+  }
+
+  h1 { font-size: 16pt !important; }
+  h2 { font-size: 14pt !important; }
+  h3 { font-size: 12pt !important; }
+
+  /* ─── 인쇄 전용 표시 요소 ─── */
+  .print-only {
+    display: block !important;
+  }
+
+  .print-header {
+    display: block !important;
+    text-align: center;
+    margin-bottom: 12pt;
+  }
+
+  .print-footer {
+    display: block !important;
+    text-align: center;
+    font-size: 8pt;
+    color: #666;
+    border-top: 1px solid #ccc;
+    padding-top: 4pt;
+    margin-top: 16pt;
+  }
+
+  /* ─── 금액 표시 ─── */
+  .amount,
+  .currency,
+  .money {
+    font-family: 'Courier New', monospace !important;
+    text-align: right !important;
+  }
+
+  /* ─── Tailwind 유틸리티 보정 ─── */
+  .hidden { /* Tailwind hidden을 print에서 존중 */ }
+  .overflow-auto,
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .overflow-scroll {
+    overflow: visible !important;
+  }
+
+  .max-h-screen,
+  [class*="max-h-"] {
+    max-height: none !important;
+  }
+
+  .fixed,
+  .sticky {
+    position: static !important;
+  }
+
+  /* ─── 칸반 보드 인쇄 최적화 ─── */
+  .kanban-board {
+    display: block !important;
+    flex-wrap: wrap !important;
+  }
+
+  .kanban-column {
+    width: 100% !important;
+    margin-bottom: 12pt !important;
+    page-break-inside: avoid;
+  }
+
+  .kanban-card {
+    border: 1px solid #ccc !important;
+    padding: 4pt !important;
+    margin: 2pt 0 !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  /* ─── 인쇄 날짜/시간 표시 ─── */
+  .print-timestamp::after {
+    content: " (인쇄: " attr(data-print-date) ")";
+    font-size: 8pt;
+    color: #999;
+  }
+}
+
+/* ─── 인쇄 전용 요소: 화면에서 숨김 ─── */
+.print-only,
+.print-header,
+.print-footer {
+  display: none;
+}

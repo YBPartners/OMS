@@ -1,6 +1,7 @@
 // ================================================================
-// 와이비 OMS — 행정구역(admin_regions) API
+// 와이비 OMS — 행정구역(admin_regions) API v2.0
 // 시도·시군구·읍면동 계층 검색 + 조직-행정구역 매핑 관리
+// try-catch 강화: DB 오류 방어
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -182,57 +183,62 @@ export function mountAdminRegions(router: Hono<Env>) {
       }
     }
 
-    // 충돌 체크: 이미 다른 조직에 매핑된 행정구역 확인
-    const conflicts: any[] = [];
-    let created = 0;
+    try {
+      // 충돌 체크: 이미 다른 조직에 매핑된 행정구역 확인
+      const conflicts: any[] = [];
+      let created = 0;
 
-    for (const regionId of region_ids) {
-      const existing = await db.prepare(`
-        SELECT orm.org_id, o.name as org_name
-        FROM org_region_mappings orm
-        JOIN organizations o ON orm.org_id = o.org_id
-        WHERE orm.region_id = ? AND orm.org_id != ?
-      `).bind(regionId, org_id).first();
+      for (const regionId of region_ids) {
+        const existing = await db.prepare(`
+          SELECT orm.org_id, o.name as org_name
+          FROM org_region_mappings orm
+          JOIN organizations o ON orm.org_id = o.org_id
+          WHERE orm.region_id = ? AND orm.org_id != ?
+        `).bind(regionId, org_id).first();
 
-      if (existing) {
-        const regionInfo = await db.prepare(
-          'SELECT full_name FROM admin_regions WHERE region_id = ?'
-        ).bind(regionId).first();
-        conflicts.push({
-          region_id: regionId,
-          region_name: regionInfo?.full_name,
-          existing_org_id: existing.org_id,
-          existing_org_name: existing.org_name,
-        });
-        continue;
+        if (existing) {
+          const regionInfo = await db.prepare(
+            'SELECT full_name FROM admin_regions WHERE region_id = ?'
+          ).bind(regionId).first();
+          conflicts.push({
+            region_id: regionId,
+            region_name: regionInfo?.full_name,
+            existing_org_id: existing.org_id,
+            existing_org_name: existing.org_name,
+          });
+          continue;
+        }
+
+        // 이미 같은 조직에 매핑된 경우 스킵
+        const selfExisting = await db.prepare(
+          'SELECT mapping_id FROM org_region_mappings WHERE org_id = ? AND region_id = ?'
+        ).bind(org_id, regionId).first();
+        if (selfExisting) continue;
+
+        await db.prepare(
+          'INSERT INTO org_region_mappings (org_id, region_id) VALUES (?, ?)'
+        ).bind(org_id, regionId).run();
+        created++;
       }
 
-      // 이미 같은 조직에 매핑된 경우 스킵
-      const selfExisting = await db.prepare(
-        'SELECT mapping_id FROM org_region_mappings WHERE org_id = ? AND region_id = ?'
-      ).bind(org_id, regionId).first();
-      if (selfExisting) continue;
+      await writeAuditLog(db, {
+        entity_type: 'ORG_REGION_MAPPING',
+        action: 'BULK_CREATE',
+        actor_id: user.user_id,
+        detail_json: JSON.stringify({ org_id, region_ids, created, conflicts: conflicts.length }),
+      });
 
-      await db.prepare(
-        'INSERT INTO org_region_mappings (org_id, region_id) VALUES (?, ?)'
-      ).bind(org_id, regionId).run();
-      created++;
+      const result: any = { created, total_requested: region_ids.length };
+      if (conflicts.length > 0) {
+        result.conflicts = conflicts;
+        result.warning = `${conflicts.length}건의 충돌이 발견되었습니다.`;
+      }
+
+      return c.json(result, created > 0 ? 201 : 200);
+    } catch (err: any) {
+      console.error('[admin-regions] 매핑 추가 실패:', err.message);
+      return c.json({ error: '행정구역 매핑 중 오류가 발생했습니다.', code: 'REGION_ERROR' }, 500);
     }
-
-    await writeAuditLog(db, {
-      entity_type: 'ORG_REGION_MAPPING',
-      action: 'BULK_CREATE',
-      actor_id: user.user_id,
-      detail_json: JSON.stringify({ org_id, region_ids, created, conflicts: conflicts.length }),
-    });
-
-    const result: any = { created, total_requested: region_ids.length };
-    if (conflicts.length > 0) {
-      result.conflicts = conflicts;
-      result.warning = `${conflicts.length}건의 충돌이 발견되었습니다.`;
-    }
-
-    return c.json(result, created > 0 ? 201 : 200);
   });
 
   // ─── 조직-행정구역 매핑 삭제 ───
@@ -244,30 +250,35 @@ export function mountAdminRegions(router: Hono<Env>) {
     const db = c.env.DB;
     const mappingId = Number(c.req.param('mapping_id'));
 
-    const existing = await db.prepare(`
-      SELECT orm.*, o.parent_org_id FROM org_region_mappings orm
-      JOIN organizations o ON orm.org_id = o.org_id
-      WHERE orm.mapping_id = ?
-    `).bind(mappingId).first();
-    if (!existing) return c.json({ error: '매핑을 찾을 수 없습니다.' }, 404);
+    try {
+      const existing = await db.prepare(`
+        SELECT orm.*, o.parent_org_id FROM org_region_mappings orm
+        JOIN organizations o ON orm.org_id = o.org_id
+        WHERE orm.mapping_id = ?
+      `).bind(mappingId).first();
+      if (!existing) return c.json({ error: '매핑을 찾을 수 없습니다.' }, 404);
 
-    // 권한 체크
-    if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
-      if (Number(existing.org_id) !== user.org_id && existing.parent_org_id !== user.org_id) {
-        return c.json({ error: '자기 조직의 매핑만 삭제할 수 있습니다.' }, 403);
+      // 권한 체크
+      if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
+        if (Number(existing.org_id) !== user.org_id && existing.parent_org_id !== user.org_id) {
+          return c.json({ error: '자기 조직의 매핑만 삭제할 수 있습니다.' }, 403);
+        }
       }
+
+      await db.prepare('DELETE FROM org_region_mappings WHERE mapping_id = ?').bind(mappingId).run();
+
+      await writeAuditLog(db, {
+        entity_type: 'ORG_REGION_MAPPING',
+        entity_id: mappingId,
+        action: 'DELETE',
+        actor_id: user.user_id,
+        detail_json: JSON.stringify({ org_id: existing.org_id, region_id: existing.region_id }),
+      });
+
+      return c.json({ ok: true });
+    } catch (err: any) {
+      console.error(`[admin-regions] 매핑 삭제 실패 mapping_id=${mappingId}:`, err.message);
+      return c.json({ error: '행정구역 매핑 삭제 중 오류가 발생했습니다.', code: 'REGION_ERROR' }, 500);
     }
-
-    await db.prepare('DELETE FROM org_region_mappings WHERE mapping_id = ?').bind(mappingId).run();
-
-    await writeAuditLog(db, {
-      entity_type: 'ORG_REGION_MAPPING',
-      entity_id: mappingId,
-      action: 'DELETE',
-      actor_id: user.user_id,
-      detail_json: JSON.stringify({ org_id: existing.org_id, region_id: existing.region_id }),
-    });
-
-    return c.json({ ok: true });
   });
 }
