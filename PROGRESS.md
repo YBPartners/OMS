@@ -1,8 +1,8 @@
 # 와이비 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-06
-> **현재 버전**: v21.0.0 (R9 완료)
-> **총 코드량**: Backend ~11,000줄 (49 TS) + Frontend ~13,100줄 (24 JS) + SW 143줄 + CSS 420줄 + SQL 1,400줄 + E2E 1,000줄 = **~27,100줄**
+> **현재 버전**: v21.1.0 (R10 완료)
+> **총 코드량**: Backend ~11,000줄 (49 TS) + Frontend ~13,000줄 (24 JS) + SW 143줄 + CSS 420줄 + SQL 1,400줄 + E2E 1,000줄 = **~27,000줄**
 
 ---
 
@@ -47,6 +47,7 @@
 | **R7** | **대시보드·통계·감사 품질 강화** | **✅ 완료** | **2026-03-06** | **인라인 테이블 5개→renderDataTable, 감사로그 renderPagination, statistics.js 12함수 apiAction 전환, E2E 61/62** |
 | **R8** | **운영 안정성·보안** | **✅ 완료** | **2026-03-06** | **SQL 안전성·쿠키 Secure·XSS 방어·에러 표준화·감사로그 민감정보 마스킹, E2E 61/62** |
 | **R9** | **인라인 테이블 renderDataTable 전면 마이그레이션** | **✅ 완료** | **2026-03-06** | **9개 테이블 변환, 6개 파일, +152/-266 순감 114줄, 접근성·XSS 강화, E2E 61/62** |
+| **R10** | **renderDataTable v5 + 잔여 인라인 테이블 전면 마이그레이션** | **✅ 완료** | **2026-03-06** | **table.js v5 확장, 10개 테이블 추가 변환, 10개 페이지 27개 호출, +182/-246 순감 64줄, E2E 61/62** |
 
 ---
 
@@ -100,9 +101,70 @@
 - 빌드: dist/_worker.js 278.66 kB
 
 ### 다음 단계 (R10 권장)
-- P1: 성능 최적화 — 대용량 테이블 가상화, API 응답 캐싱 정교화 (중간 난이도)
-- P2: orders.js 인라인 테이블 마이그레이션 — 가장 큰 파일(1,241줄), 복잡한 행 렌더링 (높은 난이도)
+- ~~P1: 성능 최적화~~ → R10에서 orders.js 등 마이그레이션 완료
+- ~~P2: orders.js 인라인 테이블 마이그레이션~~ → R10에서 완료
 - P3: Playwright E2E 브라우저 자동화 테스트 (낮은 난이도)
+
+---
+
+## Phase R10 — renderDataTable v5 + 잔여 인라인 테이블 전면 마이그레이션 ✅ (2026-03-06)
+
+> **목적**: R9에 이어 남은 23개 인라인 테이블을 분석, 10개를 추가 마이그레이션. `renderDataTable`을 v5로 확장하여 복잡한 UI 패턴(체크박스, 컨텍스트메뉴, 조건부 컬럼)도 지원.
+
+### R10-1: renderDataTable v5 확장 ✅
+`table.js`를 v4 → v5로 업그레이드:
+| 신규 옵션 | 설명 |
+|-----------|------|
+| `rowAttrs(row, idx)` | 행에 커스텀 HTML 속성 추가 (onclick, oncontextmenu, data-* 등) |
+| `rowClass(row, idx)` | 행에 동적 CSS 클래스 추가 |
+| `column.show` | boolean 또는 함수 — 조건부 컬럼 숨김/표시 (RBAC 등) |
+| `column.thClass / tdClass` | 헤더/셀에 추가 CSS 클래스 |
+| `compact` | true이면 패딩 축소 (px-3 py-2) |
+| `noBorder` | true이면 외부 테두리 제거 (부모 div에 border가 있을 때) |
+| `tbodyId` | tbody에 id 속성 부여 |
+
+### R10-2: orders.js 마이그레이션 ✅
+- **주문 목록 테이블** (1,241줄 파일의 핵심 테이블): 13컬럼 인라인 → `renderDataTable` v5
+- 체크박스 헤더/행, `onclick`/`oncontextmenu` 행 속성, `data-preview` 속성
+- `rowClass`로 선택된 행 하이라이트 (`bg-blue-50`)
+- `rowAttrs`로 컨텍스트메뉴·행 클릭 이벤트 바인딩
+- `renderPagination`으로 페이지 변경 통합, `_orderPageChange()` 함수 추가
+- 모든 사용자 입력에 `escapeHtml()` XSS 방어
+
+### R10-3: statistics.js 5개 정책 테이블 마이그레이션 ✅
+- **배분 정책 테이블** → `renderDataTable` + `show` 조건부 관리 컬럼
+- **보고서 정책 테이블** → `renderDataTable` + 커스텀 `_photosCol` 렌더러
+- **수수료 정책 테이블** → `renderDataTable` + `escapeHtml` + `show` 조건부 컬럼
+- **지역권 매핑 테이블** → `renderDataTable` + `escapeHtml`
+- **지표 정책 테이블** → `renderDataTable` + `show` 조건부 컬럼
+- 모든 테이블에 `compact: true`, `noBorder: true` 적용 (부모 div에 이미 border 존재)
+
+### R10-4: system.js, dashboard.js, signup-admin.js 마이그레이션 ✅
+- **system.js 세션 테이블** → `renderDataTable` + `escapeHtml` + `caption`
+- **dashboard.js 일별 현황 테이블** → `renderDataTable` (모달 내부)
+- **dashboard.js 소속 팀장 현황 테이블** → `renderDataTable` + `rowAttrs` data-preview
+- **signup-admin.js 선택 구역 테이블** → `renderDataTable` + `rowClass` 조건부 스타일
+
+### R10-5: 변환 제외 사항 (13개 잔여 인라인 테이블)
+| 파일 | 잔여 | 사유 |
+|------|------|------|
+| settlement.js | 10개 | 인쇄용 HTML (보고서/계산서/대사 보고서) — window.open 인쇄 최적화 필요 |
+| channels.js | 2개 | 입력 양식 테이블 (필드 매핑 설정/미리보기 — `<input>` 요소 포함) |
+| audit.js | 1개 | 상세 모달 내 key-value 표시 (동적 detailRows) |
+
+### 변경 통계
+- **6 files changed**: table.js, orders.js, statistics.js, system.js, dashboard.js, signup-admin.js
+- **+182 / -246 lines** (순감 64줄)
+- **10개 인라인 테이블 → renderDataTable v5 전환**
+- `renderDataTable` 총 사용 현황: **10개 페이지, 27개 호출** (R7: 5 + R9: 9 + R10: 10 + 기타: 3)
+- 남은 인라인 테이블: 13개 (모두 인쇄용/입력양식/특수 용도)
+- E2E: HR 35/36 (100%), Policy 26/26 (100%) — 기존과 동일
+- 빌드: dist/_worker.js 278.66 kB
+
+### 다음 단계 (R11 권장)
+- P1: Playwright E2E 브라우저 자동화 테스트 (UI 렌더링 검증)
+- P2: 성능 최적화 — 대용량 테이블 가상화, API 응답 캐싱 정교화
+- P3: 에러 핸들링 전수 조사 — 183 async 함수 중 잔여 try/catch 누락 보완
 
 ---
 
