@@ -114,13 +114,17 @@ async function renderOrders(el) {
       }
     } catch(e) { /* 채널 로드 실패 — 필터만 무시 */ }
   })();
+
+  } catch (e) {
+  console.error('[renderOrders]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 // ─── 행 클릭 → 드로어 상세 ───
 function handleOrderRowClick(event, orderId) {
   if (event.target.closest('button') || event.target.closest('input[type="checkbox"]')) return;
   showOrderDetailDrawer(orderId);
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 주문 상세 드로어 (사이드패널) ───
@@ -258,6 +262,11 @@ async function showOrderDetailDrawer(orderId) {
     width: '500px',
     footer
   });
+
+  } catch (e) {
+  console.error('[showOrderDetailDrawer]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 빠른 액션 버튼 생성 ───
@@ -378,7 +387,6 @@ function applyOrderFilter() {
 function _orderPageChange(page) {
   window._orderFilters = { ...window._orderFilters || {}, page };
   renderContent();
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ─── 주문 상세 모달 (기존 호환 — 드로어 외 사용시) ───
@@ -439,6 +447,11 @@ async function showOrderDetail(orderId) {
   showModal(`주문 상세 #${o.order_id}`, content, `
     <button onclick="closeModal();showOrderHistoryDrawer(${o.order_id})" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200"><i class="fas fa-clock-rotate-left mr-1"></i>이력 타임라인</button>
     <button onclick="closeModal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">닫기</button>`, { large: true });
+
+  } catch (e) {
+  console.error('[showOrderDetail]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 서비스 유형 정의 (에어컨 세척 도메인) ───
@@ -460,7 +473,6 @@ function getServiceTypeBadge(code) {
   const st = SERVICE_TYPES.find(s => s.code === code);
   if (!st) return `<span class="text-xs text-gray-400">미분류</span>`;
   return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-violet-50 text-violet-700 border border-violet-200"><i class="fas ${st.icon}"></i>${st.label}</span>`;
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ─── 수동 등록 모달 ───
@@ -535,6 +547,11 @@ async function showNewOrderModal() {
   showModal('주문 수동 등록', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitNewOrder()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">등록</button>`);
+
+  } catch (e) {
+  console.error('[showNewOrderModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 카카오 주소 검색 ───
@@ -564,7 +581,6 @@ function openAddressSearch() {
   }).open({
     popupTitle: '와이비 OMS - 주소 검색',
   });
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ─── 행정동코드 자동 매핑 ───
@@ -602,7 +618,11 @@ async function matchAdminDongCode(sido, sigungu, dong) {
     console.error('행정동 매핑 실패:', e);
     codeInput.value = '';
   }
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[matchAdminDongCode]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function submitNewOrder() {
@@ -626,7 +646,11 @@ async function submitNewOrder() {
   const res = await api('POST', '/orders', data);
   if (res?.order_id) { showToast(`주문 #${res.order_id}이(가) 등록되었습니다.`, 'success'); closeModal(); renderContent(); }
   else showToast(res?.error || res?.warning || '등록 실패', 'error');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[submitNewOrder]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 주문 수정 모달 ───
@@ -692,7 +716,11 @@ async function showEditOrderModal(orderId) {
   showModal(`주문 수정 #${o.order_id}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitEditOrder(${o.order_id})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`);
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showEditOrderModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function submitEditOrder(orderId) {
@@ -716,6 +744,11 @@ async function submitEditOrder(orderId) {
   const res = await api('PATCH', `/orders/${orderId}`, data);
   if (res?.ok) { showToast('주문이 수정되었습니다.', 'success'); closeModal(); renderContent(); }
   else showToast(res?.error || '수정 실패', 'error');
+
+  } catch (e) {
+  console.error('[submitEditOrder]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 수정 모달용 주소 검색 ───
@@ -741,7 +774,6 @@ function openEditAddressSearch() {
     width: '100%',
     height: '100%',
   }).open({ popupTitle: '와이비 OMS - 주소 변경' });
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function matchEditAdminDongCode(sido, sigungu, dong) {
@@ -766,7 +798,11 @@ async function matchEditAdminDongCode(sido, sigungu, dong) {
       resultEl.style.display = '';
     }
   } catch (e) { codeInput.value = ''; }
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[matchEditAdminDongCode]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 주문 삭제 ───
@@ -968,6 +1004,11 @@ async function renderDistribute(el) {
 
   // 저장된 주문 데이터를 window에 캐시 (선택배분용)
   window._distOrders = { received: receivedOrders, validated: validatedOrders, dp: dpOrders };
+
+  } catch (e) {
+  console.error('[renderDistribute]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 // ─── 배분 체크박스 관리 ───
@@ -985,7 +1026,6 @@ function toggleDistSelectGroup(checked, group) {
     else distributeState.selected.delete(o.order_id);
   });
   renderContent();
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 자동배분 실행 + 결과 모달 ───
@@ -1020,7 +1060,11 @@ async function executeDistributeWithModal() {
     </div>`;
   showModal(`<i class="fas fa-check-circle text-green-500 mr-2"></i>자동 배분 완료`, content,
     `<button onclick="closeModal();renderContent()" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium">확인</button>`, { large: true });
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[executeDistributeWithModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 수동 배분 모달 (개별) ───
@@ -1049,7 +1093,11 @@ async function showManualDistributeModal(orderId, customerName, addressText) {
   showModal(`<i class="fas fa-share-nodes mr-2 text-indigo-500"></i>수동 배분 — 주문 #${orderId}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 transition">취소</button>
     <button onclick="submitManualDistribute(${orderId})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition"><i class="fas fa-check mr-1"></i>배분 확정</button>`);
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showManualDistributeModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 async function submitManualDistribute(orderId) {
   const regionOrgId = Number(document.getElementById('manual-region').value);
@@ -1098,7 +1146,11 @@ async function showBatchDistributeModal() {
   showModal(`<i class="fas fa-hand-pointer mr-2 text-amber-500"></i>선택 일괄 배분 (${ids.length}건)`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 transition">취소</button>
     <button onclick="submitBatchDistribute()" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg text-sm hover:from-amber-600 hover:to-orange-600 transition"><i class="fas fa-check mr-1"></i>일괄 배분 실행</button>`, { large: true });
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showBatchDistributeModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 async function submitBatchDistribute() {
   try {
@@ -1124,7 +1176,11 @@ async function submitBatchDistribute() {
       <div class="text-sm text-gray-600"><i class="fas fa-building mr-1 text-indigo-500"></i>배분 총판: <span class="font-semibold">${res.region_name || ''}</span></div>
     </div>`,
     `<button onclick="closeModal();renderContent()" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">확인</button>`, { large: true });
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[submitBatchDistribute]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 주문관리 페이지에서 일괄 배분 (체크박스 선택 → 배분) ───
@@ -1158,7 +1214,11 @@ async function showOrderBatchDistributeModal() {
   showModal(`<i class="fas fa-share-nodes mr-2 text-indigo-500"></i>일괄 배분 (${ids.length}건)`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 transition">취소</button>
     <button onclick="submitOrderBatchDistribute()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition"><i class="fas fa-check mr-1"></i>배분 실행</button>`, { large: true });
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showOrderBatchDistributeModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 async function submitOrderBatchDistribute() {
   try {
@@ -1184,7 +1244,11 @@ async function submitOrderBatchDistribute() {
       <div class="text-sm text-gray-600"><i class="fas fa-building mr-1 text-indigo-500"></i>배분 총판: <span class="font-semibold">${res.region_name || ''}</span></div>
     </div>`,
     `<button onclick="closeModal();renderContent()" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">확인</button>`, { large: true });
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[submitOrderBatchDistribute]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 주문 CSV 내보내기 ───
@@ -1216,7 +1280,11 @@ async function exportOrdersCSV() {
     { label: '요청일', key: 'requested_date' },
     { label: '등록일', key: 'created_at' },
   ], '주문목록');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[exportOrdersCSV]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 주문 엑셀 내보내기 ───
@@ -1248,5 +1316,9 @@ async function exportOrdersExcel() {
     { label: '요청일', key: 'requested_date' },
     { label: '등록일', key: 'created_at' },
   ], '주문목록', '주문데이터');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[exportOrdersExcel]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }

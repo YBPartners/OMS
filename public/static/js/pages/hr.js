@@ -38,7 +38,11 @@ async function renderHRManagement(el) {
     case 'phone': renderHRPhone(hrEl); break;
     case 'agency': await renderHRAgency(hrEl); break;
   }
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
+
+  } catch (e) {
+  console.error('[renderHRManagement]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 // ─── 사용자 목록 ───
@@ -83,13 +87,17 @@ async function renderHRUsers(el) {
       emptyText: '사용자가 없습니다.',
       caption: '사용자 목록',
     })}`;
+
+  } catch (e) {
+  console.error('[renderHRUsers]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 function applyHRUserFilter() {
   window._hrUserFilters = { search: document.getElementById('hr-search')?.value, status: document.getElementById('hr-status')?.value };
   Object.keys(window._hrUserFilters).forEach(k => { if (!window._hrUserFilters[k]) delete window._hrUserFilters[k]; });
   renderContent();
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 사용자 신규등록 모달 ───
@@ -122,7 +130,11 @@ async function showCreateUserModal() {
   showModal('사용자 신규 등록', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitCreateUser()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm">등록</button>`);
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showCreateUserModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function submitCreateUser() {
@@ -147,7 +159,11 @@ async function submitCreateUser() {
       </div>
     `, `<button onclick="closeModal();renderContent()" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm">확인</button>`);
   } else showToast(res?.error || '등록 실패', 'error');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[submitCreateUser]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 사용자 수정 모달 ───
@@ -195,7 +211,11 @@ async function showEditUserModal(userId) {
   showModal(`사용자 수정 — ${u.name}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitEditUser(${userId})" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm">저장</button>`, { large: false });
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showEditUserModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function submitEditUser(userId) {
@@ -231,7 +251,11 @@ async function submitCredentials(userId) {
   const res = await api('POST', `/hr/users/${userId}/set-credentials`, body);
   if (res?.ok) { showToast('자격 증명 설정 완료', 'success'); closeModal(); }
   else showToast(res?.error || '설정 실패', 'error');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[submitCredentials]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function resetUserPw(userId, name) {
@@ -242,7 +266,11 @@ async function resetUserPw(userId, name) {
       if (res?.ok) showToast(`초기화 완료: ${res.new_password}`, 'success');
       else showToast(res?.error || '초기화 실패', 'error');
     }, '초기화', 'bg-amber-600');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[resetUserPw]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function toggleUserStatus(userId, currentStatus, name) {
@@ -255,7 +283,11 @@ async function toggleUserStatus(userId, currentStatus, name) {
       if (res?.ok) { showToast(res.message, 'success'); renderContent(); }
       else showToast(res?.error || '실패', 'error');
     }, action, newStatus === 'ACTIVE' ? 'bg-green-600' : 'bg-red-600');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[toggleUserStatus]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 조직 관리 ───
@@ -297,7 +329,11 @@ async function renderHROrgs(el) {
         </div>
       `).join('')}
     </div>`;
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
+
+  } catch (e) {
+  console.error('[renderHROrgs]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 async function showCreateOrgModal() {
@@ -322,7 +358,11 @@ async function showCreateOrgModal() {
   showModal('조직 등록', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitCreateOrg()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm">등록</button>`);
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showCreateOrgModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function submitCreateOrg() {
@@ -380,6 +420,28 @@ async function renderHRCommission(el) {
   const leaders = leadersRes?.team_leaders || [];
   const channels = chRes?.channels || [];
 
+  const tableHtml = renderDataTable({
+    columns: [
+      { key: 'commission_policy_id', label: 'ID', render: function(p) { return '<span class="font-mono text-xs">' + p.commission_policy_id + '</span>'; } },
+      { key: 'org_name', label: '지역총판' },
+      { key: 'team_leader_name', label: '대상 팀장', render: function(p) { return p.team_leader_name || '<span class="text-gray-400">총판 기본</span>'; } },
+      { key: 'channel_name', label: '채널', render: function(p) { return p.channel_name || '<span class="text-gray-400">전체</span>'; } },
+      { key: 'mode', label: '유형', align: 'center', render: function(p) { return '<span class="status-badge ' + (p.mode === 'PERCENT' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700') + '">' + (p.mode === 'PERCENT' ? '정률' : '정액') + '</span>'; } },
+      { key: 'value', label: '값', align: 'right', render: function(p) { return '<span class="font-bold">' + (p.mode === 'PERCENT' ? p.value + '%' : formatAmount(p.value)) + '</span>'; } },
+      { key: 'effective_from', label: '적용시작', render: function(p) { return '<span class="text-xs">' + (p.effective_from || '-') + '</span>'; } },
+      { key: 'is_active', label: '활성', align: 'center', render: function(p) { return p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '비활성'; } },
+      { key: '_actions', label: '관리', align: 'center', render: function(p) {
+        var editBtn = '<button onclick="showEditCommissionModal(' + p.commission_policy_id + ', ' + JSON.stringify(p).replace(/"/g, '&quot;') + ')" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>';
+        var canDel = currentUser.roles.includes('SUPER_ADMIN') || currentUser.roles.includes('HQ_OPERATOR');
+        var delBtn = canDel ? '<button onclick="deleteCommission(' + p.commission_policy_id + ')" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>' : '';
+        return '<div class="flex gap-1 justify-center">' + editBtn + delBtn + '</div>';
+      }},
+    ],
+    rows: policies,
+    emptyText: '수수료 정책이 없습니다.',
+    caption: '수수료 정책 목록',
+  });
+
   el.innerHTML = `
     <div class="bg-white rounded-xl p-4 mb-4 border border-gray-100 flex items-center justify-between">
       <div class="text-sm text-gray-600">
@@ -388,31 +450,16 @@ async function renderHRCommission(el) {
       </div>
       <button onclick="showCreateCommissionModal()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm"><i class="fas fa-plus mr-1"></i>수수료 정책 추가</button>
     </div>
-
-    ${renderDataTable({
-      columns: [
-        { key: 'commission_policy_id', label: 'ID', render: p => `<span class="font-mono text-xs">${p.commission_policy_id}</span>` },
-        { key: 'org_name', label: '지역총판' },
-        { key: 'team_leader_name', label: '대상 팀장', render: p => p.team_leader_name || '<span class="text-gray-400">총판 기본</span>' },
-        { key: 'channel_name', label: '채널', render: p => p.channel_name || '<span class="text-gray-400">전체</span>' },
-        { key: 'mode', label: '유형', align: 'center', render: p => `<span class="status-badge ${p.mode === 'PERCENT' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}">${p.mode === 'PERCENT' ? '정률' : '정액'}</span>` },
-        { key: 'value', label: '값', align: 'right', render: p => `<span class="font-bold">${p.mode === 'PERCENT' ? p.value + '%' : formatAmount(p.value)}</span>` },
-        { key: 'effective_from', label: '적용시작', render: p => `<span class="text-xs">${p.effective_from || '-'}</span>` },
-        { key: 'is_active', label: '활성', align: 'center', render: p => p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '비활성' },
-        { key: '_actions', label: '관리', align: 'center', render: p => `<div class="flex gap-1 justify-center">
-          <button onclick="showEditCommissionModal(${p.commission_policy_id}, ${JSON.stringify(p).replace(/"/g, '&quot;')})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
-          ${currentUser.roles.includes('SUPER_ADMIN') || currentUser.roles.includes('HQ_OPERATOR') ? `<button onclick="deleteCommission(${p.commission_policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>` : ''}
-        </div>` },
-      ],
-      rows: policies,
-      emptyText: '수수료 정책이 없습니다.',
-      caption: '수수료 정책 목록',
-    })`;
+    ${tableHtml}`;
 
   // 모달에서 사용할 데이터 저장
   window._commOrgs = orgs;
   window._commLeaders = leaders;
   window._commChannels = channels;
+  } catch (e) {
+    console.error('[renderHRCommission]', e);
+    el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 function showCreateCommissionModal() {
@@ -460,7 +507,6 @@ function updateCommLeaderOptions() {
   Array.from(select.options).forEach(opt => {
     if (opt.value) { opt.style.display = (!orgId || opt.dataset.org === orgId) ? '' : 'none'; }
   });
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function submitCreateCommission() {
@@ -475,6 +521,11 @@ async function submitCreateCommission() {
   const res = await api('POST', '/hr/commission-policies', data);
   if (res?.commission_policy_id) { showToast('수수료 정책 등록 완료', 'success'); closeModal(); renderContent(); }
   else showToast(res?.error || '등록 실패', 'error');
+
+  } catch (e) {
+  console.error('[submitCreateCommission]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 function showEditCommissionModal(policyId, policyData) {
@@ -500,7 +551,6 @@ function showEditCommissionModal(policyId, policyData) {
   showModal(`수수료 정책 수정 — #${policyId}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitEditCommission(${policyId})" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm">저장</button>`);
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function submitEditCommission(policyId) {
@@ -585,7 +635,11 @@ async function sendOTP() {
       if (sec <= 0) { clearInterval(verifyTimerInterval); document.getElementById('verify-timer').textContent = '시간 만료'; }
     }, 1000);
   } else showToast(res?.error || '발송 실패', 'error');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[sendOTP]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function verifyOTP() {
@@ -596,13 +650,17 @@ async function verifyOTP() {
   const res = await api('POST', '/hr/phone/verify-otp', { phone, otp_code, purpose });
   if (res?.verified) { showToast('인증 성공!', 'success'); clearInterval(verifyTimerInterval); }
   else showToast(res?.error || '인증 실패', 'error');
+
+  } catch (e) {
+  console.error('[verifyOTP]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 function resetVerify() {
   clearInterval(verifyTimerInterval);
   document.getElementById('phone-step1').style.display = 'block';
   document.getElementById('phone-step2').style.display = 'none';
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function checkPhoneStatus() {
@@ -619,6 +677,11 @@ async function checkPhoneStatus() {
         <div><span class="text-gray-500">최종인증:</span> ${res.last_verified_at ? formatDate(res.last_verified_at) : '-'}</div>
         ${res.registered_user ? `<div><span class="text-gray-500">등록사용자:</span> ${res.registered_user.name} (ID:${res.registered_user.user_id}) · 폰인증: ${res.registered_user.phone_verified ? 'Y' : 'N'}</div>` : `<div class="text-gray-400">미등록 번호</div>`}
       </div>`;
+  }
+
+  } catch (e) {
+  console.error('[checkPhoneStatus]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
   }
 }
 
@@ -645,7 +708,6 @@ function showHRUserContextMenu(event, user) {
   ];
 
   showContextMenu(event.clientX, event.clientY, items, { title: `${u.name} (${u.login_id})` });
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── HR 사용자 삭제 ───
@@ -676,7 +738,11 @@ async function showRolesModal(userId, name, currentRoles) {
   showModal(`역할 변경 — ${name}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitRoles(${userId})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`);
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showRolesModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 async function submitRoles(userId) {
   const checked = [...document.querySelectorAll('.role-cb:checked')].map(cb => cb.value);
@@ -700,7 +766,11 @@ async function showTransferModal(userId, name) {
   showModal(`조직 이동 — ${name}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitTransfer(${userId})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">이동</button>`);
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showTransferModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 async function submitTransfer(userId) {
   const orgId = document.getElementById('transfer-org')?.value;
@@ -771,7 +841,11 @@ async function renderHRAgency(el) {
       <p class="text-sm mt-2">팀장에게 대리점 권한을 부여하세요.</p>
     </div>
     `}`;
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
+
+  } catch (e) {
+  console.error('[renderHRAgency]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 // ─── 대리점 지정 (팀장 → AGENCY_LEADER) ───
@@ -801,7 +875,11 @@ async function showPromoteAgencyModal() {
       </div>
     </div>`;
   showModal('대리점 지정', content);
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showPromoteAgencyModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function promoteToAgency(userId, name) {
@@ -813,6 +891,11 @@ async function promoteToAgency(userId, name) {
       if (res?.ok) { showToast(res.message || '대리점 지정 완료', 'success'); renderContent(); }
       else showToast(res?.error || '지정 실패', 'error');
     }, '지정', 'bg-teal-600');
+
+  } catch (e) {
+  console.error('[promoteToAgency]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 function demoteAgency(userId, name) {
@@ -822,7 +905,6 @@ function demoteAgency(userId, name) {
       if (res?.ok) { showToast('대리점 해제 완료', 'success'); renderContent(); }
       else showToast(res?.error || '해제 실패', 'error');
     }, '해제', 'bg-red-600');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 대리점 상세 모달 (하위 팀장 관리) ───
@@ -904,7 +986,11 @@ async function showAgencyDetailModal(agencyUserId, agencyName) {
 
   showModal(`대리점 상세 — ${agencyName}`, content, `
     <button onclick="closeModal();renderContent()" class="px-5 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm">닫기</button>`, { large: true });
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showAgencyDetailModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function addTeamToAgency(agencyUserId, teamUserId, teamName, agencyName) {
@@ -915,7 +1001,11 @@ async function addTeamToAgency(agencyUserId, teamUserId, teamName, agencyName) {
     closeModal();
     showAgencyDetailModal(agencyUserId, agencyName);
   } else showToast(res?.error || '추가 실패', 'error');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[addTeamToAgency]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function removeTeamFromAgency(agencyUserId, teamUserId, teamName, agencyName) {
@@ -929,5 +1019,9 @@ async function removeTeamFromAgency(agencyUserId, teamUserId, teamName, agencyNa
         showAgencyDetailModal(agencyUserId, agencyName);
       } else showToast(res?.error || '제거 실패', 'error');
     }, '제거', 'bg-red-600');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[removeTeamFromAgency]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }

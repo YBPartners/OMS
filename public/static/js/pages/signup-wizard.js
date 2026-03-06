@@ -164,6 +164,11 @@ async function signupCheckPhone() {
     el.innerHTML = `<div class="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
       <i class="fas fa-times-circle mr-1"></i>${res.error || '확인 실패'}</div>`;
   }
+
+  } catch (e) {
+  console.error('[signupCheckPhone]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── Step 1: OTP 인증 ───
@@ -204,7 +209,6 @@ function renderStep1_OTP() {
         <i class="fas fa-arrow-left mr-1"></i>이전 단계
       </button>
     </div>`;
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function signupSendOTP() {
@@ -250,7 +254,11 @@ async function signupSendOTP() {
   } else {
     showToast(res.error || '발송 실패', 'error');
   }
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[signupSendOTP]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function signupVerifyOTP() {
@@ -276,13 +284,22 @@ async function signupVerifyOTP() {
   } else {
     showToast(res.error || '인증 실패', 'error');
   }
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[signupVerifyOTP]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function loadDistributors() {
   try {
   const res = await fetch('/api/signup/distributors').then(r => r.json());
   signupState.distributors = res.distributors || [];
+
+  } catch (e) {
+  console.error('[loadDistributors]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── Step 2: 기본 정보 입력 ───
@@ -365,7 +382,6 @@ function renderStep2_Info() {
         다음: 지역 선택 <i class="fas fa-arrow-right ml-1"></i>
       </button>
     </div>`;
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function signupSelectDistributor(orgId) {
@@ -377,6 +393,11 @@ async function signupSelectDistributor(orgId) {
   // 총판 관할 구역 로드
   const res = await fetch(`/api/signup/distributors/${orgId}/regions`).then(r => r.json());
   signupState.distributorRegions = res.regions || [];
+
+  } catch (e) {
+  console.error('[signupSelectDistributor]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 function signupGoToRegions() {
@@ -511,7 +532,6 @@ function signupToggleGroup(groupKey, select) {
     }
   });
   renderSignupWizard();
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function signupSearchRegion() {
@@ -546,7 +566,11 @@ async function signupSearchRegion() {
           </label>`;
       }).join('')}
     </div>`;
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[signupSearchRegion]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── Step 4: 제출 ───
@@ -593,6 +617,11 @@ async function signupSubmit() {
   } catch (e) {
     showToast('서버 통신 오류', 'error');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane mr-1"></i>가입 신청 제출'; }
+  }
+
+  } catch (e) {
+  console.error('[signupSubmit]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
   }
 }
 
@@ -645,7 +674,6 @@ function renderStep4_Result() {
       </div>
       <div id="sw-status-result" class="mt-4"></div>
     </div>`;
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function signupCheckStatus() {
@@ -677,5 +705,9 @@ async function signupCheckStatus() {
         </div>
       `).join('')}
     </div>`;
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[signupCheckStatus]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }

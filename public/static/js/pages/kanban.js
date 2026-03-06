@@ -283,6 +283,11 @@ async function renderKanban(el) {
     const inp = document.getElementById('kanban-search');
     if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
   }
+
+  } catch (e) {
+  console.error('[renderKanban]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 // ─── 칸반 카드 V2 ───
@@ -454,7 +459,6 @@ function kanbanDragOver(event) {
 
 function kanbanDragLeave(event) {
   event.currentTarget.classList.remove('drag-over');
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // 팀장 컬럼에 드롭 → 배정
@@ -528,7 +532,11 @@ async function handleKanbanDrop(event, leaderId) {
       showToast(res?.error || '배치 배정 실패', 'error');
     }
   }
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[handleKanbanDrop]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // 미배정 컬럼에 드롭 → 배정 해제
@@ -547,7 +555,11 @@ async function handleKanbanDropUnassign(event) {
   }
 
   await kanbanUnassign(Number(orderId));
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[handleKanbanDropUnassign]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 배정 해제 ───
@@ -568,7 +580,11 @@ async function kanbanUnassign(orderId) {
     },
     '해제', 'bg-red-500'
   );
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[kanbanUnassign]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 배치 배정 모달 ───
@@ -622,7 +638,11 @@ async function showBatchAssignModal() {
       </div>
     </div>`;
   showModal(`배치 배정 — ${unassignedIds.length}건`, content);
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showBatchAssignModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function executeBatchAssign(orderIds, leaderId) {
@@ -638,7 +658,11 @@ async function executeBatchAssign(orderIds, leaderId) {
   } else {
     showToast(res?.error || '배치 배정 실패', 'error');
   }
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[executeBatchAssign]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 개별 배정 모달 (기존 호환) ───
@@ -668,7 +692,11 @@ async function showAssignModal(orderId) {
       </div>
     </div>`;
   showModal(`팀장 배정 — 주문 #${orderId}`, content);
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showAssignModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function assignToLeader(orderId, leaderId) {
@@ -682,5 +710,9 @@ async function assignToLeader(orderId, leaderId) {
   } else {
     showToast(res?.error || '배정 실패', 'error');
   }
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[assignToLeader]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }

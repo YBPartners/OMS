@@ -95,7 +95,11 @@ async function renderReviewRegion(el) {
         ${orders.length === 0 ? '<div class="bg-white rounded-xl p-8 text-center text-gray-400 border"><i class="fas fa-clipboard-check text-4xl mb-3"></i><p>검수 대기 건이 없습니다.</p></div>' : ''}
       </div>
     </div>`;
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
+
+  } catch (e) {
+  console.error('[renderReviewRegion]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 // ════════ HQ 2차 검수 ════════
@@ -184,6 +188,11 @@ async function renderReviewHQ(el) {
         ${orders.length === 0 ? '<div class="bg-white rounded-xl p-8 text-center text-gray-400 border"><i class="fas fa-shield-halved text-4xl mb-3"></i><p>HQ 검수 대기 건이 없습니다.</p></div>' : ''}
       </div>
     </div>`;
+
+  } catch (e) {
+  console.error('[renderReviewHQ]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 // ─── 검수 카드 선택 토글 ───
@@ -215,7 +224,6 @@ function showReviewCardContextMenu(event, order, stage) {
     { divider: true },
     { icon: 'fa-chart-bar', label: '통계에서 확인', action: () => navigateTo('statistics') },
   ], { title: `주문 #${o.order_id} — ${o.customer_name || ''}` });
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 빠른 승인 (코멘트 없이 바로 승인) ───
@@ -235,7 +243,11 @@ async function quickApprove(orderId, stage) {
     },
     '승인', 'bg-green-600'
   );
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[quickApprove]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 일괄 검수 (배치) ───
@@ -290,7 +302,11 @@ async function batchReview(stage, result) {
     () => executeBatchReview(stage, result),
     `일괄 ${actionLabel}`, isApprove ? 'bg-green-600' : 'bg-red-600'
   );
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[batchReview]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function executeBatchReview(stage, result) {
@@ -314,6 +330,11 @@ async function executeBatchReview(stage, result) {
   set.clear();
   showToast(`일괄 처리 완료: 성공 ${success}건${fail > 0 ? `, 실패 ${fail}건` : ''}`, fail > 0 ? 'warning' : 'success');
   renderContent();
+
+  } catch (e) {
+  console.error('[executeBatchReview]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 검수 모달 (승인/반려) ───
@@ -359,10 +380,10 @@ function showReviewModal(orderId, stage, result) {
   } else {
     console.error('[DEBUG] submitBtn not found:', submitBtnId);
   }
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function submitReview(orderId, stage, result) {
+  try {
   console.log('[DEBUG] submitReview called:', { orderId, stage, result });
   try {
     const comment = document.getElementById('review-comment')?.value || '';
@@ -383,6 +404,11 @@ async function submitReview(orderId, stage, result) {
   } catch (err) {
     console.error('[DEBUG] submitReview exception:', err);
     showToast('검수 처리 중 오류 발생: ' + (err.message || err), 'error');
+  }
+
+  } catch (e) {
+  console.error('[submitReview]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
   }
 }
 
@@ -453,5 +479,9 @@ async function showReportPreview(orderId, stage) {
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>
     <button onclick="closeModal();quickApprove(${orderId},'${stage}')" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm">승인</button>
     <button onclick="closeModal();showReviewModal(${orderId},'${stage}','REJECT')" class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm">반려</button>`, { large: true });
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showReportPreview]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }

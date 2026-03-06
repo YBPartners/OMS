@@ -45,7 +45,11 @@ async function renderAuditLog(el) {
   const contentEl = document.getElementById('audit-content');
   if (tab === 'list') await renderAuditList(contentEl);
   else await renderAuditStats(contentEl);
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
+
+  } catch (e) {
+  console.error('[renderAuditLog]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 // ─── 로그 목록 ───
@@ -148,7 +152,11 @@ async function renderAuditList(el) {
       
       ${renderPagination(total, f.page, f.limit, '_auditPageChange')}
     </div>`;
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
+
+  } catch (e) {
+  console.error('[renderAuditList]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 // ─── 통계 뷰 ───
@@ -267,7 +275,11 @@ async function renderAuditStats(el) {
         </div>
       </div>
     </div>`;
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
+
+  } catch (e) {
+  console.error('[renderAuditStats]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 // ─── 상세 모달 ───
@@ -332,6 +344,11 @@ async function showAuditDetail(logId) {
 
   showModal(`감사 로그 상세 — #${log.log_id}`, content, 
     `<button onclick="closeModal()" class="px-5 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>`, { large: true });
+
+  } catch (e) {
+  console.error('[showAuditDetail]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 필터 ───
@@ -379,5 +396,4 @@ function auditActionColor(action) {
   if (lower.includes('update') || lower.includes('changed')) return 'text-amber-600';
   if (lower.includes('login') || lower.includes('auth')) return 'text-blue-600';
   return 'text-gray-600';
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }

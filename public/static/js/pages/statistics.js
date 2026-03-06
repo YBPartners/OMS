@@ -55,6 +55,11 @@ async function renderStatistics(el) {
         </div>
       </div>
     </div>`;
+
+  } catch (e) {
+  console.error('[renderStatistics]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 // ─── 통계 테이블 헬퍼 (renderDataTable 사용) ───
@@ -155,7 +160,6 @@ function showStatRowContextMenu(event, type, name, id) {
   }
 
   showContextMenu(event.clientX, event.clientY, items, { title: name });
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function refreshStats() {
@@ -181,7 +185,11 @@ async function refreshStats() {
   }
 
   showToast('통계가 갱신되었습니다.', 'success');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[refreshStats]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function exportCSV(groupBy) {
@@ -199,7 +207,11 @@ async function exportCSV(groupBy) {
   } else {
     showToast('다운로드 실패', 'error');
   }
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[exportCSV]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ════════ 정책관리 ════════
@@ -237,6 +249,11 @@ async function renderPolicies(el) {
         ${activeTab === 'metrics' ? renderMetricsPolicyTable(metricsRes?.policies || []) : ''}
       </div>
     </div>`;
+
+  } catch (e) {
+  console.error('[renderPolicies]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 function renderDistPolicyTable(policies) {
@@ -381,7 +398,6 @@ function showNewMetricsPolicyModal() {
   showModal('새 지표 정책', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitNewMetricsPolicy()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">생성</button>`);
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 async function submitNewMetricsPolicy() {
   const data = { completion_basis: document.getElementById('mp-completion')?.value, region_intake_basis: document.getElementById('mp-intake')?.value, effective_from: document.getElementById('mp-from')?.value };
@@ -416,6 +432,11 @@ async function deleteMetricsPolicy(id) {
     if (res?.ok) { showToast('삭제 완료', 'success'); renderContent(); }
     else showToast(res?.error || '삭제 실패', 'error');
   });
+
+  } catch (e) {
+  console.error('[deleteMetricsPolicy]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // 배분 정책 — 새 버전 생성
@@ -431,7 +452,6 @@ function showNewDistPolicyModal() {
   showModal('새 배분 정책 버전', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitNewDistPolicy()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">생성</button>`);
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 async function submitNewDistPolicy() {
   const name = document.getElementById('dp-name')?.value;
@@ -550,7 +570,11 @@ async function showNewCommissionModal() {
   showModal('수수료 정책 추가', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitNewCommission()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">추가</button>`);
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showNewCommissionModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 async function submitNewCommission() {
   const orgId = +document.getElementById('cp-org').value;
@@ -598,7 +622,11 @@ async function deletePolicy(type, id) {
     if (res?.ok) { showToast('삭제 완료', 'success'); renderContent(); }
     else showToast(res?.error || '삭제 실패', 'error');
   });
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[deletePolicy]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // 수수료 정책 삭제
@@ -609,7 +637,11 @@ async function deleteCommissionPolicy(id) {
     if (res?.ok) { showToast('삭제 완료', 'success'); renderContent(); }
     else showToast(res?.error || '삭제 실패', 'error');
   });
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[deleteCommissionPolicy]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // 지역권 매핑 변경
@@ -625,7 +657,11 @@ async function showTerritoryMappingModal(territoryId, currentOrgName) {
   showModal(`지역권 매핑 변경 — #${territoryId}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitTerritoryMapping(${territoryId})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">변경</button>`);
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showTerritoryMappingModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 async function submitTerritoryMapping(territoryId) {
   const orgId = +document.getElementById('tm-org').value;

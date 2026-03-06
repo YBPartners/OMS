@@ -61,6 +61,11 @@ async function renderSettlement(el) {
         caption: '정산 Run 목록',
       })}
     </div>`;
+
+  } catch (e) {
+  console.error('[renderSettlement]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 // ─── 정산 Run 컨텍스트 메뉴 ───
@@ -125,7 +130,6 @@ function showCreateRunModal() {
   showModal('정산 Run 생성', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="createRun()" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm">생성</button>`);
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function createRun() {
@@ -281,6 +285,11 @@ async function viewRunDetail(runId) {
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>
     <button onclick="closeModal();printAllInvoices(${runId})" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700"><i class="fas fa-print mr-1"></i>전체 계산서 인쇄</button>
   `, { xlarge: true });
+
+  } catch (e) {
+  console.error('[viewRunDetail]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 확장 토글 ───
@@ -298,7 +307,6 @@ function toggleSettlementExpand(el) {
 // ─── 대사 이슈 선택 상태 ───
 const reconcileState = {
   selectedIssues: new Set(),
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 };
 
 async function renderReconciliation(el) {
@@ -405,6 +413,11 @@ async function renderReconciliation(el) {
         })}
       </div>
     </div>`;
+
+  } catch (e) {
+  console.error('[renderReconciliation]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 // ─── 이슈 선택 ───
@@ -439,7 +452,6 @@ function showIssueContextMenu(event, issue) {
 // ─── 이슈 유형별 필터링 ───
 function filterIssuesByType(type) {
   showToast(`${OMS.ISSUE_TYPES[type]?.label || type} 유형 이슈 필터링`, 'info');
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 배치 이슈 해결 ───
@@ -465,6 +477,11 @@ async function batchResolveIssues() {
     },
     '일괄 해결', 'bg-green-600'
   );
+
+  } catch (e) {
+  console.error('[batchResolveIssues]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // 이슈 상세 모달 (detail_json 파싱)
@@ -539,7 +556,6 @@ function showReconcileModal() {
   showModal('대사 실행', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="executeReconciliation()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">실행</button>`);
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function executeReconciliation() {
@@ -553,7 +569,11 @@ async function executeReconciliation() {
     showToast(`대사 완료 — ${res.total_issues}건 이슈 발견`, res.total_issues > 0 ? 'warning' : 'success');
     renderContent();
   } else showToast(res?.error || '대사 실패', 'error');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[executeReconciliation]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function resolveIssue(issueId) {
@@ -564,7 +584,11 @@ async function resolveIssue(issueId) {
       if (res?.ok) { showToast('해결 처리 완료', 'success'); renderContent(); }
       else showToast(res?.error || '처리 실패', 'error');
     }, '해결 처리', 'bg-green-600');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[resolveIssue]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ════════ 정산 보고서 인쇄 ════════
@@ -633,7 +657,11 @@ ${grouped.map(g => `
   const w = window.open('', '_blank', 'width=900,height=700');
   if (w) { w.document.write(html); w.document.close(); }
   else showToast('팝업이 차단되었습니다. 팝업을 허용해주세요.', 'warning');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[printSettlementReport]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ════════ 정산서 이메일 발송 ════════
@@ -659,7 +687,11 @@ async function sendSettlementEmail(runId) {
     },
     '발송', 'bg-blue-600'
   );
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[sendSettlementEmail]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ════════ 정산 CSV 내보내기 ════════
@@ -678,7 +710,11 @@ async function exportSettlementCSV(runId) {
 
   exportToCSV(`settlement_run_${runId}.csv`, headers, rows);
   showToast('CSV 다운로드 완료', 'success');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[exportSettlementCSV]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ════════ 대리점 정산 내역서 ════════
@@ -735,7 +771,11 @@ async function renderAgencyStatement() {
         </div>
       </div>`).join('')}
     </div>`;
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[renderAgencyStatement]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 대리점 내역서 인쇄 ───
@@ -787,7 +827,11 @@ ${st.leaders.map(l => `<div class="section">${l.name} — ${l.count}건</div>
 
   const w = window.open('', '_blank', 'width=900,height=700');
   if (w) { w.document.write(html); w.document.close(); }
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[printAgencyStatement]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ════════ 딜러(팀장)별 계산서(Invoice) ════════
@@ -967,7 +1011,11 @@ async function showTeamInvoice(runId, teamLeaderId) {
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>
     <button onclick="closeModal();printTeamInvoice(${runId}, ${teamLeaderId})" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700"><i class="fas fa-print mr-1"></i>인쇄 / PDF 저장</button>
   `, { xlarge: true });
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showTeamInvoice]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // 인쇄용 계산서 HTML (산출 절차대로)
@@ -986,7 +1034,11 @@ async function printTeamInvoice(runId, teamLeaderId) {
   const w = window.open('', '_blank', 'width=900,height=900');
   if (w) { w.document.write(html); w.document.close(); }
   else showToast('팝업이 차단되었습니다. 팝업을 허용해주세요.', 'warning');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[printTeamInvoice]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // Run 내 전체 팀장 계산서 일괄 인쇄
@@ -1072,6 +1124,11 @@ ${pages}
   const w = window.open('', '_blank', 'width=900,height=900');
   if (w) { w.document.write(html); w.document.close(); }
   else showToast('팝업이 차단되었습니다.', 'warning');
+
+  } catch (e) {
+  console.error('[printAllInvoices]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // 단일 인보이스 인쇄 HTML 빌드
@@ -1193,7 +1250,6 @@ function buildInvoicePageHTML(inv, fmt, c, hasPageBreak) {
 
   <div class="inv-footer">와이비 OMS | 본 계산서는 자동 생성되었습니다 | 발행일: ${inv.issueDate}</div>
 </div>`;
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 정산 엑셀 내보내기 ════════
@@ -1222,5 +1278,9 @@ async function exportSettlementExcel(runId) {
   ];
 
   exportToExcel(res.rows, columns, `settlement_run_${runId}`, '정산내역');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[exportSettlementExcel]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }

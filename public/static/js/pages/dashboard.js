@@ -238,6 +238,11 @@ async function renderDashboard(el) {
       }
     });
   }
+
+  } catch (e) {
+  console.error('[renderDashboard]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 // ─── Chart.js 차트 생성 ───
@@ -480,7 +485,6 @@ function showRegionContextMenu(e, orgId, regionName) {
     { icon: 'fa-users', label: '소속 팀장 관리', action: () => { window._hrTab = 'users'; navigateTo('hr-management'); } },
     { icon: 'fa-chart-bar', label: '통계 보기', action: () => navigateTo('statistics') },
   ], { title: regionName });
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 지역총판 상세 모달 (Chart.js 포함) ───
@@ -579,7 +583,11 @@ async function showRegionDetailModal(orgId, regionName) {
       }
     }, 200);
   }
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showRegionDetailModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ════════ 매출 추이 차트 ════════
@@ -612,6 +620,11 @@ async function renderRevenueTrendSection() {
         <div style="height:250px;"><canvas id="chart-region-revenue"></canvas></div>
       </div>
     </div>`;
+
+  } catch (e) {
+  console.error('[renderRevenueTrendSection]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 function _renderRevenueTrendCharts(daily, byRegion) {
@@ -720,7 +733,6 @@ function _toggleTrendView(mode) {
   document.getElementById('btn-trend-cum')?.classList.toggle('bg-green-100', mode === 'cumulative');
   document.getElementById('btn-trend-cum')?.classList.toggle('text-green-700', mode === 'cumulative');
   document.getElementById('btn-trend-cum')?.classList.toggle('bg-gray-100', mode !== 'cumulative');
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 정산 현황 차트 ════════
@@ -800,6 +812,11 @@ async function renderSettlementSummarySection() {
         emptyText: '정산 기록 없음',
       })}
     </div>` : ''}`;
+
+  } catch (e) {
+  console.error('[renderSettlementSummarySection]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 function _renderSettlementCharts(statuses, byRegion) {
@@ -1060,5 +1077,4 @@ function _renderRegionHeatmap(regionSummary) {
   summaryHtml += '</div>';
 
   el.innerHTML = svgContent + summaryHtml;
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }

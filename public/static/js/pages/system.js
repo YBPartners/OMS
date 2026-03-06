@@ -97,6 +97,11 @@ async function executeGlobalSearch(q) {
         </button>
       `).join('')}
     </div>`;
+
+  } catch (e) {
+  console.error('[executeGlobalSearch]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 function handleSearchResult(r) {
@@ -106,7 +111,6 @@ function handleSearchResult(r) {
     if (r.filter?.tab) window._hrTab = r.filter.tab;
     navigateTo(r.action);
   }
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 주문 타임라인 ════════
@@ -198,7 +202,11 @@ async function showOrderTimelineModal(orderId) {
      <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm">닫기</button>`,
     { large: true }
   );
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showOrderTimelineModal]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ════════ 시스템 관리 페이지 ════════
@@ -378,7 +386,11 @@ async function renderSystemAdmin(el) {
   // 세션 목록 로드
   loadSessionList();
   loadBackupInfo();
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
+
+  } catch (e) {
+  console.error('[renderSystemAdmin]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 async function loadSessionList() {
@@ -396,7 +408,11 @@ async function loadSessionList() {
       { key: 'expires_at', label: '만료 시간', render: s => `<span class="text-xs text-gray-500">${formatDate(s.expires_at)}</span>` },
       { key: '_actions', label: '액션', align: 'center', render: s => `<button onclick="revokeSession('${s.session_id}')" class="px-2 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100"><i class="fas fa-ban mr-1"></i>강제종료</button>` }
     ], rows: sessions, compact: true, caption: '활성 세션 목록' });
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[loadSessionList]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function loadBackupInfo() {
@@ -415,7 +431,11 @@ async function loadBackupInfo() {
           <span class="text-xs font-bold ${t.row_count > 0 ? 'text-blue-600' : 'text-gray-400'}">${formatNumber(t.row_count)}</span>
         </div>`).join('')}
     </div>`;
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[loadBackupInfo]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function revokeSession(sid) {
@@ -425,7 +445,11 @@ async function revokeSession(sid) {
     if (res?.ok) { showToast('세션 강제종료 완료', 'success'); loadSessionList(); }
     else showToast(res?.error || '처리 실패', 'error');
   }, '강제종료', 'bg-red-600');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[revokeSession]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function purgeAllSessions() {
@@ -435,6 +459,11 @@ async function purgeAllSessions() {
     if (res?.ok) { showToast(`${res.purged}개 세션 종료 완료`, 'success'); loadSessionList(); }
     else showToast(res?.error || '처리 실패', 'error');
   }, '전체 초기화', 'bg-red-600');
+
+  } catch (e) {
+  console.error('[purgeAllSessions]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // 초기화 — DOM 로드 후 글로벌 검색 이벤트 등록
@@ -504,7 +533,6 @@ function parseCSV(text) {
     });
     return obj;
   }).filter(obj => Object.keys(obj).length > 0);
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function executeImport() {
@@ -544,7 +572,11 @@ async function executeImport() {
     },
     '임포트 실행', 'bg-green-600'
   );
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[executeImport]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ════════ 스냅샷 백업/복원 ════════
@@ -567,7 +599,11 @@ async function createSnapshot() {
   a.click();
   URL.revokeObjectURL(url);
   showToast(`${res.meta.total_rows}행 스냅샷 다운로드 완료`, 'success');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[createSnapshot]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function restoreSnapshot() {
@@ -617,11 +653,16 @@ async function restoreSnapshot() {
     },
     clearBefore ? '삭제 후 복원' : '복원', clearBefore ? 'bg-red-600' : 'bg-amber-600'
   );
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[restoreSnapshot]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ════════ 웹 푸시 알림 ════════
 async function initPushNotifications() {
+  try {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
 
   try {
@@ -635,9 +676,15 @@ async function initPushNotifications() {
   } catch (err) {
     console.warn('[Push] Service Worker 등록 실패:', err);
   }
+
+  } catch (e) {
+  console.error('[initPushNotifications]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function subscribePush() {
+  try {
   if (!window._swRegistration) { showToast('Service Worker가 아직 준비되지 않았습니다.', 'warning'); return; }
 
   try {
@@ -655,9 +702,15 @@ async function subscribePush() {
     showToast('로컬 알림 모드로 전환됩니다.', 'info');
     window._pushLocalMode = true;
   }
+
+  } catch (e) {
+  console.error('[subscribePush]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function unsubscribePush() {
+  try {
   if (window._pushSubscription) {
     try {
       await window._pushSubscription.unsubscribe();
@@ -666,6 +719,11 @@ async function unsubscribePush() {
   window._pushSubscription = null;
   await api('POST', '/system/push/unsubscribe');
   showToast('푸시 알림이 비활성화되었습니다.', 'success');
+
+  } catch (e) {
+  console.error('[unsubscribePush]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // 로컬 알림 발송 (Service Worker 메시지)

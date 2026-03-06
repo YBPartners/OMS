@@ -1,6 +1,7 @@
 // ============================================================
-// 와이비 OMS — Core API Module v4.0
+// 와이비 OMS — Core API Module v5.0
 // API 통신, 세션 관리, 에러 처리, 재시도, 오프라인 감지
+// v5: SWR 캐시, 디바운스, 요청 중복 제거
 // ============================================================
 
 window.OMS = window.OMS || {};
@@ -174,4 +175,110 @@ async function apiBatch(requests) {
   const success = results.filter(r => r.status === 'fulfilled' && r.value?.ok).length;
   const fail = results.length - success;
   return { success, fail, total: results.length, results };
+}
+
+// ─── SWR 캐시 (Stale-While-Revalidate) ───
+const _swrCache = new Map();
+const _swrInflight = new Map();
+
+/**
+ * GET 요청 + SWR 캐시
+ * @param {string} path - API 경로
+ * @param {Object} opts
+ *   maxAge: 캐시 유효기간 (ms, 기본 30초)
+ *   staleAge: stale 허용 기간 (ms, 기본 5분) — stale 데이터 즉시 반환 + 백그라운드 갱신
+ *   force: true이면 캐시 무시
+ *   key: 캐시 키 (기본: path)
+ * @returns {Promise<Object|null>}
+ */
+async function apiCached(path, opts = {}) {
+  const key = opts.key || path;
+  const maxAge = opts.maxAge ?? 30000;    // 30초
+  const staleAge = opts.staleAge ?? 300000; // 5분
+
+  // 1) 캐시 히트 — fresh
+  const cached = _swrCache.get(key);
+  if (cached && !opts.force) {
+    const age = Date.now() - cached.ts;
+    if (age < maxAge) return cached.data;
+
+    // 2) Stale — 즉시 반환 + 백그라운드 revalidate
+    if (age < staleAge) {
+      _revalidate(path, key, opts);
+      return cached.data;
+    }
+  }
+
+  // 3) 요청 중복 제거 (동일 path에 대한 동시 요청 합치기)
+  if (_swrInflight.has(key)) {
+    return _swrInflight.get(key);
+  }
+
+  const promise = api('GET', path, null, opts).then(data => {
+    if (data) {
+      _swrCache.set(key, { data, ts: Date.now() });
+    }
+    _swrInflight.delete(key);
+    return data;
+  });
+
+  _swrInflight.set(key, promise);
+  return promise;
+}
+
+function _revalidate(path, key, opts) {
+  if (_swrInflight.has(key)) return;
+  const promise = api('GET', path, null, { ...opts, retries: 0 }).then(data => {
+    if (data) {
+      _swrCache.set(key, { data, ts: Date.now() });
+    }
+    _swrInflight.delete(key);
+    return data;
+  });
+  _swrInflight.set(key, promise);
+}
+
+/**
+ * 캐시 무효화
+ * @param {string|RegExp} pattern - 키 또는 패턴
+ */
+function apiCacheInvalidate(pattern) {
+  if (typeof pattern === 'string') {
+    _swrCache.delete(pattern);
+  } else if (pattern instanceof RegExp) {
+    for (const key of _swrCache.keys()) {
+      if (pattern.test(key)) _swrCache.delete(key);
+    }
+  } else {
+    _swrCache.clear();
+  }
+}
+
+/**
+ * 디바운스된 검색 헬퍼
+ * @param {Function} fn - 실행할 함수
+ * @param {number} delay - 지연 ms (기본 300)
+ */
+function debounce(fn, delay = 300) {
+  let timer;
+  return function(...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
+/**
+ * 스로틀 헬퍼
+ * @param {Function} fn - 실행할 함수
+ * @param {number} limit - 최소 간격 ms (기본 1000)
+ */
+function throttle(fn, limit = 1000) {
+  let last = 0;
+  return function(...args) {
+    const now = Date.now();
+    if (now - last >= limit) {
+      last = now;
+      return fn.apply(this, args);
+    }
+  };
 }

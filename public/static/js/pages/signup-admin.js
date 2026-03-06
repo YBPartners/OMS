@@ -50,6 +50,11 @@ async function renderHRSignupRequests(el) {
     })}
       ${total > pg.limit ? renderPagination(total, pg.page, pg.limit, 'goSignupPage') : ''}
     </div>`;
+
+  } catch (e) {
+  console.error('[renderHRSignupRequests]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 function applySignupFilter() {
@@ -61,7 +66,6 @@ function applySignupFilter() {
 function goSignupPage(page) {
   window._signupFilters = { ...(window._signupFilters || {}), page };
   renderContent();
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 가입신청 상세 모달 ───
@@ -146,6 +150,11 @@ async function showSignupDetail(requestId) {
   }
   
   showModal(`가입 신청 상세 — #${requestId}`, content, footer, { large: true });
+
+  } catch (e) {
+  console.error('[showSignupDetail]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 가입 승인 ───
@@ -185,7 +194,6 @@ function rejectSignup(requestId, name) {
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitRejectSignup(${requestId})" class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm"><i class="fas fa-times mr-1"></i>반려</button>
   `);
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function submitRejectSignup(requestId) {
@@ -198,7 +206,11 @@ async function submitRejectSignup(requestId) {
     closeModal();
     renderContent();
   } else showToast(res?.error || '반려 실패', 'error');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[submitRejectSignup]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -247,6 +259,11 @@ async function renderHRRegionAddRequests(el) {
     })}
       ${total > pg.limit ? renderPagination(total, pg.page, pg.limit, 'goRegionAddPage') : ''}
     </div>`;
+
+  } catch (e) {
+  console.error('[renderHRRegionAddRequests]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 function applyRegionAddFilter() {
@@ -295,7 +312,6 @@ function rejectRegionAdd(requestId) {
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitRejectRegionAdd(${requestId})" class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm">반려</button>
   `);
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function submitRejectRegionAdd(requestId) {
@@ -305,7 +321,11 @@ async function submitRejectRegionAdd(requestId) {
   const res = await api('POST', `/signup/region-add-requests/${requestId}/reject`, { reason });
   if (res?.ok) { showToast('반려 완료', 'success'); closeModal(); renderContent(); }
   else showToast(res?.error || '반려 실패', 'error');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[submitRejectRegionAdd]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 async function showRegionAddDetail(requestId) {
@@ -333,7 +353,11 @@ async function showRegionAddDetail(requestId) {
       ` : ''}
     </div>`;
   showModal(`추가 지역 요청 상세 — #${requestId}`, content, `<button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>`);
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[showRegionAddDetail]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -360,6 +384,11 @@ async function renderHROrgTree(el) {
   if (tree.length === 0) {
     await loadOrgTreeFallback(el);
   }
+
+  } catch (e) {
+  console.error('[renderHROrgTree]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 function renderTreeNode(org, depth) {
@@ -385,7 +414,6 @@ function renderTreeNode(org, depth) {
       </div>
       ${children.map(ch => renderTreeNode(ch, depth + 1)).join('')}
     </div>`;
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function loadOrgTreeFallback(el) {
@@ -416,5 +444,9 @@ async function loadOrgTreeFallback(el) {
   });
   
   treeEl.innerHTML = html || '<p class="text-gray-400 text-sm text-center py-4">조직이 없습니다.</p>';
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[loadOrgTreeFallback]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }

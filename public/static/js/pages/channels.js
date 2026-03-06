@@ -89,6 +89,11 @@ async function renderChannels(el) {
         </div>` : ''}
       </div>
     </div>`;
+
+  } catch (e) {
+  console.error('[renderChannels]', e);
+  el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
 }
 
 function renderChannelCard(ch) {
@@ -194,7 +199,6 @@ function showCreateChannelModal() {
   showModal('주문 채널 등록', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitCreateChannel()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">등록</button>`);
-  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function submitCreateChannel() {
@@ -509,6 +513,11 @@ async function openChannelDetail(channelId) {
   document.getElementById('ch-api-method')?.addEventListener('change', function() {
     document.getElementById('post-body-section').classList.toggle('hidden', this.value !== 'POST');
   });
+
+  } catch (e) {
+  console.error('[openChannelDetail]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 function switchChannelTab(tabId) {
@@ -539,7 +548,6 @@ function addRequestHeader() {
     <input placeholder="Header-Value" class="flex-1 border rounded-lg px-3 py-1.5 text-sm font-mono header-value">
     <button onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600"><i class="fas fa-times"></i></button>`;
   container.appendChild(div);
-  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ─── API 설정 저장 ───
@@ -586,7 +594,11 @@ async function saveChannelApiConfig(channelId) {
   const res = await api('PUT', `/hr/channels/${channelId}`, data);
   if (res?.ok) showToast('API 설정이 저장되었습니다.', 'success');
   else showToast(res?.error || 'API 설정 저장 실패', 'error');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[saveChannelApiConfig]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── API 연결 테스트 ───
@@ -632,7 +644,11 @@ async function testChannelApi(channelId) {
         ${r.error_type ? `<div class="text-xs text-gray-400 mt-1">에러 유형: ${r.error_type}</div>` : ''}
       </div>`;
   }
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[testChannelApi]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 필드 매핑 저장 ───
@@ -650,7 +666,11 @@ async function saveFieldMapping(channelId) {
   const res = await api('PUT', `/hr/channels/${channelId}`, { field_mapping: mapping });
   if (res?.ok) showToast('필드 매핑이 저장되었습니다.', 'success');
   else showToast(res?.error || '매핑 저장 실패', 'error');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[saveFieldMapping]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 매핑 미리보기 (API 테스트 → 매핑 적용) ───
@@ -708,12 +728,16 @@ async function previewFieldMapping(channelId) {
   } catch (e) {
     resultEl.innerHTML = `<div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-yellow-700"><i class="fas fa-exclamation-triangle mr-1"></i>응답 데이터 파싱 실패: ${e.message}</div>`;
   }
+
+  } catch (e) {
+  console.error('[previewFieldMapping]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 function getNestedPreview(obj, path) {
   if (!path) return obj;
   return path.split('.').reduce((acc, key) => acc?.[key], obj);
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 동기화 실행 ───
@@ -754,7 +778,11 @@ async function syncChannel(channelId) {
         showToast(res?.error || '동기화 실패', 'error');
       }
     }, '동기화 실행', 'bg-blue-600');
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
+
+  } catch (e) {
+  console.error('[syncChannel]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── 단일 필드 업데이트 ───
@@ -765,6 +793,11 @@ async function updateChannelField(channelId, field, value) {
   const res = await api('PUT', `/hr/channels/${channelId}`, data);
   if (res?.ok) showToast('설정이 변경되었습니다.', 'success');
   else showToast(res?.error || '변경 실패', 'error');
+
+  } catch (e) {
+  console.error('[updateChannelField]', e);
+  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+  }
 }
 
 // ─── HTML 이스케이프 ───
@@ -772,5 +805,4 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
-  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }

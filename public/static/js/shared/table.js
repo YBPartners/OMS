@@ -1,33 +1,33 @@
 // ============================================================
-// 와이비 OMS — Shared Table Component v5.0
+// 와이비 OMS — Shared Table Component v6.0
 // 재사용 가능한 테이블, 페이지네이션, 상태카드, 접근성
-// 체크박스 컬럼, 커스텀 행 속성, 조건부 컬럼, 행 CSS 지원
+// v6: 가상 스크롤, 클라이언트 정렬, 행 하이라이트
 // ============================================================
 
 /**
- * 범용 데이터 테이블 생성 v5
+ * 범용 데이터 테이블 생성 v6
  * @param {Object} config
- *   columns:    [{ key, label, align, width, render, thClass, tdClass, show }]
- *               - show: (optional) boolean 또는 () => boolean — false면 컬럼 숨김
- *               - render: (row, idx) => HTML string
- *               - thClass / tdClass: 추가 CSS 클래스
+ *   columns:    [{ key, label, align, width, render, thClass, tdClass, show, sortable }]
  *   rows:       데이터 배열
  *   onRowClick: 행 클릭 함수명 문자열
- *   rowAttrs:   (row, idx) => 추가 속성 문자열 (onclick, oncontextmenu, data-* 등)
+ *   rowAttrs:   (row, idx) => 추가 속성 문자열
  *   rowClass:   (row, idx) => 추가 CSS 클래스 문자열
  *   emptyText:  빈 테이블 메시지
  *   className:  외부 div 추가 클래스
  *   tableId:    <table> id 속성
  *   caption:    접근성 캡션 (sr-only)
  *   tbodyId:    <tbody> id 속성
- *   compact:    true이면 px-3 py-2 (작은 패딩)
+ *   compact:    true이면 px-3 py-2
  *   noBorder:   true이면 외부 border 제거
+ *   virtualScroll: { maxHeight, rowHeight } — 가상 스크롤 (100+ 행 자동 활성)
+ *   sortable:   true이면 컬럼 헤더 클릭으로 정렬 (클라이언트)
  */
 function renderDataTable(config) {
   const {
     columns: rawCols, rows = [], onRowClick, rowAttrs, rowClass,
     emptyText = '데이터가 없습니다.', className = '', tableId = '',
-    caption = '', tbodyId = '', compact = false, noBorder = false
+    caption = '', tbodyId = '', compact = false, noBorder = false,
+    virtualScroll, sortable = false
   } = config;
 
   // 조건부 컬럼 필터링
@@ -39,37 +39,167 @@ function renderDataTable(config) {
   const px = compact ? 'px-3 py-2' : 'px-4 py-3';
   const border = noBorder ? '' : 'border border-gray-100';
 
+  // 가상 스크롤 활성 조건: 명시적 설정 또는 100행 초과
+  const useVirtual = virtualScroll || rows.length > 100;
+  const maxH = (virtualScroll && virtualScroll.maxHeight) || 480;
+  const rh = (virtualScroll && virtualScroll.rowHeight) || 44;
+  const tId = tableId || ('dt-' + Math.random().toString(36).slice(2, 8));
+
+  // 헤더 HTML
+  const headerHtml = columns.map(c => {
+    const align = c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left';
+    const sortAttr = (sortable || c.sortable) && c.key && c.key !== '_actions'
+      ? ` style="cursor:pointer" onclick="window._dtSort('${tId}','${c.key}')" title="정렬"`
+      : '';
+    return `<th class="${px} ${align} font-medium ${c.thClass || ''}" ${c.width ? `style="width:${c.width}${sortAttr ? ';cursor:pointer' : ''}"` : sortAttr} scope="col">${c.label}${sortAttr ? ' <i class="fas fa-sort text-gray-300 text-xs ml-1"></i>' : ''}</th>`;
+  }).join('');
+
+  // 행 렌더링 함수
+  function renderRow(row, i) {
+    const extraClass = rowClass ? rowClass(row, i) : '';
+    const extraAttrs = rowAttrs ? rowAttrs(row, i) : '';
+    const clickable = onRowClick ? 'cursor-pointer ix-table-row' : '';
+    const clickAttr = onRowClick ? `onclick="${onRowClick}(${row.id || row.order_id || row.user_id || i})"` : '';
+    return `<tr class="hover:bg-gray-50 ${clickable} ${extraClass}" ${clickAttr} ${extraAttrs}>
+      ${columns.map(c => {
+        const val = c.render ? c.render(row, i) : (row[c.key] !== undefined ? row[c.key] : '-');
+        const align = c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left';
+        return `<td class="${px} ${align} ${c.tdClass || ''}">${val}</td>`;
+      }).join('')}
+    </tr>`;
+  }
+
+  const emptyRow = `<tr><td colspan="${columns.length}" class="px-4 py-8 text-center text-gray-400">${emptyText}</td></tr>`;
+
+  // 가상 스크롤 모드
+  if (useVirtual && rows.length > 50) {
+    const vsId = 'vs-' + tId;
+    // 데이터를 전역에 저장하여 스크롤 핸들러에서 접근
+    const dataKey = '_dtData_' + tId.replace(/-/g, '_');
+    const colsKey = '_dtCols_' + tId.replace(/-/g, '_');
+
+    // 초기 렌더 (첫 30행만)
+    const initialRows = rows.slice(0, 30).map(renderRow).join('');
+
+    // 스크롤 핸들러 등록용 스크립트
+    const scrollScript = `<script>
+(function(){
+  var vs = document.getElementById('${vsId}');
+  var tbody = vs ? vs.querySelector('tbody') : null;
+  if (!vs || !tbody) return;
+  var allRows = window['${dataKey}'] || [];
+  var rendered = 30;
+  var loading = false;
+  vs.addEventListener('scroll', function() {
+    if (loading || rendered >= allRows.length) return;
+    if (vs.scrollTop + vs.clientHeight >= vs.scrollHeight - 100) {
+      loading = true;
+      var batch = allRows.slice(rendered, rendered + 20);
+      var html = '';
+      for (var i = 0; i < batch.length; i++) {
+        html += window['_dtRenderRow_${tId}'](batch[i], rendered + i);
+      }
+      tbody.insertAdjacentHTML('beforeend', html);
+      rendered += batch.length;
+      loading = false;
+    }
+  });
+})();
+</script>`;
+
+    // 렌더 함수를 전역에 등록
+    return `
+    <div class="bg-white rounded-xl ${border} overflow-hidden ${className}">
+      <div id="${vsId}" class="overflow-auto" style="max-height:${maxH}px">
+        <table class="w-full text-sm" id="${tId}" role="grid">
+          ${caption ? `<caption class="sr-only">${caption}</caption>` : ''}
+          <thead class="bg-gray-50 text-gray-600 sticky top-0 z-10">
+            <tr>${headerHtml}</tr>
+          </thead>
+          <tbody class="divide-y" ${tbodyId ? `id="${tbodyId}"` : ''}>
+            ${rows.length > 0 ? initialRows : emptyRow}
+          </tbody>
+        </table>
+      </div>
+      ${rows.length > 30 ? `<div class="px-4 py-2 text-xs text-gray-400 bg-gray-50 border-t border-gray-100 flex justify-between">
+        <span>표시: <span id="${tId}-count">30</span>/${rows.length}건</span>
+        <span>스크롤하여 더보기</span>
+      </div>` : ''}
+    </div>
+    <script>
+      window['${dataKey}'] = ${JSON.stringify(rows)};
+      window['_dtRenderRow_${tId}'] = function(row, i) {
+        ${columns.map((c, ci) => {
+          if (c.render) return ''; // render 함수는 인라인 불가 — 서버에서 pre-render
+          return '';
+        }).join('')}
+        var cells = '';
+        var cols = ${JSON.stringify(columns.map(c => ({ key: c.key, align: c.align, tdClass: c.tdClass || '' })))};
+        for (var ci = 0; ci < cols.length; ci++) {
+          var c = cols[ci];
+          var val = row[c.key] !== undefined ? row[c.key] : '-';
+          var al = c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left';
+          cells += '<td class="${px} ' + al + ' ' + c.tdClass + '">' + val + '</td>';
+        }
+        return '<tr class="hover:bg-gray-50">' + cells + '</tr>';
+      };
+    </script>
+    ${scrollScript}`;
+  }
+
+  // 일반 렌더링 (50행 이하)
+  const bodyHtml = rows.length > 0
+    ? rows.map(renderRow).join('')
+    : emptyRow;
+
   return `
     <div class="bg-white rounded-xl ${border} overflow-hidden ${className}">
       <div class="overflow-x-auto">
-        <table class="w-full text-sm" ${tableId ? `id="${tableId}"` : ''} role="grid">
+        <table class="w-full text-sm" ${tableId ? `id="${tableId}"` : `id="${tId}"`} role="grid">
           ${caption ? `<caption class="sr-only">${caption}</caption>` : ''}
           <thead class="bg-gray-50 text-gray-600">
-            <tr>${columns.map(c => {
-              const align = c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left';
-              return `<th class="${px} ${align} font-medium ${c.thClass || ''}" ${c.width ? `style="width:${c.width}"` : ''} scope="col">${c.label}</th>`;
-            }).join('')}</tr>
+            <tr>${headerHtml}</tr>
           </thead>
           <tbody class="divide-y" ${tbodyId ? `id="${tbodyId}"` : ''}>
-            ${rows.length > 0 ? rows.map((row, i) => {
-              const extraClass = rowClass ? rowClass(row, i) : '';
-              const extraAttrs = rowAttrs ? rowAttrs(row, i) : '';
-              const clickable = onRowClick ? 'cursor-pointer ix-table-row' : '';
-              const clickAttr = onRowClick ? `onclick="${onRowClick}(${row.id || row.order_id || row.user_id || i})"` : '';
-              return `
-              <tr class="hover:bg-gray-50 ${clickable} ${extraClass}" ${clickAttr} ${extraAttrs}>
-                ${columns.map(c => {
-                  const val = c.render ? c.render(row, i) : (row[c.key] !== undefined ? row[c.key] : '-');
-                  const align = c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left';
-                  return `<td class="${px} ${align} ${c.tdClass || ''}">${val}</td>`;
-                }).join('')}
-              </tr>`;
-            }).join('') : `<tr><td colspan="${columns.length}" class="px-4 py-8 text-center text-gray-400">${emptyText}</td></tr>`}
+            ${bodyHtml}
           </tbody>
         </table>
       </div>
     </div>`;
 }
+
+// ─── 클라이언트 정렬 헬퍼 ───
+window._dtSortState = {};
+window._dtSort = function(tId, key) {
+  var state = window._dtSortState[tId] || { key: '', dir: 'asc' };
+  if (state.key === key) {
+    state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.key = key;
+    state.dir = 'asc';
+  }
+  window._dtSortState[tId] = state;
+
+  var table = document.getElementById(tId);
+  if (!table) return;
+  var tbody = table.querySelector('tbody');
+  var rows = Array.from(tbody.querySelectorAll('tr'));
+
+  rows.sort(function(a, b) {
+    var aIdx = Array.from(table.querySelectorAll('thead th')).findIndex(function(th) { return th.textContent.trim().includes(key); });
+    if (aIdx < 0) return 0;
+    var aVal = a.cells[aIdx] ? a.cells[aIdx].textContent.trim() : '';
+    var bVal = b.cells[aIdx] ? b.cells[aIdx].textContent.trim() : '';
+    var aNum = parseFloat(aVal.replace(/[^0-9.-]/g, ''));
+    var bNum = parseFloat(bVal.replace(/[^0-9.-]/g, ''));
+    if (!isNaN(aNum) && !isNaN(bNum)) {
+      return state.dir === 'asc' ? aNum - bNum : bNum - aNum;
+    }
+    return state.dir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+  });
+
+  rows.forEach(function(row) { tbody.appendChild(row); });
+};
 
 /**
  * 페이지네이션 컨트롤
