@@ -1,7 +1,7 @@
 # 와이비 OMS — 구현 추적 문서 (Implementation Tracker)
 
-> **최종 업데이트**: 2026-03-05
-> **버전**: v16.0.0
+> **최종 업데이트**: 2026-03-06
+> **버전**: v17.1.0
 > **이 문서는 대화 압축/토큰 초과 시 컨텍스트 복구용입니다.**
 > **항상 이 파일 + ARCHITECTURE.md + PROGRESS.md 를 먼저 읽어 현재 진행 상황을 파악하세요.**
 
@@ -22,12 +22,12 @@
 
 ## 현재 상태 요약
 
-- **전체 Phase**: 0~16 완료 (Phase 16: 품질 강화 + E2E 테스트 + 문서 정비)
-- **프로덕션 배포**: ✅ https://dahada-oms.pages.dev (v16.0.0)
+- **전체 Phase**: 0~17.1 완료 (Phase 17.1: 보고서/영수증 모바일 카메라 첨부 + 파일명 규칙화)
+- **프로덕션 배포**: ✅ https://dahada-oms.pages.dev (v17.1.0)
 - **로컬 개발**: ✅ PM2 + wrangler pages dev, port 3000
 - **서비스 레이어**: ✅ 5개 서비스, 모듈 간 교차 의존성 해소
 - **E2E 테스트**: ✅ 50/50 통과 (15개 영역, `tests/e2e.sh`)
-- **코드량**: Backend 8,902 + Frontend 10,722 + SW 143 + CSS 419 + SQL 1,112 + E2E 386 = **21,684줄**
+- **코드량**: Backend 8,890 + Frontend 11,107 + SW 143 + CSS 419 + SQL 1,184 + E2E 386 = **22,129줄**
 - **알려진 이슈**: signup SQL 오류 ✅해결, 로그아웃 세션 버그 ✅해결, Tailwind CDN 경고 (경미)
 
 ---
@@ -194,6 +194,28 @@
 - [x] 버그 수정: 로그아웃 쿠키 세션 버그, 보고서 사진 URL 호환성
 - [x] 커밋 03cfb17, 8 files changed, +826/-206
 
+### ✅ Phase 17.0: 주문 수동 등록 – 실주소 검색
+- [x] 카카오 우편번호 서비스 (Daum Postcode v2) CDN 연동
+- [x] 주문 등록 모달 "주소 검색" 버튼 추가
+- [x] 선택 주소 → 시도/시군구/읍면동 파싱 → admin_dong_code 자동 매핑
+- [x] `GET /api/system/address-lookup?sido=&sigungu=&dong=` API 추가
+- [x] `GET /api/system/admin-regions?sido=` API 추가
+- [x] 매핑 결과 UI (파란색 상자 코드+지역명 / 경고 메시지)
+- [x] 커밋 a7f1422, 3 files, +153/-3
+
+### ✅ Phase 17.1: 보고서/영수증 – 모바일 카메라 첨부 + 파일명 규칙화
+- [x] 보고서 체크리스트 6항목별 카메라/갤러리 버튼 UI 구현 (my-orders.js)
+- [x] `<input type="file" accept="image/*" capture="environment">` 모바일 카메라 직접 실행
+- [x] `handleFileAttach()` — 2MB 제한, 이미지 타입 검증, Base64 변환, 미리보기
+- [x] 파일명 자동 규칙화: `YYYYMMDD_팀코드_카테고리.ext` (클라이언트 + 서버)
+- [x] 영수증 첨부 카메라/갤러리 UI 통합 (URL 입력 제거)
+- [x] `POST /api/orders/:id/upload` multipart 사진 업로드 API (report.ts)
+- [x] 서버 측 `generateFileName()` — org_code DB 조회 기반 팀코드 확인
+- [x] 보고서/완료 API에 Base64 사진 저장 지원 (file_name, file_size, mime_type)
+- [x] `0011_photo_upload.sql` — work_report_photos에 file_name, file_size, mime_type 컬럼
+- [x] `/auth/me` 응답에 `org_code` 필드 추가
+- [x] 커밋 ae02022, 4 files, +317/-34
+
 ---
 
 ## 핵심 설계 결정 요약
@@ -230,16 +252,18 @@
 ## 파일 경로 참조
 
 - 프로젝트 루트: `/home/user/webapp/`
-- 백엔드 소스: `/home/user/webapp/src/` (45파일, 7,357줄)
+- 백엔드 소스: `/home/user/webapp/src/` (46파일, 8,890줄)
 - **서비스 레이어**: `/home/user/webapp/src/services/` (6파일, 634줄)
 - **채널+대리점 API**: `/home/user/webapp/src/routes/hr/channels-agency.ts` (373줄) ← v7.0 신규
-- 프론트엔드: `/home/user/webapp/public/static/js/` (22파일, 8,601줄)
+- 프론트엔드: `/home/user/webapp/public/static/js/` (24파일, 11,107줄)
 - **모바일 CSS**: `/home/user/webapp/public/static/css/mobile.css` (419줄) ← v9.0 신규
 - **채널 페이지**: `/home/user/webapp/public/static/js/pages/channels.js` (145줄) ← v7.0
 - **대리점 페이지**: `/home/user/webapp/public/static/js/pages/agency.js` (400줄) ← v7.0
 - **대시보드 차트**: `/home/user/webapp/public/static/js/pages/dashboard.js` (~250줄) ← v8.0 Chart.js
 - **CSV 유틸리티**: `/home/user/webapp/public/static/js/core/ui.js` exportToCSV() ← v8.0
-- 마이그레이션: `/home/user/webapp/migrations/` (6파일)
+- **카메라 첨부/파일명**: `/home/user/webapp/public/static/js/pages/my-orders.js` handleFileAttach() ← v17.1
+- **사진업로드 API**: `/home/user/webapp/src/routes/orders/report.ts` generateFileName() ← v17.1
+- 마이그레이션: `/home/user/webapp/migrations/` (11파일, 최신 0011_photo_upload.sql)
 - 시드 데이터: `/home/user/webapp/seed.sql` + `/home/user/webapp/seed/`
 - 설계 문서: `/home/user/webapp/docs/`
 - 아키텍처: `/home/user/webapp/ARCHITECTURE.md`

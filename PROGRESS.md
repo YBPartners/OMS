@@ -1,8 +1,8 @@
 # 와이비 OMS — 개발 진척도 (Development Progress)
 
-> **최종 업데이트**: 2026-03-05
-> **현재 버전**: v15.0.0
-> **총 코드량**: Backend 8,860줄 (47 TS) + Frontend 10,643줄 (23 JS) + SW 143줄 + CSS 419줄 + SQL 1,169줄 = **21,234줄**
+> **최종 업데이트**: 2026-03-06
+> **현재 버전**: v17.1.0
+> **총 코드량**: Backend 8,890줄 (46 TS) + Frontend 11,107줄 (24 JS) + SW 143줄 + CSS 419줄 + SQL 1,184줄 + E2E 386줄 = **22,129줄**
 
 ---
 
@@ -28,11 +28,88 @@
 | **13.0** | **시스템 관리 + 보안 강화 + 글로벌 검색 + 타임라인** | **✅ 완료** | **2026-03-05** | **시스템 관리 페이지, 로그인 잠금, 비밀번호 정책, Cmd+K 검색, 주문 타임라인** |
 | **14.0** | **웹 푸시 + 데이터 관리 + 매출/정산 차트** | **✅ 완료** | **2026-03-05** | **Service Worker, 임포트/백업/복원, 매출 추이, 정산 현황 차트** |
 | **15.0** | **GAP 패치 + 상태전이 정규화 + 정책 CRUD** | **✅ 완료** | **2026-03-05** | **READY_DONE/DONE 상태, 알림 트리거, 정책관리 CRUD, 프론트엔드 상태 업데이트** |
-| **16.0** | **품질 강화 + 문서 정비 + E2E 테스트** | **🔄 진행중** | **2026-03-05** | **프로덕션 DB 마이그레이션, 문서 정합성, 에러 핸들링 강화** |
+| **16.0** | **품질 강화 + 문서 정비 + E2E 테스트** | **✅ 완료** | **2026-03-05** | **프로덕션 DB 마이그레이션, 문서 정합성, 에러 핸들링 강화** |
+| **17.0** | **주문 수동 등록 – 실주소 검색** | **✅ 완료** | **2026-03-06** | **카카오 우편번호 서비스, admin_dong_code 자동 매핑, 주소검색 API** |
+| **17.1** | **보고서/영수증 – 모바일 카메라 첨부 + 파일명 규칙화** | **✅ 완료** | **2026-03-06** | **카메라 촬영/갤러리, Base64 저장, 파일명 자동생성, 0011 마이그레이션** |
 
 ---
 
-## Phase 16.0 — 품질 강화 + 문서 정비 + E2E 테스트 ✅ (최신)
+## Phase 17.0 — 주문 수동 등록 – 실주소 검색 ✅ (2026-03-06)
+
+> **목적**: 주문 수동 등록 시 카카오 우편번호 서비스로 실주소를 검색하고 행정동 코드 자동 매핑
+
+### 17-1: 카카오 우편번호 서비스 연동 ✅
+- Daum Postcode v2 CDN 추가 (`t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js`)
+- API 키 불필요, 무료 사용
+- 주문 수동 등록 모달에 "주소 검색" 버튼 추가
+- 도로명/지번/건물명 검색 → 선택 시 자동 주소 채움
+
+### 17-2: 행정동 코드 자동 매핑 ✅
+- 선택 주소에서 시도/시군구/읍면동 파싱
+- `GET /api/system/address-lookup?sido=&sigungu=&dong=` 백엔드 API 호출
+- admin_regions 테이블 매칭 → admin_dong_code 자동 설정
+- 매핑 성공: 파란색 상자에 코드 + 지역명 표시
+- 매핑 실패: 경고 메시지 표시
+
+### 17-3: 행정구역 조회 API ✅
+- `GET /api/system/admin-regions?sido=` — 시도별 행정구역 목록
+- `GET /api/system/address-lookup?sido=&sigungu=&dong=` — 주소→행정동 코드 매핑
+
+### 변경 통계
+- 3 files changed, +153 insertions, -3 deletions
+- 커밋: a7f1422
+
+---
+
+## Phase 17.1 — 보고서/영수증 – 모바일 카메라 직접 첨부 + 파일명 규칙화 ✅ (2026-03-06)
+
+> **목적**: 보고서 체크리스트/영수증에서 URL 링크 대신 모바일 카메라 직접 촬영 + 파일명 자동 규칙화
+
+### 17.1-1: 프론트엔드 – 카메라/갤러리 첨부 UI ✅
+- 보고서 체크리스트 6개 항목 각각에 "촬영"/"갤러리" 버튼 추가
+  - exterior_photo (외부촬영, 필수), interior_photo (내부촬영, 필수)
+  - before_wash (세척전, 필수), after_wash (세척후, 필수)
+  - receipt (영수증, 선택), customer_confirm (고객확인, 선택)
+- `<input type="file" accept="image/*" capture="environment">` — 모바일 카메라 직접 실행
+- `handleFileAttach()` — 2MB 제한, 이미지 타입 검증, FileReader → Base64 변환
+- 미리보기 썸네일 (80x80) + X 버튼 삭제
+- 사진 첨부 시 해당 체크리스트 자동 체크
+
+### 17.1-2: 파일명 자동 규칙화 ✅
+- 클라이언트 측: `YYYYMMDD_팀코드_카테고리.확장자`
+  - 팀 코드 = `currentUser.org_code` 또는 `login_id` 폴백
+  - 카테고리 한글 매핑: EXTERIOR→외부촬영, BEFORE_WASH→세척전, RECEIPT→영수증 등
+- 서버 측 (report.ts): `generateFileName()` — org_code DB 조회 기반 팀 코드 확인
+  - 파일명 패턴: `YYYYMMDD_팀코드_주문ID_카테고리.확장자`
+- 예: `20260306_REGION_SEOUL_외부촬영.jpg`, `20260306_REGION_SEOUL_42_영수증.png`
+
+### 17.1-3: 백엔드 – 사진 업로드/저장 ✅
+- `POST /api/orders/:id/upload` — multipart/form-data 사진 업로드
+  - 2MB 제한, 이미지 타입 검증
+  - File → ArrayBuffer → Base64 Data URL 변환
+  - work_report_photos 테이블에 file_url(Base64), file_name, file_size, mime_type 저장
+- `POST /api/orders/:id/reports` — photos[] 배열로 Base64 사진 일괄 저장
+- `POST /api/orders/:id/complete` — receipt_url에 Base64 영수증 저장
+
+### 17.1-4: 영수증 첨부 UI 통합 ✅
+- 최종완료(completeOrder) 모달에 카메라/갤러리 버튼 추가
+- URL 입력 필드 제거 → 직접 촬영/선택으로 대체
+- 미리보기 + 삭제 동일 UX
+
+### 17.1-5: DB 마이그레이션 ✅
+- `0011_photo_upload.sql` — work_report_photos에 file_name, file_size, mime_type 컬럼 추가
+
+### 17.1-6: /auth/me org_code 추가 ✅
+- 로그인 세션 응답에 `org_code` 필드 포함 → 파일명 팀코드 자동 반영
+
+### 변경 통계
+- 4 files changed, +317 insertions, -34 deletions
+- 신규 파일 1개: migrations/0011_photo_upload.sql
+- 커밋: ae02022
+
+---
+
+## Phase 16.0 — 품질 강화 + 문서 정비 + E2E 테스트 ✅
 
 > **목적**: 프로덕션 안정성 확보, 문서 정합성, 에러 핸들링, 통합 테스트
 
@@ -614,6 +691,6 @@
 
 | 구분 | URL |
 |------|-----|
-| 프로덕션 | https://yb-oms.pages.dev |
+| 프로덕션 | https://dahada-oms.pages.dev |
 | 샌드박스 | https://3000-inedg4lr7hnug2y22i9nx-5185f4aa.sandbox.novita.ai |
 | D1 Database ID | 0b7aedd5-7510-44d3-8b81-d421b03fffa6 |

@@ -1,7 +1,7 @@
-# 와이비 OMS — 시스템 아키텍처 (v16.0)
+# 와이비 OMS — 시스템 아키텍처 (v17.1)
 
-> **최종 업데이트**: 2026-03-05
-> **현재 버전**: v16.0.0
+> **최종 업데이트**: 2026-03-06
+> **현재 버전**: v17.1.0
 > **프로덕션**: https://dahada-oms.pages.dev
 > **이 문서는 새 대화에서 컨텍스트 복구용 — 반드시 먼저 읽을 것**
 
@@ -13,7 +13,7 @@
 |------|------|------|
 | Runtime | Cloudflare Workers (Edge) | 10ms CPU 제한 (free) |
 | Framework | Hono v4 | TypeScript, 경량 라우팅 |
-| Database | Cloudflare D1 (SQLite) | 로컬: `--local` 모드, 41개 테이블, 10개 마이그레이션 |
+| Database | Cloudflare D1 (SQLite) | 로컬: `--local` 모드, 41개 테이블, 11개 마이그레이션 |
 | Frontend | Vanilla JS + TailwindCSS (CDN) | SPA, 23개 JS 모듈 |
 | Icons | FontAwesome 6.5 (CDN) | |
 | Charts | Chart.js 4.4 (CDN) | 대시보드 5종 차트 |
@@ -28,7 +28,7 @@
 
 ```
 /home/user/webapp/
-├── src/                          # Backend (TypeScript) — 47 파일, 8,902줄
+├── src/                          # Backend (TypeScript) — 46 파일, 8,890줄
 │   ├── index.tsx                 # Hono 앱 진입점, 라우트 마운트, SPA HTML
 │   ├── types/index.ts            # 타입 정의 v6.0 (Env, SessionUser, RoleCode, OrderStatus 등)
 │   ├── middleware/
@@ -50,7 +50,7 @@
 │   │   └── stats-service.ts      # 통계 upsert/배치 빌더
 │   └── routes/
 │       ├── auth.ts               # 로그인/로그아웃/계정잠금 (→ session-service)
-│       ├── orders/               # 주문 CRUD, 배분, 배정, 보고서, 검수
+│       ├── orders/               # 주문 CRUD, 배분, 배정, 보고서, 검수, 사진업로드
 │       │   ├── index.ts, crud.ts, distribute.ts, assign.ts, report.ts, review.ts
 │       ├── settlements/          # 정산 Run, 산출, 확정, 보고서 (→ order-lifecycle-service)
 │       │   ├── index.ts, runs.ts, calculation.ts, report.ts
@@ -67,7 +67,7 @@
 │       ├── notifications.ts      # 알림 CRUD + 설정
 │       ├── system.ts             # 시스템 관리 + 검색 + 타임라인 + 임포트/백업
 │       └── audit.ts              # 감사 로그 조회/통계
-├── public/                       # Frontend — 23 JS + 1 CSS + SW
+├── public/                       # Frontend — 24 JS + 1 CSS + SW
 │   ├── sw.js                     # Service Worker (오프라인 + 푸시 알림)
 │   ├── static/js/core/
 │   │   ├── constants.js          # OMS.STATUS (15상태), OMS.PERMISSIONS, ROLE_LABELS
@@ -87,7 +87,7 @@
 │   │   ├── settlement.js         # 정산+대사 (인쇄보고서, CSV/xlsx)
 │   │   ├── statistics.js         # 통계 + 정책관리 CRUD
 │   │   ├── hr.js                 # 인사관리 + 온보딩
-│   │   ├── my-orders.js          # 팀장 전용 (READY_DONE/DONE 플로우, 프로필, 통계)
+│   │   ├── my-orders.js          # 팀장 전용 (READY_DONE/DONE 플로우, 프로필, 통계, 카메라첨부)
 │   │   ├── signup-wizard.js      # 팀장 자가 가입 5단계 위자드
 │   │   ├── signup-admin.js       # 관리자 가입 승인/반려
 │   │   ├── notifications.js      # 알림 센터
@@ -97,8 +97,8 @@
 │   │   └── system.js             # 시스템 관리 (세션/DB/임포트/백업)
 │   └── static/css/
 │       └── mobile.css            # 모바일 반응형 (419줄)
-├── migrations/                   # D1 마이그레이션 (10개)
-│   ├── 0001_initial_schema.sql ~ 0010_ready_done_status.sql
+├── migrations/                   # D1 마이그레이션 (11개)
+│   ├── 0001_initial_schema.sql ~ 0011_photo_upload.sql
 ├── seed.sql                      # 기본 시드 데이터
 ├── seed_test_orders.sql          # 테스트 주문 데이터
 ├── tests/
@@ -216,6 +216,7 @@ orders (order_id, external_order_no, customer_name, address_text, admin_dong_cod
 order_distributions (order_id → region_org_id)
 order_assignments (order_id → team_leader_id, status)
 work_reports (report_id, order_id, version, note, receipt_url, submitted_at)
+work_report_photos (photo_id, report_id, category, file_url, file_name, file_size, mime_type, file_hash) — v17.1: file_name/size/mime 추가
 reviews (review_id, order_id, stage:REGION|HQ, result:APPROVE|REJECT, comment)
 order_status_history (from_status, to_status, actor_id, created_at)
 ```
@@ -339,7 +340,7 @@ IX 전역 상태: activePopover, activeContextMenu, activeDrawer, activeTooltip,
 
 ---
 
-## 7. API 엔드포인트 전체 맵 (~100개)
+## 7. API 엔드포인트 전체 맵 (~120개)
 
 ### 인증 (auth.ts → session-service)
 | Method | Path | 설명 |
@@ -366,8 +367,9 @@ IX 전역 상태: activePopover, activeContextMenu, activeDrawer, activeTooltip,
 | POST | /api/orders/:id/unassign | 배정 해제 |
 | POST | /api/orders/:id/ready-done | **준비완료 (v15.0)** |
 | POST | /api/orders/:id/start | 작업 시작 |
-| POST | /api/orders/:id/reports | 보고서 제출 |
-| POST | /api/orders/:id/complete | **최종완료 + 영수증 (v15.0)** |
+| POST | /api/orders/:id/upload | **사진 업로드 (multipart, v17.1)** |
+| POST | /api/orders/:id/reports | 보고서 제출 (**Base64 사진첨부 v17.1**) |
+| POST | /api/orders/:id/complete | **최종완료 + 영수증 카메라첨부 (v17.1)** |
 | POST | /api/orders/:id/review/region | 지역 1차 검수 |
 | POST | /api/orders/:id/review/hq | HQ 2차 검수 |
 
@@ -418,6 +420,8 @@ IX 전역 상태: activePopover, activeContextMenu, activeDrawer, activeTooltip,
 | POST | /api/system/snapshot/restore | 스냅샷 복원 (v14.0) |
 | POST | /api/system/push/subscribe | 푸시 알림 구독 (v14.0) |
 | POST | /api/system/push/unsubscribe | 푸시 알림 해제 (v14.0) |
+| GET | /api/system/address-lookup | **주소→행정동 코드 매핑 (v17.0)** |
+| GET | /api/system/admin-regions | **시도별 행정구역 목록 (v17.0)** |
 
 ### 알림 (notifications.ts)
 | Method | Path | 설명 |
@@ -510,13 +514,13 @@ npx wrangler d1 migrations apply dahada-production --remote  # 프로덕션 DB
 
 | 영역 | 파일 수 | 줄수 |
 |------|---------|------|
-| Backend (TypeScript) | 47 | 8,902 |
-| Frontend (JavaScript) | 23 | 10,722 |
+| Backend (TypeScript) | 46 | 8,890 |
+| Frontend (JavaScript) | 24 | 11,107 |
 | Service Worker | 1 | 143 |
 | CSS | 1 | 419 |
-| SQL (migrations + seed) | 12 | 1,112 |
+| SQL (migrations + seed) | 13 | 1,184 |
 | E2E Test (Shell) | 1 | 386 |
-| **총계** | **85** | **21,684** |
+| **총계** | **86** | **22,129** |
 
 ---
 
@@ -551,7 +555,26 @@ npx wrangler d1 migrations apply dahada-production --remote  # 프로덕션 DB
 
 ---
 
-## 12. v16.0 주요 변경사항
+## 12. v17.0~17.1 주요 변경사항
+
+### Phase 17.0: 주문 수동 등록 – 실주소 검색
+- 카카오 우편번호 서비스 (Daum Postcode v2) CDN 연동
+- 주문 등록 모달에 "주소 검색" 버튼 → 도로명/지번/건물명 검색
+- admin_dong_code 자동 매핑 (admin_regions 테이블 기반)
+- 신규 API: `GET /api/system/address-lookup`, `GET /api/system/admin-regions`
+
+### Phase 17.1: 보고서/영수증 – 모바일 카메라 첨부 + 파일명 규칙화
+- **보고서 체크리스트 6항목별** 카메라 촬영/갤러리 선택 UI
+- **파일명 자동 규칙화**: `YYYYMMDD_팀코드_카테고리.ext`
+- **Base64 Data URL** 방식 D1 저장 (2MB 제한)
+- 영수증 첨부도 동일 카메라/갤러리 UI로 통합
+- 신규 API: `POST /api/orders/:id/upload` (multipart)
+- DB 마이그레이션: `0011_photo_upload.sql` (file_name, file_size, mime_type)
+- `/auth/me` 응답에 `org_code` 필드 추가
+
+---
+
+## 13. v16.0 주요 변경사항
 
 ### 버그 수정
 - **로그아웃 API**: Cookie에서 session_id 미추출 → `getSessionCookie()` 헬퍼 추가로 쿠키 기반 세션 삭제 정상화
