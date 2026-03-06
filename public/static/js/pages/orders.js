@@ -186,11 +186,11 @@ async function showOrderDetailDrawer(orderId) {
         </div>
         <div class="bg-gray-50 rounded-lg p-3">
           <div class="text-[10px] text-gray-400 uppercase">주소</div>
-          <div class="text-sm mt-1">${o.address_text || '-'}</div>
+          <div class="text-sm mt-1">${o.address_text || '-'}${o.address_detail ? ` <span class="text-gray-500">${o.address_detail}</span>` : ''}</div>
         </div>
         <div class="bg-gray-50 rounded-lg p-3">
           <div class="text-[10px] text-gray-400 uppercase">연락처</div>
-          <div class="text-sm mt-1">${o.customer_phone || '-'}</div>
+          <div class="text-sm mt-1">${formatPhone(o.customer_phone) || '-'}</div>
         </div>
         <div class="bg-gray-50 rounded-lg p-3">
           <div class="text-[10px] text-gray-400 uppercase">지역총판</div>
@@ -392,7 +392,7 @@ async function showOrderDetail(orderId) {
         <div><label class="text-xs text-gray-500">외부주문번호</label><div class="font-mono">${o.external_order_no || '미확정'}</div></div>
         <div><label class="text-xs text-gray-500">고객명</label><div class="font-medium">${o.customer_name || '-'}</div></div>
         <div><label class="text-xs text-gray-500">연락처</label><div>${o.customer_phone || '-'}</div></div>
-        <div class="col-span-2"><label class="text-xs text-gray-500">주소</label><div>${o.address_text}</div></div>
+        <div class="col-span-2"><label class="text-xs text-gray-500">주소</label><div>${o.address_text}${o.address_detail ? ` <span class="text-gray-500">${o.address_detail}</span>` : ''}</div></div>
         <div><label class="text-xs text-gray-500">행정동코드</label><div class="font-mono text-xs">${o.admin_dong_code || '-'}</div></div>
         <div><label class="text-xs text-gray-500">금액</label><div class="font-bold text-blue-600">${formatAmount(o.base_amount)}</div></div>
         <div><label class="text-xs text-gray-500">상태</label><div>${statusBadge(o.status)}</div></div>
@@ -522,7 +522,7 @@ async function showNewOrderModal() {
 
         <input type="hidden" name="admin_dong_code" id="new-order-dong-code">
 
-        <div><label class="block text-xs text-gray-500 mb-1">금액(원) *</label><input name="base_amount" type="number" min="10000" step="1000" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="최소 10,000원"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">금액(원) *</label><input name="base_amount" type="number" min="10000" step="100" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="최소 10,000원"></div>
         <div><label class="block text-xs text-gray-500 mb-1">요청일 *</label><input name="requested_date" type="date" required value="${new Date().toISOString().split('T')[0]}" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
         <div><label class="block text-xs text-gray-500 mb-1">예약일 (선택)</label><input name="scheduled_date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
       </div>
@@ -604,6 +604,8 @@ async function submitNewOrder() {
   // 프론트엔드 검증
   if (!data.customer_name?.trim()) { showToast('고객명을 입력해주세요.', 'warning'); return; }
   if (!data.customer_phone?.trim()) { showToast('연락처를 입력해주세요.', 'warning'); return; }
+  const phoneClean = data.customer_phone.replace(/[\s-]/g, '');
+  if (!/^0\d{8,10}$/.test(phoneClean)) { showToast('올바른 전화번호 형식이 아닙니다. (예: 010-1234-5678)', 'warning'); return; }
   if (!data.address_text) { showToast('주소를 검색해주세요.', 'warning'); return; }
   if (!data.channel_id) { showToast('주문 채널을 선택해주세요.', 'warning'); return; }
 
@@ -613,7 +615,7 @@ async function submitNewOrder() {
   if (data.base_amount < 10000) { showToast('금액은 최소 10,000원 이상이어야 합니다.', 'warning'); return; }
 
   const res = await api('POST', '/orders', data);
-  if (res?._status === 201) { showToast('주문이 등록되었습니다.', 'success'); closeModal(); renderContent(); }
+  if (res?.order_id) { showToast(`주문 #${res.order_id}이(가) 등록되었습니다.`, 'success'); closeModal(); renderContent(); }
   else showToast(res?.error || res?.warning || '등록 실패', 'error');
 }
 
@@ -655,10 +657,23 @@ async function showEditOrderModal(orderId) {
         <div><label class="block text-xs text-gray-500 mb-1">메모</label><input name="memo" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.memo || ''}"></div>
         <div class="col-span-2">
           <label class="block text-xs text-gray-500 mb-1">주소</label>
-          <input name="address_text" class="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50" value="${o.address_text || ''}" readonly>
-          <p class="text-xs text-gray-400 mt-1">* 주소 변경은 신규 등록을 이용하세요</p>
+          <div class="flex gap-2">
+            <input name="address_text" id="edit-order-address" class="flex-1 border rounded-lg px-3 py-2 text-sm bg-gray-50 cursor-pointer" value="${o.address_text || ''}" readonly onclick="openEditAddressSearch()">
+            <button type="button" onclick="openEditAddressSearch()" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition whitespace-nowrap"><i class="fas fa-search mr-1"></i>주소 변경</button>
+          </div>
         </div>
-        <div><label class="block text-xs text-gray-500 mb-1">금액(원) *</label><input name="base_amount" type="number" min="10000" step="1000" required class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.base_amount || ''}"></div>
+        <div class="col-span-2">
+          <label class="block text-xs text-gray-500 mb-1">상세주소</label>
+          <input name="address_detail" id="edit-order-address-detail" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.address_detail || ''}" placeholder="동/호수 등 상세주소">
+        </div>
+        <div class="col-span-2" id="edit-address-match-result" style="display:none;">
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div class="flex items-center gap-2 mb-1"><i class="fas fa-map-marker-alt text-blue-600"></i><span class="text-xs font-semibold text-blue-700">행정동 매칭 결과</span></div>
+            <div class="text-sm text-blue-800" id="edit-address-match-text">-</div>
+          </div>
+        </div>
+        <input type="hidden" name="admin_dong_code" id="edit-order-dong-code" value="${o.admin_dong_code || ''}">
+        <div><label class="block text-xs text-gray-500 mb-1">금액(원) *</label><input name="base_amount" type="number" min="10000" step="100" required class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.base_amount || ''}"></div>
         <div><label class="block text-xs text-gray-500 mb-1">요청일</label><input name="requested_date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.requested_date || ''}"></div>
         <div><label class="block text-xs text-gray-500 mb-1">예약일</label><input name="scheduled_date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.scheduled_date || ''}"></div>
       </div>
@@ -673,15 +688,14 @@ async function submitEditOrder(orderId) {
   const data = Object.fromEntries(new FormData(form));
   delete data.order_id;
 
-  // 빈 문자열 → undefined 변환 (수정하지 않은 필드)
-  // address_text는 readonly이므로 제외
-  delete data.address_text;
-
   data.base_amount = Number(data.base_amount);
   data.channel_id = Number(data.channel_id);
   if (!data.scheduled_date) data.scheduled_date = null;
   if (!data.external_order_no) data.external_order_no = null;
   if (!data.memo) data.memo = null;
+  if (!data.address_detail) data.address_detail = null;
+  // admin_dong_code가 변경되었으면 포함
+  if (data.admin_dong_code === '') data.admin_dong_code = null;
 
   if (!data.customer_name?.trim()) { showToast('고객명을 입력해주세요.', 'warning'); return; }
   if (data.base_amount < 10000) { showToast('금액은 최소 10,000원 이상이어야 합니다.', 'warning'); return; }
@@ -689,6 +703,54 @@ async function submitEditOrder(orderId) {
   const res = await api('PATCH', `/orders/${orderId}`, data);
   if (res?.ok) { showToast('주문이 수정되었습니다.', 'success'); closeModal(); renderContent(); }
   else showToast(res?.error || '수정 실패', 'error');
+}
+
+// ─── 수정 모달용 주소 검색 ───
+function openEditAddressSearch() {
+  if (typeof daum === 'undefined' || !daum.Postcode) {
+    showToast('주소 검색 서비스를 불러오는 중입니다. 잠시 후 다시 시도해주세요.', 'warning');
+    return;
+  }
+  new daum.Postcode({
+    oncomplete: function(data) {
+      const fullAddress = data.roadAddress || data.jibunAddress || data.address;
+      const addrInput = document.getElementById('edit-order-address');
+      const detailInput = document.getElementById('edit-order-address-detail');
+      if (addrInput) {
+        addrInput.value = fullAddress;
+        addrInput.classList.remove('bg-gray-50');
+        addrInput.classList.add('bg-white');
+      }
+      if (detailInput) detailInput.focus();
+      // 행정동코드 재매핑
+      matchEditAdminDongCode(data.sido, data.sigungu, data.bname || data.bname1 || '');
+    },
+    width: '100%',
+    height: '100%',
+  }).open({ popupTitle: '와이비 OMS - 주소 변경' });
+}
+
+async function matchEditAdminDongCode(sido, sigungu, dong) {
+  const resultEl = document.getElementById('edit-address-match-result');
+  const textEl = document.getElementById('edit-address-match-text');
+  const codeInput = document.getElementById('edit-order-dong-code');
+  if (!resultEl || !textEl || !codeInput) return;
+
+  try {
+    const params = new URLSearchParams({ sido, sigungu });
+    if (dong) params.set('dong', dong);
+    const res = await api('GET', `/system/address-lookup?${params.toString()}`);
+    if (res?.regions?.length > 0) {
+      const match = res.regions[0];
+      codeInput.value = match.admin_code;
+      textEl.innerHTML = `<span class="font-mono text-xs bg-blue-100 px-1.5 py-0.5 rounded mr-2">${match.admin_code}</span><span>${match.full_name}</span>`;
+      resultEl.style.display = '';
+    } else {
+      codeInput.value = '';
+      textEl.innerHTML = `<span class="text-amber-700"><i class="fas fa-exclamation-triangle mr-1"></i>행정동 매칭 실패</span>`;
+      resultEl.style.display = '';
+    }
+  } catch (e) { codeInput.value = ''; }
 }
 
 // ─── 주문 삭제 ───
@@ -872,7 +934,7 @@ async function renderDistribute(el) {
                     <span class="text-xs text-gray-500 font-mono">#${o.order_id}</span>
                     <span class="font-medium truncate">${o.customer_name || '-'}</span>
                   </div>
-                  <div class="text-xs text-red-500 mt-0.5 truncate"><i class="fas fa-location-dot mr-1"></i>행정동 매칭 실패 · ${o.address_text || ''}</div>
+                  <div class="text-xs text-red-500 mt-0.5 truncate"><i class="fas fa-location-dot mr-1"></i>${o.admin_dong_code ? `행정동코드(${o.admin_dong_code}) 총판 매핑 없음` : '행정동 매칭 실패'} · ${o.address_text || ''}</div>
                 </div>
                 <span class="text-sm font-medium whitespace-nowrap text-gray-600">${formatAmount(o.base_amount)}</span>
                 <button onclick="event.stopPropagation();showManualDistributeModal(${o.order_id}, '${(o.customer_name||'').replace(/'/g, "\\'")}', '${(o.address_text||'').replace(/'/g, "\\'")}')" 

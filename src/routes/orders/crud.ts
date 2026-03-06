@@ -142,6 +142,11 @@ export function mountCrud(router: Hono<Env>) {
     if (!body.customer_name?.trim()) return c.json({ error: '고객명(customer_name)은 필수입니다.' }, 400);
     if (!body.address_text?.trim()) return c.json({ error: '주소(address_text)는 필수입니다.' }, 400);
     if (!body.customer_phone?.trim()) return c.json({ error: '연락처(customer_phone)는 필수입니다.' }, 400);
+    // ★ R1 고도화: 전화번호 형식 검증
+    const phoneClean = body.customer_phone.replace(/[\s-]/g, '');
+    if (!/^0\d{8,10}$/.test(phoneClean)) {
+      return c.json({ error: '올바른 전화번호 형식이 아닙니다. (예: 010-1234-5678)' }, 400);
+    }
     if (body.base_amount === undefined || body.base_amount === null || isNaN(Number(body.base_amount)) || Number(body.base_amount) < 10000) {
       return c.json({ error: '금액은 10,000원 이상의 숫자여야 합니다.' }, 400);
     }

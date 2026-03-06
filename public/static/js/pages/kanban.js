@@ -476,10 +476,26 @@ async function handleKanbanDrop(event, leaderId) {
 
   // 드래그된 카드가 이미 배정된 상태인지 확인
   const card = document.querySelector(`.kanban-card[data-order-id="${orderIds[0]}"]`);
-  const isFromAssigned = card?.dataset.status === 'ASSIGNED';
+  const currentStatus = card?.dataset.status;
   
-  if (orderIds.length === 1 && !isFromAssigned) {
-    // 단일 배정
+  if (orderIds.length === 1) {
+    if (currentStatus === 'ASSIGNED' || currentStatus === 'READY_DONE') {
+      // ★ R1 고도화: 이미 배정된 카드 → 다른 팀장으로 재배정 (unassign → assign)
+      showConfirmModal(
+        '팀장 재배정',
+        `주문 #${orderIds[0]}을(를) 다른 팀장에게 재배정하시겠습니까?`,
+        async () => {
+          const unRes = await api('POST', `/orders/${orderIds[0]}/unassign`);
+          if (!unRes?.ok) { showToast(unRes?.error || '배정 해제 실패', 'error'); return; }
+          const asRes = await api('POST', `/orders/${orderIds[0]}/assign`, { team_leader_id: leaderId });
+          if (asRes?.ok) { showToast('팀장 재배정 완료', 'success'); renderContent(); }
+          else showToast(asRes?.error || '배정 실패', 'error');
+        },
+        '재배정', 'bg-purple-500'
+      );
+      return;
+    }
+    // 미배정 → 단일 배정
     const res = await api('POST', `/orders/${orderIds[0]}/assign`, { team_leader_id: leaderId });
     if (res?.ok) {
       showToast('팀장 배정 완료', 'success');
