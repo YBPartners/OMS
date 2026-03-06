@@ -247,15 +247,21 @@ async function renderDashboardBanners() {
   const settings = await loadAdSettings();
   const enabled = settings.banner_enabled !== '0';
 
-  if (!enabled) return '';
-
-  await loadBanners('dashboard_top');
-
   let html = '';
 
   // 1) 내부 슬라이딩 배너 (대시보드 상단)
-  const bannerHtml = renderSlidingBanner('dashboard_top', { height: '180px' });
-  if (bannerHtml) html += bannerHtml;
+  if (enabled) {
+    await loadBanners('dashboard_top');
+    const bannerHtml = renderSlidingBanner('dashboard_top', { height: '180px' });
+    if (bannerHtml) {
+      html += bannerHtml;
+    } else {
+      // 배너 없을 때 → 광고문의 플레이스홀더
+      html += renderAdPlaceholder('dashboard_top', { height: '140px' });
+    }
+  } else {
+    html += renderAdPlaceholder('dashboard_top', { height: '140px' });
+  }
 
   // 2) Google AdSense (대시보드)
   const adSlot = renderAdSenseSlot(settings.adsense_slot_dashboard);
@@ -267,13 +273,19 @@ async function renderDashboardBanners() {
 // ─── 사이드바용 배너 로드 & 삽입 ───
 async function renderSidebarBanner() {
   const settings = await loadAdSettings();
-  if (settings.banner_enabled === '0') return '';
-
-  await loadBanners('sidebar_bottom');
 
   let html = '';
-  const bannerHtml = renderSlidingBanner('sidebar_bottom', { height: '120px' });
-  if (bannerHtml) html += bannerHtml;
+  if (settings.banner_enabled !== '0') {
+    await loadBanners('sidebar_bottom');
+    const bannerHtml = renderSlidingBanner('sidebar_bottom', { height: '120px' });
+    if (bannerHtml) {
+      html += bannerHtml;
+    } else {
+      html += renderAdPlaceholder('sidebar_bottom', { height: '100px' });
+    }
+  } else {
+    html += renderAdPlaceholder('sidebar_bottom', { height: '100px' });
+  }
 
   const adSlot = renderAdSenseSlot(settings.adsense_slot_sidebar);
   if (adSlot) html += adSlot;
@@ -350,4 +362,109 @@ async function loadAdSenseScript() {
   script.crossOrigin = 'anonymous';
   script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${settings.adsense_client_id}`;
   document.head.appendChild(script);
+}
+
+// ─── 광고 문의 플레이스홀더 ───
+function renderAdPlaceholder(position, options = {}) {
+  const height = options.height || '140px';
+  const posLabels = {
+    dashboard_top: '대시보드 상단',
+    sidebar_bottom: '사이드바',
+    content_between: '컨텐츠',
+    login_page: '로그인',
+  };
+  const label = posLabels[position] || '';
+  
+  return `
+    <div class="relative overflow-hidden rounded-xl group mb-6 border-2 border-dashed border-gray-200 hover:border-blue-300 transition-all cursor-pointer" 
+         style="height:${height};background:linear-gradient(135deg,#f0f9ff 0%,#e0f2fe 50%,#f0f9ff 100%)"
+         onclick="openAdInquiryModal('${position}')">
+      <div class="absolute inset-0 flex flex-col items-center justify-center text-center p-4 transition-all group-hover:scale-105">
+        <div class="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center mb-3 group-hover:bg-blue-200 transition-colors shadow-sm">
+          <i class="fas fa-rectangle-ad text-blue-500 text-xl"></i>
+        </div>
+        <p class="text-sm font-semibold text-gray-600 group-hover:text-blue-600 transition-colors">이 자리에 광고를 게재하세요</p>
+        <p class="text-xs text-gray-400 mt-1">${label} 광고 영역</p>
+        <button class="mt-3 px-4 py-1.5 bg-blue-600 text-white text-xs rounded-full font-medium opacity-0 group-hover:opacity-100 transition-all shadow-md hover:bg-blue-700 transform group-hover:translate-y-0 translate-y-2">
+          <i class="fas fa-paper-plane mr-1"></i>광고 문의하기
+        </button>
+      </div>
+      <!-- 장식 요소 -->
+      <div class="absolute top-3 right-3 opacity-30 group-hover:opacity-50 transition">
+        <i class="fas fa-bullhorn text-blue-300 text-2xl"></i>
+      </div>
+    </div>`;
+}
+
+// ─── 광고 문의 모달 ───
+function openAdInquiryModal(position) {
+  if (!currentUser) {
+    showToast('로그인 후 문의하실 수 있습니다.', 'warning');
+    return;
+  }
+
+  const posLabels = {
+    dashboard_top: '대시보드 상단 (최고 노출)',
+    sidebar_bottom: '사이드바 하단',
+    content_between: '컨텐츠 사이',
+    login_page: '로그인 페이지',
+  };
+
+  showModal(
+    '📢 광고 문의',
+    `<div class="space-y-4">
+      <div class="bg-blue-50 rounded-xl p-4 border border-blue-100">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+            <i class="fas fa-rectangle-ad text-blue-600"></i>
+          </div>
+          <div>
+            <p class="text-sm font-semibold text-blue-800">광고 게재 위치</p>
+            <p class="text-xs text-blue-600">${posLabels[position] || position}</p>
+          </div>
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">문의 내용 *</label>
+        <textarea id="ad-inq-msg" rows="4" maxlength="500"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  placeholder="광고 내용, 예산, 기간 등을 자유롭게 작성해주세요.&#10;관리자가 확인 후 연락드리겠습니다."></textarea>
+        <p class="text-xs text-gray-400 mt-1 text-right"><span id="ad-inq-charcount">0</span>/500</p>
+      </div>
+      <div class="bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
+        <p><i class="fas fa-user mr-1"></i>문의자: ${currentUser.name} (${currentUser.org_name || ''})</p>
+        <p class="mt-1"><i class="fas fa-info-circle mr-1"></i>문의 내용은 시스템 관리자에게 알림으로 전달됩니다.</p>
+      </div>
+    </div>`,
+    `<div class="flex gap-2">
+      <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">취소</button>
+      <button onclick="submitAdInquiry('${position}')" class="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm">
+        <i class="fas fa-paper-plane mr-1"></i>문의 전송
+      </button>
+    </div>`,
+    { large: false }
+  );
+
+  // 글자수 카운트
+  setTimeout(() => {
+    const ta = document.getElementById('ad-inq-msg');
+    const cnt = document.getElementById('ad-inq-charcount');
+    if (ta && cnt) {
+      ta.addEventListener('input', () => { cnt.textContent = ta.value.length; });
+    }
+  }, 100);
+}
+
+async function submitAdInquiry(position) {
+  const msg = document.getElementById('ad-inq-msg')?.value?.trim();
+  if (!msg || msg.length < 5) {
+    showToast('문의 내용을 5자 이상 입력해주세요.', 'error');
+    return;
+  }
+
+  const res = await api('POST', '/banners/public/inquiry', { position, message: msg });
+  if (res?.ok) {
+    showToast('광고 문의가 전송되었습니다! 관리자가 확인 후 연락드리겠습니다.', 'success');
+    closeModal();
+  }
 }

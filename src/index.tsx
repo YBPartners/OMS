@@ -179,7 +179,7 @@ app.route('/api/system', systemRoutes);
 app.route('/api/banners', bannerRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '22.0.0', system: '와이비 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '23.0.0', system: '와이비 OMS' }));
 
 // ─── API 404 표준화 — 존재하지 않는 API 경로에 대해 명확한 JSON 응답 ───
 app.all('/api/*', (c) => {

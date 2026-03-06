@@ -417,3 +417,24 @@
 .swipe-action-btn.reject { background: #ef4444; }
 .swipe-action-btn.assign { background: #3b82f6; }
 .swipe-action-btn i { font-size: 16px; }
+
+/* ─── 알림센터 슬라이드 패널 ─── */
+#notif-center-overlay { overscroll-behavior: contain; }
+#notif-center-panel {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.notif-center-item .line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.notif-center-item:hover .group-hover\:opacity-100 { opacity: 1; }
+
+@media (max-width: 768px) {
+  /* 모바일에서 데스크탑 헤더 숨김 */
+  .desktop-content-header { display: none !important; }
+
+  /* 알림센터 풀스크린 */
+  #notif-center-panel { max-width: 100% !important; width: 100% !important; }
+}

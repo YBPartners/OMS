@@ -181,7 +181,7 @@ function renderLayout() {
           </div>
           <div>
             <div class="font-bold text-gray-800">와이비 OMS</div>
-            <div class="text-xs text-gray-400">v14.0 · ${menuKey}</div>
+            <div class="text-xs text-gray-400">v23.0 · ${menuKey}</div>
           </div>
         </div>
       </div>
@@ -203,7 +203,6 @@ function renderLayout() {
               <span class="text-[10px] text-gray-400">${roleLabel[currentUser.roles[0]] || currentUser.roles[0]}</span>
             </div>
           </div>
-          <div class="relative">${getNotifBellHtml()}</div>
         </div>
         <div class="flex gap-2">
           <button onclick="navigateTo('my-profile')" class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-gray-500 hover:bg-gray-50 rounded-lg transition" title="비밀번호 변경">
@@ -224,17 +223,45 @@ function renderLayout() {
         <button class="header-btn" onclick="showGlobalSearchModal()" aria-label="검색">
           <i class="fas fa-search"></i>
         </button>
-        <button class="header-btn" onclick="toggleNotifDropdown()" aria-label="알림">
+        <button class="header-btn" onclick="openNotifCenter()" aria-label="알림">
           <i class="fas fa-bell"></i>
-          ${_notifUnreadCount > 0 ? `<span style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:#ef4444;border-radius:50%;border:2px solid white;"></span>` : ''}
+          <span id="notif-mobile-dot" style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:#ef4444;border-radius:50%;border:2px solid white;${_notifUnreadCount > 0 ? '' : 'display:none;'}"></span>
         </button>
       </div>
     </div>
 
     <!-- 메인 컨텐츠 -->
-    <main class="main-content flex-1 overflow-y-auto bg-gray-50">
-      <div id="content" class="p-6"></div>
+    <main class="main-content flex-1 flex flex-col overflow-hidden bg-gray-50">
+      <!-- ★ v22.0 컨텐츠 상단 툴바 (알림 벨 이동) -->
+      <div class="desktop-content-header hidden md:flex items-center justify-between px-6 py-3 border-b border-gray-100 bg-white/80 backdrop-blur-sm flex-shrink-0" style="min-height:52px">
+        <div class="flex items-center gap-3">
+          <h3 id="content-page-title" class="text-sm font-semibold text-gray-700">${pageTitle}</h3>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="openNotifCenter()" class="relative flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-100 transition group" title="알림 센터 열기 (N)">
+            <i class="fas fa-bell text-gray-500 group-hover:text-blue-600 transition text-[15px]"></i>
+            <span id="notif-header-badge" class="min-w-[20px] h-5 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1.5 ${_notifUnreadCount > 0 ? 'animate-pulse' : 'hidden'}">${_notifUnreadCount > 99 ? '99+' : _notifUnreadCount}</span>
+            ${_notifUnreadCount > 0 ? '<span class="text-xs text-red-600 font-medium">새 알림</span>' : '<span class="text-xs text-gray-400">알림</span>'}
+          </button>
+          <div class="w-px h-5 bg-gray-200"></div>
+          <button onclick="showGlobalSearchModal()" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition" title="검색 (⌘K)">
+            <i class="fas fa-search"></i>
+          </button>
+        </div>
+      </div>
+      <div class="flex-1 overflow-y-auto">
+        <div id="content" class="p-6"></div>
+      </div>
     </main>
+
+    <!-- ★ v22.0 알림 센터 슬라이드 패널 -->
+    <div id="notif-center-overlay" class="fixed inset-0 z-50 hidden">
+      <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeNotifCenter()"></div>
+      <aside id="notif-center-panel" class="absolute top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl flex flex-col transform translate-x-full transition-transform duration-300 ease-out">
+        <div id="notif-center-content"></div>
+      </aside>
+    </div>
+
 
     <!-- 바텀 네비게이션 (모바일) -->
     <nav class="bottom-nav" id="bottom-nav" style="display:none">
@@ -264,7 +291,11 @@ function updateBottomNav() {
     const menuKey = isAgency ? 'AGENCY' : (currentUser.org_type === 'TEAM' || isLeader) ? 'TEAM_LEADER' : isRegion ? 'REGION' : 'HQ';
     const menuItems = OMS.MENU_ITEMS[menuKey] || [];
     const cur = menuItems.find(m => m.id === currentPage);
-    titleEl.textContent = cur ? cur.label : '와이비 OMS';
+    const label = cur ? cur.label : '와이비 OMS';
+    titleEl.textContent = label;
+    // 데스크탑 타이틀도 갱신
+    const dtTitle = document.getElementById('content-page-title');
+    if (dtTitle) dtTitle.textContent = label;
   }
 }
 

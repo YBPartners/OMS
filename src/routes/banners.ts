@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../middleware/auth';
 import { writeAuditLog } from '../lib/audit';
+import { createNotifications } from '../services/notification-service';
 
 const banners = new Hono<Env>();
 
@@ -491,6 +492,68 @@ banners.patch('/admin/:banner_id/toggle', async (c) => {
   } catch (err: any) {
     console.error('[Banner Toggle] Error:', err.message);
     return c.json({ error: '배너 상태 변경 중 오류가 발생했습니다.' }, 500);
+  }
+});
+
+// ─── 공개 API: 광고 문의 전송 (로그인 사용자 → 슈퍼어드민 쪽지) ───
+banners.post('/public/inquiry', async (c) => {
+  try {
+    const db = c.env.DB;
+    const user = c.get('user');
+    if (!user) return c.json({ error: '로그인이 필요합니다.' }, 401);
+
+    const body = await c.req.json();
+    const { position, message } = body;
+
+    if (!message || message.trim().length < 5) {
+      return c.json({ error: '문의 내용을 5자 이상 입력해주세요.' }, 400);
+    }
+    if (message.length > 500) {
+      return c.json({ error: '문의 내용은 500자 이내로 입력해주세요.' }, 400);
+    }
+
+    // 슈퍼어드민 사용자 ID 조회
+    const admins = await db.prepare(
+      "SELECT u.user_id FROM users u JOIN user_roles ur ON u.user_id = ur.user_id JOIN roles r ON ur.role_id = r.role_id WHERE r.code = 'SUPER_ADMIN' AND u.status = 'ACTIVE'"
+    ).all();
+
+    const adminIds = (admins.results as any[]).map(a => a.user_id);
+    if (adminIds.length === 0) {
+      return c.json({ error: '관리자가 없습니다.' }, 500);
+    }
+
+    const posLabels: Record<string, string> = {
+      dashboard_top: '대시보드 상단',
+      sidebar_bottom: '사이드바 하단',
+      content_between: '컨텐츠 사이',
+      login_page: '로그인 페이지',
+    };
+
+    await createNotifications(db, adminIds, {
+      type: 'SYSTEM',
+      title: `📢 광고 문의 — ${user.name}`,
+      message: `[${posLabels[position] || '기타'} 위치] ${message.trim()}\n\n보낸 사람: ${user.name} (${user.login_id}) · ${user.org_name || ''}`,
+      link_url: '#banner-manage',
+      metadata_json: JSON.stringify({
+        inquiry_type: 'AD_INQUIRY',
+        position,
+        sender_id: user.user_id,
+        sender_name: user.name,
+        sender_org: user.org_name,
+      }),
+    });
+
+    await writeAuditLog(db, {
+      entity_type: 'BANNER', entity_id: 0,
+      action: 'AD_INQUIRY',
+      actor_id: user.user_id,
+      detail_json: JSON.stringify({ position, message: message.substring(0, 100) }),
+    });
+
+    return c.json({ ok: true, message: '광고 문의가 전송되었습니다. 관리자가 확인 후 연락드리겠습니다.' });
+  } catch (err: any) {
+    console.error('[Ad Inquiry] Error:', err.message);
+    return c.json({ error: '광고 문의 전송 중 오류가 발생했습니다.' }, 500);
   }
 });
 

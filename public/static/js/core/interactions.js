@@ -859,12 +859,19 @@ function initInteractionSystem() {
   initTooltips();
   initHoverPreview();
 
-  // ESC 키로 팝오버/컨텍스트메뉴 닫기
+  // 키보드 단축키
   document.addEventListener('keydown', (e) => {
+    // ESC 키로 팝오버/컨텍스트메뉴 닫기
     if (e.key === 'Escape') {
       closePopover();
       closeContextMenu();
       closeBatchActionBar();
+    }
+    // N키: 알림센터 토글 (입력필드 안에서는 무시)
+    if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return;
+      if (typeof openNotifCenter === 'function') openNotifCenter();
     }
   });
 }
