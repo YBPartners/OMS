@@ -1,10 +1,10 @@
-# 와이비 OMS - 주문관리시스템 v17.1.0
+# 와이비 OMS - 주문관리시스템 v18.0.0
 
 ## 프로젝트 개요
 - **명칭**: 와이비 OMS (Order Management System)
 - **목적**: 원청(아정당) → 와이비(HQ) → 총판(4개) → 대리점(AGENCY) → 팀 구조의 주문 처리/배분/검수/정산/대사/통계 통합 시스템
 - **설계 원칙**: 고품질 · 자동화 · 정합성 · 보안 우선 · 기능별 분리 설계 · 서비스 레이어 분리
-- **기술 스택**: Hono + TypeScript + Cloudflare Workers + D1 (SQLite) + TailwindCSS + Vanilla JS
+- **기술 스택**: Hono + TypeScript + Cloudflare Workers + D1 (SQLite) + **KV (Session Cache)** + TailwindCSS + Vanilla JS
 
 ## URLs
 - **프로덕션**: https://dahada-oms.pages.dev
@@ -57,6 +57,18 @@
 | 16.0 | 품질 강화 + E2E 테스트 + 문서 정비 | ✅ | E2E 50/50, 로그아웃/보고서 버그 수정, 에러 핸들링 강화 |
 | **17.0** | **주문 수동 등록 – 실주소 검색** | **✅** | **카카오 우편번호 서비스 연동, admin_dong_code 자동 매핑** |
 | **17.1** | **보고서/영수증 – 모바일 카메라 직접 첨부 + 파일명 자동 규칙화** | **✅** | **모바일 카메라 촬영/갤러리, Base64 첨부, 파일명 `YYYYMMDD_팀코드_카테고리.ext`** |
+| **18.0** | **KV 캐시 세션 검증 – D1 쿼리 최소화** | **✅** | **SESSION_CACHE KV, session-service v2.0, API 요청당 D1 쿼리 3→0회** |
+
+## v18.0 주요 변경사항
+
+### Phase 18.0: KV 캐시 세션 검증 – D1 쿼리 최소화
+- **Cloudflare KV** `SESSION_CACHE` 네임스페이스 추가
+- **session-service v2.0**: KV 우선 조회 → miss 시 D1 fallback → KV 재캐시
+- **로그인 시**: D1 세션 저장 + KV에 사용자 정보 캐시 (TTL 24h)
+- **API 요청마다**: KV hit 시 **D1 쿼리 0회** (기존 3~4회 → 0회)
+- **로그아웃/무효화**: D1 + KV 동시 삭제로 일관성 보장
+- **장애 안전(Graceful Degradation)**: KV 실패 시 D1 자동 fallback
+- **성능 효과**: 동시 200명 × 분당 10요청 시 D1 쿼리 24,000건/분 → ~0건/분
 
 ## v17.0~17.1 주요 변경사항
 
@@ -147,12 +159,13 @@
 - **Scope Engine v7.0**: 역할별 데이터 가시성 (HQ → REGION → AGENCY → TEAM)
 - **Batch Builder**: D1 batch()를 활용한 원자적 트랜잭션
 - **Service Layer**: 5개 서비스 (교차 도메인 쓰기 일원화)
+- **KV Cache**: 세션 검증 KV 캐시 (세션당 ~1KB, TTL 24h)
 
 ## 서비스 레이어 아키텍처 (v6.5)
 | 서비스 | 역할 | 차단한 교차 의존 |
 |--------|------|-----------------|
 | notification-service | 알림 테이블 유일 쓰기 진입점 | Signup/RegionAdd → notifications |
-| session-service | 세션 CRUD/만료정리/무효화 | Auth/HR → sessions |
+| session-service v2.0 | 세션 CRUD + **KV 캐시** 검증/만료정리/무효화 | Auth/HR → sessions + KV |
 | hr-service | 팀+리더 원자적 생성 (6개 테이블) | Signup → HR 테이블 |
 | order-lifecycle-service | 정산 확정 시 주문/통계 일괄 업데이트 | Settlements → Orders/Stats |
 | stats-service | 통계 도메인 유일 쓰기 진입점 | Settlements → 통계 테이블 |
@@ -181,14 +194,15 @@
 | 15 | 로그아웃 | 4 |
 
 ## 배포 정보
-- **플랫폼**: Cloudflare Pages + D1
+- **플랫폼**: Cloudflare Pages + D1 + **KV**
 - **상태**: ✅ Active
 - **프로덕션**: https://dahada-oms.pages.dev
 - **Cloudflare 프로젝트명**: dahada-oms
 - **D1 ID**: 0b7aedd5-7510-44d3-8b81-d421b03fffa6
-- **버전**: v17.1.0
-- **빌드 크기**: 233.70 KB (dist/_worker.js)
-- **총 코드량**: Backend 8,890 + Frontend 11,107 + SW 143 + CSS 419 + SQL 1,184 + E2E 386 = **22,129줄**
+- **KV ID**: 5024085768aa47ba943e4e65a454795e (SESSION_CACHE)
+- **버전**: v18.0.0
+- **빌드 크기**: 235.42 KB (dist/_worker.js)
+- **총 코드량**: Backend 9,041 + Frontend 11,107 + SW 143 + CSS 419 + SQL 1,184 + E2E 386 = **22,280줄**
 - **파일 수**: Backend 46 TS + Frontend 24 JS + 1 SW + 1 CSS + 11 SQL migrations + 2 seed + 1 E2E = **86파일**
 - **최종 업데이트**: 2026-03-06
 

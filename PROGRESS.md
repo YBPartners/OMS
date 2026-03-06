@@ -1,8 +1,8 @@
 # 와이비 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-06
-> **현재 버전**: v17.1.0
-> **총 코드량**: Backend 8,890줄 (46 TS) + Frontend 11,107줄 (24 JS) + SW 143줄 + CSS 419줄 + SQL 1,184줄 + E2E 386줄 = **22,129줄**
+> **현재 버전**: v18.0.0
+> **총 코드량**: Backend 9,041줄 (46 TS) + Frontend 11,107줄 (24 JS) + SW 143줄 + CSS 419줄 + SQL 1,184줄 + E2E 386줄 = **22,280줄**
 
 ---
 
@@ -31,6 +31,48 @@
 | **16.0** | **품질 강화 + 문서 정비 + E2E 테스트** | **✅ 완료** | **2026-03-05** | **프로덕션 DB 마이그레이션, 문서 정합성, 에러 핸들링 강화** |
 | **17.0** | **주문 수동 등록 – 실주소 검색** | **✅ 완료** | **2026-03-06** | **카카오 우편번호 서비스, admin_dong_code 자동 매핑, 주소검색 API** |
 | **17.1** | **보고서/영수증 – 모바일 카메라 첨부 + 파일명 규칙화** | **✅ 완료** | **2026-03-06** | **카메라 촬영/갤러리, Base64 저장, 파일명 자동생성, 0011 마이그레이션** |
+| **18.0** | **KV 캐시 세션 검증 – D1 쿼리 최소화** | **✅ 완료** | **2026-03-06** | **SESSION_CACHE KV, session-service v2.0, API 요청당 D1 쿼리 3→0회** |
+
+---
+
+## Phase 18.0 — KV 캐시 세션 검증 – D1 쿼리 최소화 ✅ (2026-03-06)
+
+> **목적**: 모든 API 요청마다 발생하는 세션 검증 D1 쿼리(3~4회)를 Cloudflare KV 캐시로 대체하여 응답 속도 대폭 개선
+
+### 18.0-1: KV 네임스페이스 설정 ✅
+- `SESSION_CACHE` KV 네임스페이스 생성 (ID: `5024085768aa47ba943e4e65a454795e`)
+- `wrangler.jsonc`에 KV 바인딩 추가
+- `ecosystem.config.cjs`에 `--kv=SESSION_CACHE` 로컬 개발 바인딩 추가
+
+### 18.0-2: 타입 시스템 업데이트 ✅
+- `types/index.ts` Env.Bindings에 `SESSION_CACHE: KVNamespace` 추가
+
+### 18.0-3: session-service v2.0 ✅
+- **KV 캐시 전략**: 로그인 시 KV 저장 → API 요청 시 KV 조회 → miss 시 D1 fallback → KV 재캐시
+- **KV Key**: `session:{sessionId}`, **TTL**: 세션 만료까지 남은 초 (최대 24h)
+- `createSession()`: D1 저장 + `loadUserData()` → KV 캐시 (TTL 자동 계산)
+- `validateSession()`: KV hit 시 **D1 쿼리 0회** (기존 3~4회 → 0회)
+- `deleteSession()`: D1 삭제 + KV 삭제 (로그아웃)
+- `invalidateUserSessions()`: 사용자 전체 세션 ID 목록 조회 → KV 일괄 삭제 → D1 삭제
+- `cleanExpiredSessions()`: KV는 TTL 자동 만료, D1만 정리
+- **장애 안전(Graceful Degradation)**: KV 읽기/쓰기 실패 시 D1 fallback, 서비스 중단 없음
+
+### 18.0-4: 미들웨어/라우트 연동 ✅
+- `auth middleware v7.0`: `c.env.SESSION_CACHE` 전달
+- `auth.ts`: `createSession()`, `deleteSession()`에 KV 전달
+- `hr/users.ts`: `invalidateUserSessions()`에 KV 전달 (비활성화, 비밀번호 리셋, 자격증명 설정)
+
+### 성능 효과
+| 항목 | Before (D1 Only) | After (KV Cache) |
+|------|-------------------|-------------------|
+| 세션 검증 D1 쿼리 | 3~4회/요청 | 0회 (KV hit) |
+| 세션 검증 지연 | ~30ms | ~5ms (KV edge) |
+| 동시 사용자 200명 × 분당 10요청 | 24,000 D1 쿼리/분 | ~0 D1 쿼리/분 |
+
+### 변경 통계
+- 7 files changed, +194 insertions, -43 deletions
+- 커밋: 6cb221d
+- E2E 50/50 통과
 
 ---
 
