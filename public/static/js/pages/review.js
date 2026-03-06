@@ -258,9 +258,11 @@ async function batchReview(stage, result) {
           <textarea id="batch-review-comment" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="반려 사유를 입력하세요"></textarea>
         </div>
       </div>`;
+    const batchBtnId = '_batch_reject_' + Date.now();
     showModal(`일괄 ${stageLabel} 반려 — ${ids.length}건`, content, `
       <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
-      <button onclick="executeBatchReview('${stage}','${result}')" class="px-5 py-2 bg-red-600 text-white rounded-lg text-sm font-medium">반려 확정</button>`);
+      <button id="${batchBtnId}" class="px-5 py-2 bg-red-600 text-white rounded-lg text-sm font-medium">반려 확정</button>`);
+    document.getElementById(batchBtnId)?.addEventListener('click', () => executeBatchReview(stage, result));
     return;
   }
 
@@ -297,8 +299,10 @@ async function executeBatchReview(stage, result) {
 
 // ─── 검수 모달 (승인/반려) ───
 function showReviewModal(orderId, stage, result) {
+  console.log('[DEBUG] showReviewModal called:', { orderId, stage, result });
   const isApprove = result === 'APPROVE';
   const title = `${stage === 'hq' ? 'HQ' : '지역'} 검수 — ${isApprove ? '승인' : '반려'}`;
+  const submitBtnId = '_review_submit_' + Date.now();
   const content = `
     <div class="space-y-4">
       <div class="p-4 rounded-lg ${isApprove ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}">
@@ -326,21 +330,38 @@ function showReviewModal(orderId, stage, result) {
     </div>`;
   const actions = `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
-    <button onclick="submitReview(${orderId}, '${stage}', '${result}')" class="px-5 py-2 ${isApprove ? 'bg-green-600' : 'bg-red-600'} text-white rounded-lg text-sm font-medium">${isApprove ? '승인 확정' : '반려 확정'}</button>`;
+    <button id="${submitBtnId}" class="px-5 py-2 ${isApprove ? 'bg-green-600' : 'bg-red-600'} text-white rounded-lg text-sm font-medium">${isApprove ? '승인 확정' : '반려 확정'}</button>`;
   showModal(title, content, actions);
+
+  // addEventListener 방식으로 바인딩 (inline onclick 대신 더 안정적)
+  const submitBtn = document.getElementById(submitBtnId);
+  if (submitBtn) {
+    submitBtn.addEventListener('click', () => submitReview(orderId, stage, result));
+  } else {
+    console.error('[DEBUG] submitBtn not found:', submitBtnId);
+  }
 }
 
 async function submitReview(orderId, stage, result) {
-  const comment = document.getElementById('review-comment')?.value || '';
-  const reasonChecks = document.querySelectorAll('.reject-reason-check:checked');
-  const reason_codes = Array.from(reasonChecks).map(el => el.value);
+  console.log('[DEBUG] submitReview called:', { orderId, stage, result });
+  try {
+    const comment = document.getElementById('review-comment')?.value || '';
+    const reasonChecks = document.querySelectorAll('.reject-reason-check:checked');
+    const reason_codes = Array.from(reasonChecks).map(el => el.value);
 
-  const res = await api('POST', `/orders/${orderId}/review/${stage}`, { result, comment, reason_codes });
-  if (res?.ok) {
-    showToast(`${result === 'APPROVE' ? '승인' : '반려'} 완료`, result === 'APPROVE' ? 'success' : 'warning');
-    closeModal();
-    renderContent();
-  } else {
-    showToast(res?.error || '검수 실패', 'error');
+    console.log('[DEBUG] submitReview API call:', { path: `/orders/${orderId}/review/${stage}`, body: { result, comment, reason_codes } });
+    const res = await api('POST', `/orders/${orderId}/review/${stage}`, { result, comment, reason_codes });
+    console.log('[DEBUG] submitReview API response:', res);
+    if (res?.ok) {
+      showToast(`${result === 'APPROVE' ? '승인' : '반려'} 완료`, result === 'APPROVE' ? 'success' : 'warning');
+      closeModal();
+      renderContent();
+    } else {
+      console.error('[DEBUG] submitReview failed:', res);
+      showToast(res?.error || '검수 실패', 'error');
+    }
+  } catch (err) {
+    console.error('[DEBUG] submitReview exception:', err);
+    showToast('검수 처리 중 오류 발생: ' + (err.message || err), 'error');
   }
 }
