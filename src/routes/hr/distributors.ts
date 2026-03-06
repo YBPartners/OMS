@@ -12,6 +12,12 @@ import { normalizePagination } from '../../lib/validators';
 
 export function mountDistributors(router: Hono<Env>) {
 
+  // ═══════════════════════════════════════════════════════════════
+  // 조직 트리 (전체 계층 구조) — ★ :org_id 와일드카드보다 먼저 등록해야 함
+  // ═══════════════════════════════════════════════════════════════
+  router.get('/distributors/tree', async (c) => orgTreeHandler(c));
+  router.get('/org-tree', async (c) => orgTreeHandler(c));
+
   // ─── 총판(REGION) 목록 (하위 팀 수·인원수·관할구역 수 포함) ───
   router.get('/distributors', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
@@ -429,19 +435,9 @@ export function mountDistributors(router: Hono<Env>) {
   });
 
   // ═══════════════════════════════════════════════════════════════
-  // 조직 트리 (전체 계층 구조)
+  // 조직 트리 핸들러 함수 (위에서 라우트 등록)
   // ═══════════════════════════════════════════════════════════════
-
-  // ─── 조직 트리 조회 (HQ > REGION > TEAM) ───
-  // ★ 별칭 경로: 프론트엔드 호환 (distributors/tree → org-tree)
-  router.get('/distributors/tree', async (c) => {
-    // org-tree와 동일 핸들러로 포워딩
-    const url = new URL(c.req.url);
-    url.pathname = url.pathname.replace('/distributors/tree', '/org-tree');
-    return c.redirect(url.pathname + url.search, 307);
-  });
-
-  router.get('/org-tree', async (c) => {
+  async function orgTreeHandler(c: any) {
     const authErr = requireAuth(c);
     if (authErr) return authErr;
 
@@ -518,5 +514,5 @@ export function mountDistributors(router: Hono<Env>) {
       regions: regionOrgs.results,
       teams: teamOrgs.results,
     }});
-  });
+  }
 }
