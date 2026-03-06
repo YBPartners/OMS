@@ -7,48 +7,83 @@
 // ─── 전역 변수 (지연 로딩 모듈에서 재정의됨) ───
 if (typeof _notifUnreadCount === 'undefined') var _notifUnreadCount = 0;
 
+// ─── 지연 로딩 함수 안전 가드 ───
+// 이 함수들은 lazy-loaded 모듈(system.js, notifications.js)에서 재정의됨
+// 모듈 로딩 전 호출 시 에러 방지를 위해 기본 구현 제공
+if (typeof showGlobalSearchModal === 'undefined') {
+  var showGlobalSearchModal = function() {
+    // system.js가 아직 로드되지 않은 경우 → 로드 후 실행
+    if (typeof loadPageScripts === 'function') {
+      loadPageScripts('system-admin').then(() => {
+        if (typeof showGlobalSearchModal === 'function') showGlobalSearchModal();
+      }).catch(() => { if (typeof showToast === 'function') showToast('검색 모듈을 불러오는 중입니다. 잠시 후 다시 시도해주세요.', 'warning'); });
+    }
+  };
+}
+if (typeof openNotifCenter === 'undefined') {
+  var openNotifCenter = function() {
+    if (typeof loadPageScripts === 'function') {
+      loadPageScripts('notifications').then(() => {
+        if (typeof openNotifCenter === 'function') openNotifCenter();
+      }).catch(() => { if (typeof showToast === 'function') showToast('알림 모듈을 불러오는 중입니다.', 'warning'); });
+    }
+  };
+}
+if (typeof closeNotifCenter === 'undefined') {
+  var closeNotifCenter = function() { /* noop until notifications.js loads */ };
+}
+
 // ─── 모바일 감지 ───
 function isMobile() { return window.innerWidth <= 768; }
 function isSmallMobile() { return window.innerWidth <= 375; }
 
 // ─── 메인 렌더 ───
 function render() {
-  const app = document.getElementById('app');
-  if (!currentUser) {
-    if (typeof stopNotificationPolling === 'function') stopNotificationPolling();
-    if (window.location.hash === '#signup') { 
-      if (typeof loadPageScripts === 'function') loadPageScripts('signup').then(() => { openSignupWizard(); });
-      else { app.innerHTML = ''; openSignupWizard(); }
-      return; 
+  try {
+    const app = document.getElementById('app');
+    if (!currentUser) {
+      if (typeof stopNotificationPolling === 'function') stopNotificationPolling();
+      if (window.location.hash === '#signup') { 
+        if (typeof loadPageScripts === 'function') loadPageScripts('signup').then(() => { openSignupWizard(); });
+        else { app.innerHTML = ''; openSignupWizard(); }
+        return; 
+      }
+      app.innerHTML = renderLoginPage();
+      // 로그인 페이지 배너 삽입
+      if (typeof renderLoginBanner === 'function') {
+        renderLoginBanner().then(html => {
+          const slot = document.getElementById('login-banner-slot');
+          if (slot && html) { slot.innerHTML = html; startBannerAutoplay('login_page'); }
+        }).catch(() => {});
+      }
+      return;
     }
-    app.innerHTML = renderLoginPage();
-    // 로그인 페이지 배너 삽입
-    if (typeof renderLoginBanner === 'function') {
-      renderLoginBanner().then(html => {
-        const slot = document.getElementById('login-banner-slot');
-        if (slot && html) { slot.innerHTML = html; startBannerAutoplay('login_page'); }
-      }).catch(() => {});
+    
+    const hash = window.location.hash.replace('#', '');
+    if (hash === 'signup') { window.location.hash = ''; }
+    if (hash && hash !== 'signup' && hasPermission(hash)) { currentPage = hash; }
+    else if (!hasPermission(currentPage)) {
+      const isAgency = currentUser.is_agency === true;
+      const isLeader = currentUser.roles.includes('TEAM_LEADER');
+      currentPage = isAgency ? 'agency-dashboard' : 'dashboard';
     }
-    return;
-  }
-  
-  const hash = window.location.hash.replace('#', '');
-  if (hash === 'signup') { window.location.hash = ''; }
-  if (hash && hash !== 'signup' && hasPermission(hash)) { currentPage = hash; }
-  else if (!hasPermission(currentPage)) {
-    const isAgency = currentUser.is_agency === true;
-    const isLeader = currentUser.roles.includes('TEAM_LEADER');
-    currentPage = isAgency ? 'agency-dashboard' : 'dashboard';
-  }
-  
-  app.innerHTML = renderLayout();
-  renderContent();
-  if (typeof startNotificationPolling === 'function') startNotificationPolling();
-  if (typeof loadAdSenseScript === 'function') loadAdSenseScript();
-  if (isMobile()) {
-    initPullToRefresh();
-    initMobileHeaderScroll();
-    initMobileHaptics();
+    
+    app.innerHTML = renderLayout();
+    renderContent();
+    try { if (typeof startNotificationPolling === 'function') startNotificationPolling(); } catch(e) { console.warn('[render] startNotificationPolling error:', e); }
+    try { if (typeof loadAdSenseScript === 'function') loadAdSenseScript(); } catch(e) { console.warn('[render] loadAdSenseScript error:', e); }
+    if (isMobile()) {
+      try { initPullToRefresh(); } catch(e) { console.warn('[render] initPullToRefresh error:', e); }
+      try { initMobileHeaderScroll(); } catch(e) {}
+      try { initMobileHaptics(); } catch(e) {}
+    }
+  } catch (err) {
+    console.error('[CRITICAL render() error]', err);
+    // 렌더링 실패 시에도 최소한의 UI 표시
+    const app = document.getElementById('app');
+    if (app && currentUser) {
+      app.innerHTML = `<div class="flex items-center justify-center h-screen"><div class="text-center"><p class="text-lg text-red-600 mb-4">화면 로드 중 오류가 발생했습니다.</p><p class="text-sm text-gray-500 mb-4">${err.message}</p><button onclick="location.reload()" class="px-6 py-2 bg-blue-600 text-white rounded-lg">새로고침</button></div></div>`;
+    }
   }
 }
 
@@ -488,7 +523,13 @@ function initMobileHaptics() {
 
 // ─── 초기화 ───
 (async () => {
-  _prevMobile = isMobile();
-  await checkAuth();
-  render();
+  try {
+    _prevMobile = isMobile();
+    await checkAuth();
+    render();
+  } catch (err) {
+    console.error('[CRITICAL init error]', err);
+    const app = document.getElementById('app');
+    if (app) app.innerHTML = '<div class="flex items-center justify-center h-screen"><div class="text-center"><p class="text-lg text-red-600 mb-4">시스템 초기화 오류</p><button onclick="location.reload()" class="px-6 py-2 bg-blue-600 text-white rounded-lg">새로고침</button></div></div>';
+  }
 })();

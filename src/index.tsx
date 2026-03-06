@@ -79,11 +79,11 @@ app.use('*', async (c, next) => {
   if (!c.req.path.startsWith('/api/')) {
     c.res.headers.set('Content-Security-Policy', [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://t1.daumcdn.net https://pagead2.googlesyndication.com https://adservice.google.com https://www.googletagservices.com https://static.cloudflareinsights.com https://www.googletagmanager.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://t1.daumcdn.net https://pagead2.googlesyndication.com https://adservice.google.com https://www.googletagservices.com https://static.cloudflareinsights.com https://www.googletagmanager.com https://ep1.adtrafficquality.google https://ep2.adtrafficquality.google",
       "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
       "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com",
       "img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com https://pagead2.googlesyndication.com https://*.google.com https://*.googleusercontent.com",
-      "connect-src 'self' https://pagead2.googlesyndication.com https://adservice.google.com https://cloudflareinsights.com https://static.cloudflareinsights.com https://www.google-analytics.com",
+      "connect-src 'self' https://pagead2.googlesyndication.com https://adservice.google.com https://cloudflareinsights.com https://static.cloudflareinsights.com https://www.google-analytics.com https://ep1.adtrafficquality.google https://ep2.adtrafficquality.google",
       "frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com https://www.google.com",
       "object-src 'none'",
       "base-uri 'self'",
@@ -289,7 +289,7 @@ app.get('*', async (c) => {
 });
 
 function getIndexHtml(adsenseAccount: string = ''): string {
-  const V = '26';
+  const V = '27';
   return `<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -343,17 +343,27 @@ function getIndexHtml(adsenseAccount: string = ''): string {
 <body class="bg-gray-50 min-h-screen">
   <div id="app"></div>
   
-  <!-- SW 강제 갱신: 이전 yb-oms 캐시 정리 -->
+  <!-- SW 강제 갱신: 모든 이전 캐시 정리 + SW 재등록 -->
   <script>
   (async()=>{
-    if('serviceWorker' in navigator){
-      const regs=await navigator.serviceWorker.getRegistrations();
-      for(const r of regs){r.update();}
-    }
-    if('caches' in window){
-      const keys=await caches.keys();
-      for(const k of keys){if(k.startsWith('yb-oms'))await caches.delete(k);}
-    }
+    try{
+      // 1) 모든 이전 서비스워커 해제 + 강제 업데이트
+      if('serviceWorker' in navigator){
+        const regs=await navigator.serviceWorker.getRegistrations();
+        for(const r of regs){
+          await r.unregister();
+        }
+      }
+      // 2) 모든 캐시 삭제 (yb-oms, airflow-oms 구버전 모두)
+      if('caches' in window){
+        const keys=await caches.keys();
+        for(const k of keys){await caches.delete(k);}
+      }
+      // 3) 새 서비스워커 등록
+      if('serviceWorker' in navigator){
+        navigator.serviceWorker.register('/sw.js',{scope:'/'});
+      }
+    }catch(e){console.warn('SW cleanup error:',e);}
   })();
   </script>
   

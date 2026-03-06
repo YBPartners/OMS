@@ -11,15 +11,20 @@ let currentPage = 'dashboard';
 
 // ─── 로그인 ───
 async function login(loginId, password) {
-  const res = await api('POST', '/auth/login', { login_id: loginId, password });
-  if (res?._status === 200) {
-    currentUser = res.user;
-    setSessionId(res.session_id);
-    if (typeof startGlobalNotifPolling === 'function') startGlobalNotifPolling();
-    if (typeof preloadCriticalPages === 'function') preloadCriticalPages();
-    render();
-  } else {
-    showToast(res?.error || '로그인 실패', 'error');
+  try {
+    const res = await api('POST', '/auth/login', { login_id: loginId, password });
+    if (res?._status === 200) {
+      currentUser = res.user;
+      setSessionId(res.session_id);
+      try { if (typeof startGlobalNotifPolling === 'function') startGlobalNotifPolling(); } catch(e) { console.warn('[login] notif polling error:', e); }
+      try { if (typeof preloadCriticalPages === 'function') preloadCriticalPages(); } catch(e) { console.warn('[login] preload error:', e); }
+      render();
+    } else {
+      showToast(res?.error || '로그인 실패', 'error');
+    }
+  } catch (err) {
+    console.error('[CRITICAL login() error]', err);
+    showToast('로그인 처리 중 오류가 발생했습니다. 페이지를 새로고침해 주세요.', 'error');
   }
 }
 
