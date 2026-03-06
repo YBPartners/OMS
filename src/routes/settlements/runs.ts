@@ -159,4 +159,126 @@ export function mountRuns(router: Hono<Env>) {
     const result = await db.prepare(query).bind(...params).all();
     return c.json({ ledger: result.results });
   });
+
+  // ─── 정산 지급완료 (SETTLEMENT_CONFIRMED → PAID) ───
+  router.post('/runs/:run_id/pay', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const runId = Number(c.req.param('run_id'));
+    if (isNaN(runId)) return c.json({ error: '유효하지 않은 Run ID입니다.' }, 400);
+
+    const run = await db.prepare('SELECT * FROM settlement_runs WHERE run_id = ?').bind(runId).first() as any;
+    if (!run) return c.json({ error: '정산 Run을 찾을 수 없습니다.' }, 404);
+    if (run.status !== 'CONFIRMED') {
+      return c.json({ error: '확정(CONFIRMED) 상태에서만 지급 가능합니다. 현재: ' + run.status }, 400);
+    }
+
+    // 옵션: payment_note, payment_date
+    let body: any = {};
+    try { body = await c.req.json(); } catch { /* optional body */ }
+    const paymentNote = body.payment_note || '';
+    const paymentDate = body.payment_date || new Date().toISOString().split('T')[0];
+
+    // CONFIRMED 상태인 정산 항목 조회
+    const confirmedSettlements = await db.prepare(`
+      SELECT s.settlement_id, s.order_id, s.team_leader_id, s.region_org_id, s.payable_amount
+      FROM settlements s
+      WHERE s.run_id = ? AND s.status = 'CONFIRMED'
+    `).bind(runId).all();
+
+    if (confirmedSettlements.results.length === 0) {
+      return c.json({ error: '지급 대상 정산 항목이 없습니다.' }, 400);
+    }
+
+    const items = confirmedSettlements.results as any[];
+    let paidCount = 0;
+    const errors: { order_id: number; error: string }[] = [];
+
+    // 주문 현재 상태 일괄 조회
+    const orderIds = items.map((s: any) => s.order_id);
+    const orderStatuses = await db.prepare(`
+      SELECT order_id, status FROM orders WHERE order_id IN (${orderIds.map(() => '?').join(',')})
+    `).bind(...orderIds).all();
+
+    const statusMap = new Map<number, string>();
+    for (const os of orderStatuses.results as any[]) {
+      statusMap.set(os.order_id, os.status);
+    }
+
+    // 배치 빌드
+    const stmts: D1PreparedStatement[] = [];
+
+    for (const item of items) {
+      const currentStatus = statusMap.get(item.order_id);
+      if (currentStatus !== 'SETTLEMENT_CONFIRMED') {
+        errors.push({ order_id: item.order_id, error: `주문 상태가 ${currentStatus} (SETTLEMENT_CONFIRMED 필요)` });
+        continue;
+      }
+
+      // 1. 정산 → PAID
+      stmts.push(db.prepare(
+        `UPDATE settlements SET status = 'PAID', confirmed_at = datetime('now') WHERE settlement_id = ?`
+      ).bind(item.settlement_id));
+
+      // 2. 주문 → PAID
+      stmts.push(db.prepare(
+        `UPDATE orders SET status = 'PAID', updated_at = datetime('now') WHERE order_id = ? AND status = 'SETTLEMENT_CONFIRMED'`
+      ).bind(item.order_id));
+
+      // 3. 배정 → PAID
+      stmts.push(db.prepare(
+        `UPDATE order_assignments SET status = 'PAID', updated_at = datetime('now') WHERE order_id = ? AND status = 'SETTLEMENT_CONFIRMED'`
+      ).bind(item.order_id));
+
+      // 4. 상태 이력
+      stmts.push(db.prepare(
+        `INSERT INTO order_status_history (order_id, from_status, to_status, actor_id, note) VALUES (?, 'SETTLEMENT_CONFIRMED', 'PAID', ?, ?)`
+      ).bind(item.order_id, user.user_id, paymentNote || `지급완료 run_id:${runId} date:${paymentDate}`));
+
+      // 5. 팀장 원장 — paid 관련 컬럼 업데이트
+      stmts.push(db.prepare(
+        `INSERT INTO team_leader_ledger_daily (date, team_leader_id, paid_amount_sum, paid_count, updated_at)
+         VALUES (?, ?, ?, 1, datetime('now'))
+         ON CONFLICT(date, team_leader_id) DO UPDATE SET
+           paid_amount_sum = paid_amount_sum + ?,
+           paid_count = paid_count + 1,
+           updated_at = datetime('now')`
+      ).bind(paymentDate, item.team_leader_id, item.payable_amount, item.payable_amount));
+
+      paidCount++;
+    }
+
+    if (paidCount > 0) {
+      // Run 상태 업데이트
+      stmts.push(db.prepare(
+        `UPDATE settlement_runs SET status = 'PAID', updated_at = datetime('now') WHERE run_id = ?`
+      ).bind(runId));
+
+      // 배치 실행
+      await db.batch(stmts);
+    }
+
+    // 감사 로그
+    await writeAuditLog(db, {
+      entity_type: 'SETTLEMENT_RUN', entity_id: runId,
+      action: 'SETTLEMENT.PAID' as any,
+      actor_id: user.user_id,
+      detail_json: JSON.stringify({
+        paid_count: paidCount, errors: errors.length,
+        total_payable: items.filter((_: any, i: number) => i < paidCount).reduce((s: number, it: any) => s + it.payable_amount, 0),
+        payment_date: paymentDate, payment_note: paymentNote,
+      }),
+    });
+
+    return c.json({
+      ok: paidCount > 0,
+      run_id: runId,
+      paid_count: paidCount,
+      payment_date: paymentDate,
+      ...(errors.length > 0 ? { warnings: `${errors.length}건 지급 실패`, errors } : {}),
+    });
+  });
 }
