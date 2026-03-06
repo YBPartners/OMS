@@ -106,6 +106,7 @@ async function showSignupDetail(requestId) {
         <div><span class="text-gray-500">팀명:</span> ${r.team_name}</div>
         <div><span class="text-gray-500">로그인 ID:</span> <span class="font-mono">${r.login_id}</span></div>
         <div><span class="text-gray-500">전화번호:</span> ${r.phone}</div>
+        <div><span class="text-gray-500">이메일:</span> ${r.email || '<span class="text-gray-400">미입력</span>'}</div>
         <div><span class="text-gray-500">총판:</span> ${r.distributor_name} (${r.distributor_code})</div>
         <div><span class="text-gray-500">신청일:</span> ${(r.created_at || '').replace('T', ' ').slice(0,16)}</div>
         ${r.commission_mode ? `<div><span class="text-gray-500">수수료:</span> ${r.commission_mode === 'PERCENT' ? r.commission_value + '%' : r.commission_value?.toLocaleString() + '원'}</div>` : ''}

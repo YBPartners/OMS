@@ -15,6 +15,7 @@ export interface CreateTeamWithLeaderParams {
   passwordHash: string;
   name: string;
   phone: string;
+  email?: string;
   regionIds: number[];
   commissionMode?: string | null;
   commissionValue?: number | null;
@@ -59,11 +60,11 @@ export async function createTeamWithLeader(
     'INSERT OR IGNORE INTO team_distributor_mappings (team_org_id, distributor_org_id) VALUES (?, ?)'
   ).bind(newOrgId, params.distributorOrgId).run();
 
-  // 3. 사용자 생성
+  // 3. 사용자 생성 (email 포함)
   const userResult = await db.prepare(`
-    INSERT INTO users (org_id, login_id, password_hash, name, phone, status, phone_verified, joined_at)
-    VALUES (?, ?, ?, ?, ?, 'ACTIVE', 1, datetime('now'))
-  `).bind(newOrgId, params.loginId, params.passwordHash, params.name, params.phone).run();
+    INSERT INTO users (org_id, login_id, password_hash, name, phone, email, email_verified, status, phone_verified, joined_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, datetime('now'))
+  `).bind(newOrgId, params.loginId, params.passwordHash, params.name, params.phone, params.email || null, params.email ? 1 : 0).run();
   const newUserId = userResult.meta.last_row_id as number;
 
   // 4. TEAM_LEADER 역할 부여

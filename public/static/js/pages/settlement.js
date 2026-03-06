@@ -63,6 +63,7 @@ async function renderSettlement(el) {
                 <td class="px-4 py-3 text-center" onclick="event.stopPropagation()">
                   <div class="flex gap-1 justify-center">
                     <button onclick="viewRunDetail(${r.run_id})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200" data-tooltip="상세"><i class="fas fa-eye"></i></button>
+                    ${r.status !== 'DRAFT' && currentUser?.roles?.includes('TEAM_LEADER') ? `<button onclick="showTeamInvoice(${r.run_id}, ${currentUser.user_id})" class="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs hover:bg-amber-200" data-tooltip="내 계산서"><i class="fas fa-file-invoice-dollar mr-1"></i>계산서</button>` : ''}
                     ${r.status === 'DRAFT' && canEdit('policy') ? `<button onclick="calculateRun(${r.run_id})" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200" data-tooltip="산출"><i class="fas fa-calculator mr-1"></i>산출</button>` : ''}
                     ${r.status === 'CALCULATED' && canEdit('policy') ? `<button onclick="confirmRun(${r.run_id})" class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200" data-tooltip="확정"><i class="fas fa-check mr-1"></i>확정</button>` : ''}
                   </div>
@@ -96,7 +97,9 @@ function showRunContextMenu(event, run) {
 
   items.push(
     { divider: true },
+    { icon: 'fa-file-invoice-dollar', label: '전체 계산서 인쇄', badge: `${r.total_count || ''}건`, badgeColor: 'bg-amber-100 text-amber-700', action: () => printAllInvoices(r.run_id) },
     { icon: 'fa-print', label: '보고서 인쇄', action: () => printSettlementReport(r.run_id) },
+    { icon: 'fa-envelope', label: '정산서 이메일 발송', action: () => sendSettlementEmail(r.run_id) },
     { icon: 'fa-file-csv', label: 'CSV 내보내기', action: () => exportSettlementCSV(r.run_id) },
     { icon: 'fa-file-excel', label: '엑셀 내보내기', action: () => exportSettlementExcel(r.run_id) },
     { divider: true },
@@ -230,10 +233,12 @@ async function viewRunDetail(runId) {
                     <span class="text-xs text-gray-500 ml-2">${g.region}</span>
                   </div>
                 </div>
-                <div class="flex items-center gap-6 text-sm">
+                <div class="flex items-center gap-3 text-sm">
                   <span>${g.items.length}건</span>
                   <span class="text-red-600">수수료 ${formatAmount(g.totalComm)}</span>
                   <span class="font-bold text-green-600">${formatAmount(g.totalPay)}</span>
+                  <button onclick="event.stopPropagation();closeModal();showTeamInvoice(${runId}, ${id})" class="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs hover:bg-amber-200 transition" title="계산서 보기"><i class="fas fa-file-invoice-dollar mr-1"></i>계산서</button>
+                  <button onclick="event.stopPropagation();closeModal();printTeamInvoice(${runId}, ${id})" class="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200" title="인쇄"><i class="fas fa-print"></i></button>
                   <i class="fas fa-chevron-down text-gray-400 text-xs ix-expand-icon transition-transform"></i>
                 </div>
               </div>
@@ -286,7 +291,10 @@ async function viewRunDetail(runId) {
         </div>
       </div>
     </div>`;
-  showModal(`정산 상세 — Run #${runId}`, content, '', { xlarge: true });
+  showModal(`정산 상세 — Run #${runId}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>
+    <button onclick="closeModal();printAllInvoices(${runId})" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700"><i class="fas fa-print mr-1"></i>전체 계산서 인쇄</button>
+  `, { xlarge: true });
 }
 
 // ─── 확장 토글 ───
@@ -636,6 +644,30 @@ ${grouped.map(g => `
   else showToast('팝업이 차단되었습니다. 팝업을 허용해주세요.', 'warning');
 }
 
+// ════════ 정산서 이메일 발송 ════════
+async function sendSettlementEmail(runId) {
+  showConfirmModal(
+    '정산서 이메일 발송',
+    `정산 Run #${runId}의 정산서를 각 팀장의 등록 이메일로 발송하시겠습니까?<br><br>
+    <small class="text-gray-500"><i class="fas fa-info-circle mr-1"></i>이메일이 등록되지 않은 팀장에게는 발송되지 않습니다.</small>`,
+    async () => {
+      showToast('이메일 발송 중...', 'info');
+      const res = await api('POST', `/settlements/runs/${runId}/send-email`);
+      if (res?.ok) {
+        let msg = res.message;
+        if (res.failed > 0) {
+          const failedNames = res.details.filter(d => !d.ok).map(d => `${d.name}(${d.error})`).join(', ');
+          msg += `\n실패: ${failedNames}`;
+        }
+        showToast(msg, res.failed > 0 ? 'warning' : 'success');
+      } else {
+        showToast(res?.error || '이메일 발송 실패', 'error');
+      }
+    },
+    '발송', 'bg-blue-600'
+  );
+}
+
 // ════════ 정산 CSV 내보내기 ════════
 async function exportSettlementCSV(runId) {
   showToast('CSV 생성 중...', 'info');
@@ -756,6 +788,406 @@ ${st.leaders.map(l => `<div class="section">${l.name} — ${l.count}건</div>
 
   const w = window.open('', '_blank', 'width=900,height=700');
   if (w) { w.document.write(html); w.document.close(); }
+}
+
+// ════════ 딜러(팀장)별 계산서(Invoice) ════════
+
+// 개별 팀장 계산서 모달
+async function showTeamInvoice(runId, teamLeaderId) {
+  showToast('계산서 조회 중...', 'info');
+  const res = await api('GET', `/settlements/runs/${runId}/invoice/${teamLeaderId}`);
+  if (!res?.invoice) return showToast(res?.error || '계산서 조회 실패', 'error');
+
+  const inv = res.invoice;
+  const fmt = n => Number(n).toLocaleString('ko-KR') + '원';
+  const c = inv.calculation;
+
+  const content = `
+    <div class="space-y-5 text-sm">
+      <!-- 계산서 헤더 -->
+      <div class="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-5 border border-amber-200">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="text-lg font-bold text-gray-800"><i class="fas fa-file-invoice-dollar mr-2 text-amber-600"></i>정산 계산서</div>
+            <div class="text-xs text-gray-500 mt-1">Invoice No. <span class="font-mono">${inv.invoiceNo}</span></div>
+          </div>
+          <div class="text-right text-xs text-gray-500">
+            <div>발행일: ${inv.issueDate}</div>
+            <div>${inv.periodLabel} | ${inv.periodStart} ~ ${inv.periodEnd}</div>
+            <div class="mt-1"><span class="status-badge ${inv.runStatus === 'CONFIRMED' ? 'bg-green-100 text-green-700' : inv.runStatus === 'CALCULATED' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}">${inv.runStatus}</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 수신인 정보 -->
+      <div class="bg-white rounded-xl p-4 border border-gray-200">
+        <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">수신인</h4>
+        <div class="grid grid-cols-3 gap-4">
+          <div><span class="text-xs text-gray-400">성명</span><div class="font-bold">${inv.recipient.name}</div></div>
+          <div><span class="text-xs text-gray-400">소속</span><div>${inv.recipient.orgName}${inv.recipient.parentOrgName ? ` <span class="text-gray-400">(${inv.recipient.parentOrgName})</span>` : ''}</div></div>
+          <div><span class="text-xs text-gray-400">연락처</span><div>${inv.recipient.phone || '-'}</div></div>
+        </div>
+      </div>
+
+      <!-- ★ 산출 절차 (핵심) -->
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-gray-50 px-4 py-3 border-b">
+          <h4 class="font-bold text-gray-700"><i class="fas fa-calculator mr-2 text-blue-500"></i>산출 절차</h4>
+        </div>
+        <div class="divide-y">
+          <!-- ① 주문 집계 -->
+          <div class="px-4 py-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center text-xs font-bold text-blue-700">①</span>
+                <span class="font-semibold">${c.step1_orderSummary.label}</span>
+              </div>
+              <div class="text-right">
+                <span class="text-gray-500 mr-3">${c.step1_orderSummary.totalCount}건</span>
+                <span class="font-bold text-blue-600">${fmt(c.step1_orderSummary.totalBaseAmount)}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ② 수수료 적용 -->
+          <div class="px-4 py-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-7 h-7 bg-red-100 rounded-full flex items-center justify-center text-xs font-bold text-red-700">②</span>
+                <span class="font-semibold">${c.step2_commission.label}</span>
+                <span class="text-xs px-2 py-0.5 bg-red-50 text-red-600 rounded-full">${inv.commissionPolicy.label}</span>
+              </div>
+              <div class="text-right">
+                <span class="font-bold text-red-600">- ${fmt(c.step2_commission.totalCommission)}</span>
+              </div>
+            </div>
+            <div class="ml-9 mt-1 text-xs text-gray-400">적용시점: ${inv.commissionPolicy.effectiveFrom}</div>
+          </div>
+
+          <!-- ③ 공제항목 -->
+          <div class="px-4 py-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-7 h-7 bg-orange-100 rounded-full flex items-center justify-center text-xs font-bold text-orange-700">③</span>
+                <span class="font-semibold">${c.step3_deductions.label}</span>
+              </div>
+              <div class="text-right">
+                ${c.step3_deductions.totalDeductions > 0
+                  ? `<span class="font-bold text-orange-600">- ${fmt(c.step3_deductions.totalDeductions)}</span>`
+                  : '<span class="text-gray-400">없음</span>'}
+              </div>
+            </div>
+            ${c.step3_deductions.items.length > 0 ? `
+            <div class="ml-9 mt-2 space-y-1">
+              ${c.step3_deductions.items.map(d => `
+                <div class="flex justify-between text-xs">
+                  <span class="text-gray-600">${d.label || d.type}</span>
+                  <span class="text-orange-600">- ${fmt(d.amount)}</span>
+                </div>
+              `).join('')}
+            </div>` : ''}
+          </div>
+
+          <!-- ④ 최종 지급액 -->
+          <div class="px-4 py-4 bg-green-50">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-7 h-7 bg-green-600 rounded-full flex items-center justify-center text-xs font-bold text-white">④</span>
+                <span class="font-bold text-lg">${c.step4_netPayable.label}</span>
+              </div>
+              <div class="text-right">
+                <div class="text-2xl font-bold text-green-700">${fmt(c.step4_netPayable.netPayable)}</div>
+                ${c.step4_netPayable.deductions > 0 ? `<div class="text-xs text-gray-500">${fmt(c.step4_netPayable.grossPayable)} - 공제 ${fmt(c.step4_netPayable.deductions)}</div>` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 일자별 소계 -->
+      ${inv.dailySummary.length > 1 ? `
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-gray-50 px-4 py-3 border-b"><h4 class="font-bold text-gray-700"><i class="fas fa-calendar-alt mr-2 text-purple-500"></i>일자별 소계</h4></div>
+        <table class="w-full text-xs">
+          <thead class="bg-gray-50 text-gray-500"><tr>
+            <th class="px-4 py-2 text-left">일자</th><th class="px-4 py-2 text-right">건수</th>
+            <th class="px-4 py-2 text-right">기본금액</th><th class="px-4 py-2 text-right">수수료</th>
+            <th class="px-4 py-2 text-right">지급액</th>
+          </tr></thead>
+          <tbody class="divide-y">${inv.dailySummary.map(d => `
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-2">${d.date}</td><td class="px-4 py-2 text-right">${d.count}건</td>
+              <td class="px-4 py-2 text-right">${fmt(d.base)}</td>
+              <td class="px-4 py-2 text-right text-red-600">${fmt(d.commission)}</td>
+              <td class="px-4 py-2 text-right font-bold text-green-600">${fmt(d.payable)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : ''}
+
+      <!-- 상세 내역 (축소 가능) -->
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-gray-50 px-4 py-3 border-b cursor-pointer flex justify-between items-center" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.fa-chevron-down')?.classList.toggle('rotate-180')">
+          <h4 class="font-bold text-gray-700"><i class="fas fa-list mr-2 text-gray-500"></i>상세 내역 (${inv.items.length}건)</h4>
+          <i class="fas fa-chevron-down text-gray-400 text-xs transition-transform"></i>
+        </div>
+        <div class="max-h-64 overflow-y-auto">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-50 sticky top-0 text-gray-500"><tr>
+              <th class="px-3 py-2 text-center">#</th><th class="px-3 py-2 text-left">주문번호</th>
+              <th class="px-3 py-2 text-left">고객</th><th class="px-3 py-2 text-left">서비스</th>
+              <th class="px-3 py-2 text-left">일자</th><th class="px-3 py-2 text-right">금액</th>
+              <th class="px-3 py-2 text-right">수수료</th><th class="px-3 py-2 text-right">지급액</th>
+            </tr></thead>
+            <tbody class="divide-y">${inv.items.map(i => `
+              <tr class="hover:bg-gray-50">
+                <td class="px-3 py-2 text-center text-gray-400">${i.seq}</td>
+                <td class="px-3 py-2 font-mono">${i.externalOrderNo || '#' + i.orderId}</td>
+                <td class="px-3 py-2">${i.customerName || '-'}</td>
+                <td class="px-3 py-2">${i.serviceType || '-'}</td>
+                <td class="px-3 py-2">${i.requestedDate || '-'}</td>
+                <td class="px-3 py-2 text-right">${fmt(i.baseAmount)}</td>
+                <td class="px-3 py-2 text-right text-red-600">${fmt(i.commissionAmount)}</td>
+                <td class="px-3 py-2 text-right font-bold text-green-600">${fmt(i.payableAmount)}</td>
+              </tr>`).join('')}
+              <tr class="bg-gray-100 font-bold">
+                <td colspan="5" class="px-3 py-2">합계 (${inv.totals.count}건)</td>
+                <td class="px-3 py-2 text-right">${fmt(inv.totals.baseAmount)}</td>
+                <td class="px-3 py-2 text-right text-red-600">${fmt(inv.totals.commission)}</td>
+                <td class="px-3 py-2 text-right text-green-700">${fmt(inv.totals.netPayable)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+
+  showModal(`계산서 — ${inv.recipient.name}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>
+    <button onclick="closeModal();printTeamInvoice(${runId}, ${teamLeaderId})" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700"><i class="fas fa-print mr-1"></i>인쇄 / PDF 저장</button>
+  `, { xlarge: true });
+}
+
+// 인쇄용 계산서 HTML (산출 절차대로)
+async function printTeamInvoice(runId, teamLeaderId) {
+  showToast('계산서 생성 중...', 'info');
+  const res = await api('GET', `/settlements/runs/${runId}/invoice/${teamLeaderId}`);
+  if (!res?.invoice) return showToast(res?.error || '계산서 생성 실패', 'error');
+
+  const inv = res.invoice;
+  const fmt = n => Number(n).toLocaleString('ko-KR') + '원';
+  const c = inv.calculation;
+
+  const html = buildInvoicePrintHTML(inv, fmt, c);
+
+  const w = window.open('', '_blank', 'width=900,height=900');
+  if (w) { w.document.write(html); w.document.close(); }
+  else showToast('팝업이 차단되었습니다. 팝업을 허용해주세요.', 'warning');
+}
+
+// Run 내 전체 팀장 계산서 일괄 인쇄
+async function printAllInvoices(runId) {
+  showToast('전체 계산서 생성 중...', 'info');
+  const detailRes = await api('GET', `/settlements/runs/${runId}/details`);
+  if (!detailRes?.settlements) return showToast('데이터 조회 실패', 'error');
+
+  // 고유 팀장 목록 추출
+  const leaderIds = [...new Set(detailRes.settlements.map(s => s.team_leader_id))];
+  if (leaderIds.length === 0) return showToast('정산 내역이 없습니다.', 'warning');
+
+  // 각 팀장별 인보이스 조회
+  const invoices = [];
+  for (const lid of leaderIds) {
+    const r = await api('GET', `/settlements/runs/${runId}/invoice/${lid}`);
+    if (r?.invoice) invoices.push(r.invoice);
+  }
+
+  if (invoices.length === 0) return showToast('생성 가능한 계산서가 없습니다.', 'warning');
+
+  const fmt = n => Number(n).toLocaleString('ko-KR') + '원';
+
+  // 전체를 하나의 HTML로 (page-break 포함)
+  const pages = invoices.map((inv, idx) => {
+    const c = inv.calculation;
+    return buildInvoicePageHTML(inv, fmt, c, idx < invoices.length - 1);
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8">
+<title>전체 계산서 — Run #${runId}</title>
+<style>
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .no-print { display: none; } .page-break { page-break-after: always; } }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Pretendard', -apple-system, 'Malgun Gothic', sans-serif; font-size: 11px; color: #333; }
+  .no-print { text-align: center; padding: 16px; background: #f3f4f6; border-bottom: 1px solid #ddd; }
+  .no-print button { padding: 8px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; margin: 0 4px; }
+  .no-print .btn-print { background: #d97706; color: white; }
+  .no-print .btn-close { background: #6b7280; color: white; }
+  .inv-page { padding: 24px 32px; max-width: 800px; margin: 0 auto; }
+  .inv-header { text-align: center; margin-bottom: 16px; }
+  .inv-header h1 { font-size: 18px; margin-bottom: 2px; }
+  .inv-header .inv-no { font-size: 10px; color: #888; }
+  .inv-meta { display: flex; justify-content: space-between; margin-bottom: 16px; font-size: 11px; }
+  .inv-meta .box { border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 14px; width: 48%; }
+  .inv-meta .box .title { font-size: 10px; color: #999; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
+  .inv-meta .box .row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+  .inv-meta .box .row .label { color: #888; }
+  /* 산출 절차 */
+  .calc-steps { border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; margin-bottom: 14px; }
+  .calc-steps .step-header { background: #f3f4f6; padding: 8px 12px; font-weight: 700; font-size: 12px; border-bottom: 1px solid #e5e7eb; }
+  .calc-step { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #f3f4f6; }
+  .calc-step:last-child { border-bottom: none; }
+  .calc-step .step-num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; margin-right: 8px; }
+  .step-blue { background: #dbeafe; color: #1d4ed8; }
+  .step-red { background: #fee2e2; color: #dc2626; }
+  .step-orange { background: #ffedd5; color: #ea580c; }
+  .step-green { background: #16a34a; color: white; }
+  .calc-final { background: #f0fdf4; padding: 10px 12px; }
+  .calc-final .amount { font-size: 18px; font-weight: 700; color: #15803d; }
+  .text-right { text-align: right; }
+  .text-red { color: #dc2626; } .text-green { color: #16a34a; } .text-blue { color: #2563eb; }
+  .font-bold { font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 12px; }
+  th { background: #f3f4f6; padding: 5px 6px; text-align: left; font-weight: 600; border-bottom: 2px solid #d1d5db; }
+  td { padding: 4px 6px; border-bottom: 1px solid #e5e7eb; }
+  .subtotal-row { background: #f9fafb; font-weight: 700; }
+  .inv-footer { text-align: center; color: #aaa; font-size: 9px; margin-top: 16px; padding-top: 10px; border-top: 1px solid #ddd; }
+  .daily-table { margin-bottom: 14px; }
+  .daily-table th, .daily-table td { font-size: 10px; }
+  .policy-tag { display: inline-block; padding: 2px 8px; background: #fef2f2; color: #dc2626; border-radius: 10px; font-size: 9px; margin-left: 4px; }
+</style></head><body>
+<div class="no-print">
+  <button class="btn-print" onclick="window.print()">🖨️ 전체 인쇄 (${invoices.length}명)</button>
+  <button class="btn-close" onclick="window.close()">닫기</button>
+  <div style="margin-top:8px;font-size:12px;color:#666">💡 인쇄 대화상자에서 "PDF로 저장"을 선택하면 PDF로 저장됩니다.</div>
+</div>
+${pages}
+</body></html>`;
+
+  const w = window.open('', '_blank', 'width=900,height=900');
+  if (w) { w.document.write(html); w.document.close(); }
+  else showToast('팝업이 차단되었습니다.', 'warning');
+}
+
+// 단일 인보이스 인쇄 HTML 빌드
+function buildInvoicePrintHTML(inv, fmt, c) {
+  return `<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8">
+<title>계산서 — ${inv.invoiceNo}</title>
+<style>
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .no-print { display: none; } }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Pretendard', -apple-system, 'Malgun Gothic', sans-serif; font-size: 11px; color: #333; padding: 24px 32px; max-width: 800px; margin: 0 auto; }
+  .no-print { text-align: center; margin-bottom: 16px; }
+  .no-print button { padding: 8px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; margin: 0 4px; }
+  .no-print .btn-print { background: #d97706; color: white; }
+  .no-print .btn-close { background: #6b7280; color: white; }
+  .inv-header { text-align: center; margin-bottom: 16px; }
+  .inv-header h1 { font-size: 18px; margin-bottom: 2px; }
+  .inv-header .inv-no { font-size: 10px; color: #888; }
+  .inv-meta { display: flex; justify-content: space-between; margin-bottom: 16px; font-size: 11px; }
+  .inv-meta .box { border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 14px; width: 48%; }
+  .inv-meta .box .title { font-size: 10px; color: #999; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
+  .inv-meta .box .row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+  .inv-meta .box .row .label { color: #888; }
+  .calc-steps { border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; margin-bottom: 14px; }
+  .calc-steps .step-header { background: #f3f4f6; padding: 8px 12px; font-weight: 700; font-size: 12px; border-bottom: 1px solid #e5e7eb; }
+  .calc-step { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #f3f4f6; }
+  .calc-step:last-child { border-bottom: none; }
+  .calc-step .step-num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; margin-right: 8px; }
+  .step-blue { background: #dbeafe; color: #1d4ed8; }
+  .step-red { background: #fee2e2; color: #dc2626; }
+  .step-orange { background: #ffedd5; color: #ea580c; }
+  .step-green { background: #16a34a; color: white; }
+  .calc-final { background: #f0fdf4; padding: 10px 12px; }
+  .calc-final .amount { font-size: 18px; font-weight: 700; color: #15803d; }
+  .text-right { text-align: right; }
+  .text-red { color: #dc2626; } .text-green { color: #16a34a; } .text-blue { color: #2563eb; }
+  .font-bold { font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 12px; }
+  th { background: #f3f4f6; padding: 5px 6px; text-align: left; font-weight: 600; border-bottom: 2px solid #d1d5db; }
+  td { padding: 4px 6px; border-bottom: 1px solid #e5e7eb; }
+  .subtotal-row { background: #f9fafb; font-weight: 700; }
+  .inv-footer { text-align: center; color: #aaa; font-size: 9px; margin-top: 16px; padding-top: 10px; border-top: 1px solid #ddd; }
+  .daily-table { margin-bottom: 14px; }
+  .policy-tag { display: inline-block; padding: 2px 8px; background: #fef2f2; color: #dc2626; border-radius: 10px; font-size: 9px; margin-left: 4px; }
+</style></head><body>
+<div class="no-print">
+  <button class="btn-print" onclick="window.print()">🖨️ 인쇄 / PDF 저장</button>
+  <button class="btn-close" onclick="window.close()">닫기</button>
+  <div style="margin-top:8px;font-size:12px;color:#666">💡 인쇄 대화상자에서 "PDF로 저장"을 선택하면 PDF로 저장됩니다.</div>
+</div>
+${buildInvoicePageHTML(inv, fmt, c, false)}
+</body></html>`;
+}
+
+// 인쇄용 계산서 본문 (page-break 포함)
+function buildInvoicePageHTML(inv, fmt, c, hasPageBreak) {
+  return `
+<div class="inv-page${hasPageBreak ? ' page-break' : ''}">
+  <div class="inv-header">
+    <h1>정 산 계 산 서</h1>
+    <div class="inv-no">${inv.invoiceNo} | ${inv.periodLabel} | ${inv.periodStart} ~ ${inv.periodEnd}</div>
+  </div>
+
+  <div class="inv-meta">
+    <div class="box">
+      <div class="title">발행처 (와이비 OMS)</div>
+      <div class="row"><span class="label">발행일</span><span>${inv.issueDate}</span></div>
+      <div class="row"><span class="label">정산 Run</span><span>#${inv.runId} (${inv.runStatus})</span></div>
+    </div>
+    <div class="box">
+      <div class="title">수신인</div>
+      <div class="row"><span class="label">성명</span><span class="font-bold">${inv.recipient.name}</span></div>
+      <div class="row"><span class="label">소속</span><span>${inv.recipient.orgName}</span></div>
+      <div class="row"><span class="label">연락처</span><span>${inv.recipient.phone || '-'}</span></div>
+      ${inv.recipient.email ? `<div class="row"><span class="label">이메일</span><span>${inv.recipient.email}</span></div>` : ''}
+    </div>
+  </div>
+
+  <!-- 산출 절차 -->
+  <div class="calc-steps">
+    <div class="step-header">산출 절차</div>
+    <div class="calc-step">
+      <div><span class="step-num step-blue">①</span><span class="font-bold">${c.step1_orderSummary.label}</span></div>
+      <div class="text-right"><span style="color:#888;margin-right:8px">${c.step1_orderSummary.totalCount}건</span><span class="font-bold text-blue">${fmt(c.step1_orderSummary.totalBaseAmount)}</span></div>
+    </div>
+    <div class="calc-step">
+      <div><span class="step-num step-red">②</span><span class="font-bold">${c.step2_commission.label}</span><span class="policy-tag">${inv.commissionPolicy.label}</span></div>
+      <div class="text-right"><span class="font-bold text-red">- ${fmt(c.step2_commission.totalCommission)}</span></div>
+    </div>
+    <div class="calc-step">
+      <div><span class="step-num step-orange">③</span><span class="font-bold">${c.step3_deductions.label}</span></div>
+      <div class="text-right">${c.step3_deductions.totalDeductions > 0 ? `<span class="font-bold" style="color:#ea580c">- ${fmt(c.step3_deductions.totalDeductions)}</span>` : '<span style="color:#aaa">없음</span>'}</div>
+    </div>
+    <div class="calc-step calc-final">
+      <div><span class="step-num step-green">④</span><span class="font-bold" style="font-size:13px">${c.step4_netPayable.label}</span></div>
+      <div class="text-right"><span class="amount">${fmt(c.step4_netPayable.netPayable)}</span></div>
+    </div>
+  </div>
+
+  ${inv.dailySummary.length > 1 ? `
+  <div style="font-size:11px;font-weight:700;margin-bottom:6px">일자별 소계</div>
+  <table class="daily-table">
+    <thead><tr><th>일자</th><th class="text-right">건수</th><th class="text-right">기본금액</th><th class="text-right">수수료</th><th class="text-right">지급액</th></tr></thead>
+    <tbody>${inv.dailySummary.map(d => `
+      <tr><td>${d.date}</td><td class="text-right">${d.count}건</td><td class="text-right">${fmt(d.base)}</td><td class="text-right text-red">${fmt(d.commission)}</td><td class="text-right font-bold text-green">${fmt(d.payable)}</td></tr>
+    `).join('')}</tbody>
+  </table>` : ''}
+
+  <div style="font-size:11px;font-weight:700;margin-bottom:6px">상세 내역</div>
+  <table>
+    <thead><tr><th>#</th><th>주문번호</th><th>고객</th><th>서비스</th><th>일자</th><th class="text-right">금액</th><th class="text-right">수수료</th><th class="text-right">지급액</th></tr></thead>
+    <tbody>
+      ${inv.items.map(i => `
+      <tr><td>${i.seq}</td><td>${i.externalOrderNo || '#' + i.orderId}</td><td>${i.customerName || '-'}</td><td>${i.serviceType || '-'}</td><td>${i.requestedDate || '-'}</td>
+      <td class="text-right">${fmt(i.baseAmount)}</td><td class="text-right text-red">${fmt(i.commissionAmount)}</td><td class="text-right font-bold text-green">${fmt(i.payableAmount)}</td></tr>`).join('')}
+      <tr class="subtotal-row"><td colspan="5">합계 (${inv.totals.count}건)</td><td class="text-right">${fmt(inv.totals.baseAmount)}</td><td class="text-right text-red">${fmt(inv.totals.commission)}</td><td class="text-right font-bold text-green">${fmt(inv.totals.netPayable)}</td></tr>
+    </tbody>
+  </table>
+
+  <div class="inv-footer">와이비 OMS | 본 계산서는 자동 생성되었습니다 | 발행일: ${inv.issueDate}</div>
+</div>`;
 }
 
 // ════════ 정산 엑셀 내보내기 ════════

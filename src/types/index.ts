@@ -38,6 +38,7 @@ export interface Env {
   Bindings: {
     DB: D1Database;
     SESSION_CACHE: KVNamespace;
+    RESEND_API_KEY?: string;
   };
   Variables: {
     user: SessionUser | null;

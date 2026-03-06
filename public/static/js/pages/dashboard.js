@@ -175,6 +175,21 @@ async function renderDashboard(el) {
         ` : ''}
       </div>
 
+      ${!isTeam ? `
+      <!-- 지역 히트맵 -->
+      <div class="bg-white rounded-xl p-6 border border-gray-100 mb-8">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold"><i class="fas fa-map mr-2 text-teal-500"></i>지역별 주문 현황 히트맵</h3>
+          <div class="flex items-center gap-2 text-xs text-gray-400">
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded" style="background:#dbeafe"></span>적음</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded" style="background:#3b82f6"></span>보통</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded" style="background:#1e3a8a"></span>많음</span>
+          </div>
+        </div>
+        <div id="region-heatmap" class="flex items-center justify-center" style="min-height:320px;"></div>
+      </div>
+      ` : ''}
+
       ${(dashRes.recent_issues && dashRes.recent_issues.length > 0) ? `
       <div class="bg-white rounded-xl p-6 border border-gray-100">
         <h3 class="text-lg font-semibold mb-4">
@@ -200,6 +215,11 @@ async function renderDashboard(el) {
 
   // ─── Chart.js 렌더링 ───
   _renderDashCharts(funnelRes.funnel || [], dashRes.region_summary || []);
+
+  // ─── 히트맵 렌더링 (HQ/REGION만) ───
+  if (!isTeam) {
+    _renderRegionHeatmap(dashRes.region_summary || []);
+  }
 
   // ─── v14.0: 매출 추이 + 정산 현황 (HQ/REGION만; TEAM/AGENCY는 자기 퍼널로 충분) ───
   if (currentUser && !isTeam && (currentUser.org_type === 'HQ' || currentUser.org_type === 'REGION')) {
@@ -943,4 +963,121 @@ function startGlobalNotifPolling() {
 }
 function stopGlobalNotifPolling() {
   if (_globalNotifTimer) { clearInterval(_globalNotifTimer); _globalNotifTimer = null; }
+}
+
+// ════════ 지역 히트맵 SVG 렌더링 ════════
+function _renderRegionHeatmap(regionSummary) {
+  const el = document.getElementById('region-heatmap');
+  if (!el) return;
+
+  // 지역법인 코드 → region_name 매핑 (대시보드 region_summary에서)
+  const regionData = {};
+  (regionSummary || []).forEach(r => {
+    const total = (r.active_orders || 0) + (r.pending_review || 0) + (r.ready_for_settlement || 0) + (r.settled || 0);
+    regionData[r.region_name] = { total, ...r };
+  });
+
+  // 한국 광역시/도 SVG 경로 (간이 버전)
+  const regions = [
+    { id: 'seoul', name: '서울', cx: 148, cy: 122, r: 16, match: '서울' },
+    { id: 'gyeonggi', name: '경기', cx: 155, cy: 100, r: 30, match: '경기', isRing: true },
+    { id: 'incheon', name: '인천', cx: 118, cy: 112, r: 14, match: '인천' },
+    { id: 'gangwon', name: '강원', cx: 220, cy: 80, r: 28, match: '강원' },
+    { id: 'chungbuk', name: '충북', cx: 195, cy: 155, r: 22, match: '충북' },
+    { id: 'chungnam', name: '충남', cx: 130, cy: 175, r: 24, match: '충남' },
+    { id: 'sejong', name: '세종', cx: 160, cy: 165, r: 10, match: '세종' },
+    { id: 'daejeon', name: '대전', cx: 162, cy: 185, r: 12, match: '대전' },
+    { id: 'jeonbuk', name: '전북', cx: 125, cy: 220, r: 22, match: '전북' },
+    { id: 'jeonnam', name: '전남', cx: 110, cy: 275, r: 26, match: '전남' },
+    { id: 'gwangju', name: '광주', cx: 110, cy: 250, r: 12, match: '광주' },
+    { id: 'gyeongbuk', name: '경북', cx: 240, cy: 180, r: 28, match: '경북' },
+    { id: 'daegu', name: '대구', cx: 230, cy: 210, r: 13, match: '대구' },
+    { id: 'gyeongnam', name: '경남', cx: 210, cy: 260, r: 26, match: '경남' },
+    { id: 'ulsan', name: '울산', cx: 265, cy: 230, r: 13, match: '울산' },
+    { id: 'busan', name: '부산', cx: 250, cy: 265, r: 15, match: '부산' },
+    { id: 'jeju', name: '제주', cx: 115, cy: 345, r: 20, match: '제주' },
+  ];
+
+  // 지역법인이 관할하는 광역시/도 매핑
+  const orgToRegions = {};
+  for (const [rName, rData] of Object.entries(regionData)) {
+    regions.forEach(reg => {
+      if (rName.includes(reg.match)) {
+        orgToRegions[reg.id] = { orgName: rName, data: rData };
+      }
+    });
+  }
+
+  // 최대값 계산 (히트맵 색상 스케일)
+  const maxTotal = Math.max(...Object.values(regionData).map(d => d.total), 1);
+
+  // 색상 함수
+  function getHeatColor(value) {
+    if (value === 0) return '#f3f4f6'; // gray-100
+    const ratio = Math.min(value / maxTotal, 1);
+    if (ratio < 0.25) return '#dbeafe'; // blue-100
+    if (ratio < 0.5) return '#93c5fd';  // blue-300
+    if (ratio < 0.75) return '#3b82f6'; // blue-500
+    return '#1e3a8a';                    // blue-900
+  }
+
+  function getTextColor(value) {
+    if (value === 0) return '#9ca3af';
+    const ratio = Math.min(value / maxTotal, 1);
+    return ratio >= 0.5 ? '#ffffff' : '#1e3a8a';
+  }
+
+  let svgContent = `<svg viewBox="40 30 270 340" width="100%" style="max-width:420px;max-height:360px" xmlns="http://www.w3.org/2000/svg">`;
+  
+  // 배경 한반도 아웃라인 (간이)
+  svgContent += `<path d="M130,40 Q170,35 200,50 Q240,55 260,75 Q275,100 270,140 Q265,170 270,200 Q275,230 260,260 Q240,290 230,300 Q210,310 200,290 Q180,280 170,290 Q155,300 140,295 Q120,290 110,280 Q95,260 90,230 Q85,200 95,180 Q105,160 100,140 Q95,120 105,100 Q110,80 120,60 Q125,45 130,40 Z" fill="#e5e7eb" stroke="#d1d5db" stroke-width="1" opacity="0.3"/>`;
+  
+  // 제주도 아웃라인
+  svgContent += `<ellipse cx="115" cy="345" rx="30" ry="14" fill="#e5e7eb" stroke="#d1d5db" stroke-width="1" opacity="0.3"/>`;
+
+  // 각 지역 원
+  regions.forEach(reg => {
+    const orgInfo = orgToRegions[reg.id];
+    const value = orgInfo ? orgInfo.data.total : 0;
+    const hasOrg = !!orgInfo;
+    const fillColor = hasOrg ? getHeatColor(value) : '#f9fafb';
+    const strokeColor = hasOrg ? '#2563eb' : '#e5e7eb';
+    const strokeWidth = hasOrg ? 2 : 1;
+    const textColor = hasOrg ? getTextColor(value) : '#d1d5db';
+    const cursor = hasOrg ? 'pointer' : 'default';
+    const opacity = hasOrg ? 1 : 0.5;
+
+    if (reg.isRing) {
+      // 경기도: 링 형태
+      svgContent += `<circle cx="${reg.cx}" cy="${reg.cy}" r="${reg.r}" fill="none" stroke="${fillColor}" stroke-width="12" opacity="${opacity}" style="cursor:${cursor}" data-region="${reg.id}">
+        <title>${reg.name}: ${value}건${orgInfo ? ` (${orgInfo.orgName})` : ''}</title></circle>`;
+      svgContent += `<circle cx="${reg.cx}" cy="${reg.cy}" r="${reg.r}" fill="none" stroke="${strokeColor}" stroke-width="1" opacity="0.3"/>`;
+    } else {
+      svgContent += `<circle cx="${reg.cx}" cy="${reg.cy}" r="${reg.r}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}" opacity="${opacity}" style="cursor:${cursor}" data-region="${reg.id}">
+        <title>${reg.name}: ${value}건${orgInfo ? ` (${orgInfo.orgName})` : ''}</title></circle>`;
+    }
+
+    // 레이블
+    const fontSize = reg.r < 14 ? 7 : 9;
+    svgContent += `<text x="${reg.cx}" y="${reg.cy - 2}" text-anchor="middle" fill="${textColor}" font-size="${fontSize}" font-weight="600" style="pointer-events:none">${reg.name}</text>`;
+    if (hasOrg) {
+      svgContent += `<text x="${reg.cx}" y="${reg.cy + 8}" text-anchor="middle" fill="${textColor}" font-size="${fontSize - 1}" font-weight="700" style="pointer-events:none">${value}건</text>`;
+    }
+  });
+
+  svgContent += `</svg>`;
+
+  // 하단에 활성 지역법인 요약
+  let summaryHtml = '<div class="flex flex-wrap gap-3 mt-4 justify-center">';
+  for (const [rName, rData] of Object.entries(regionData)) {
+    const total = rData.total;
+    summaryHtml += `<div class="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg border border-blue-100">
+      <div class="w-3 h-3 rounded-full" style="background:${getHeatColor(total)}"></div>
+      <span class="text-sm font-medium text-blue-800">${rName}</span>
+      <span class="text-sm font-bold text-blue-600">${total}건</span>
+    </div>`;
+  }
+  summaryHtml += '</div>';
+
+  el.innerHTML = svgContent + summaryHtml;
 }

@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+/* Tailwind v4: source() 지시자로 JS 파일에서 사용하는 클래스도 스캔 */
+@source "../public/static/js/**/*.js";
+@source "../src/**/*.tsx";
+@source "../src/**/*.ts";

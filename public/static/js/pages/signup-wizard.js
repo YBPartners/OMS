@@ -18,6 +18,7 @@ let signupState = {
   loginId: '',
   password: '',
   name: '',
+  email: '',
   teamName: '',
   commissionMode: '',
   commissionValue: '',
@@ -32,7 +33,7 @@ function resetSignupState() {
     step: 0, phone: '', otpCode: '', verifyToken: '', tokenExpires: '',
     distributors: [], selectedDistributor: null, distributorRegions: [],
     selectedRegionIds: new Set(), allRegions: [],
-    loginId: '', password: '', name: '', teamName: '',
+    loginId: '', password: '', name: '', email: '', teamName: '',
     commissionMode: '', commissionValue: '',
     result: null, otpTimer: null, otpSeconds: 0,
   };
@@ -317,6 +318,14 @@ function renderStep2_Info() {
         </div>
       </div>
       <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">이메일 <span class="text-red-500">*</span></label>
+        <input name="email" type="email" required
+          class="w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-teal-500"
+          placeholder="example@email.com" value="${s.email}">
+        <p class="text-xs text-amber-600 mt-1"><i class="fas fa-exclamation-triangle mr-1"></i>정산서 수취를 위해 반드시 정확한 이메일을 입력해주세요. 정산 내역 등 중요 알림이 이 주소로 발송됩니다.</p>
+      </div>
+      </div>
+      <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">소속 총판 <span class="text-red-500">*</span></label>
         <select name="distributor_org_id" required class="w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-teal-500"
           onchange="signupSelectDistributor(this.value)">
@@ -367,6 +376,7 @@ function signupGoToRegions() {
   
   const fd = new FormData(form);
   signupState.name = fd.get('name');
+  signupState.email = fd.get('email');
   signupState.teamName = fd.get('team_name');
   signupState.loginId = fd.get('login_id');
   signupState.password = fd.get('password');
@@ -541,6 +551,7 @@ async function signupSubmit() {
   const body = {
     verify_token: s.verifyToken,
     phone: s.phone,
+    email: s.email,
     login_id: s.loginId,
     password: s.password,
     name: s.name,

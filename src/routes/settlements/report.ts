@@ -5,8 +5,185 @@
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { requireAuth } from '../../middleware/auth';
+import { sendEmailWithLog, buildSettlementEmailHTML } from '../../services/email-service';
 
 export function mountReport(router: Hono<Env>) {
+
+  // ─── 딜러(팀장)별 계산서 (Invoice) 조회 ───
+  router.get('/runs/:run_id/invoice/:team_leader_id', async (c) => {
+    const authErr = requireAuth(c);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const runId = Number(c.req.param('run_id'));
+    const leaderId = Number(c.req.param('team_leader_id'));
+    if (isNaN(runId) || isNaN(leaderId)) return c.json({ error: '유효하지 않은 파라미터입니다.' }, 400);
+
+    // Scope 체크: TEAM은 자기 계산서만
+    if (user.roles.includes('TEAM_LEADER') && !user.roles.some(r => ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN'].includes(r))) {
+      if (user.user_id !== leaderId) return c.json({ error: '권한이 없습니다.' }, 403);
+    }
+
+    const run = await db.prepare('SELECT * FROM settlement_runs WHERE run_id = ?').bind(runId).first() as any;
+    if (!run) return c.json({ error: '정산 Run을 찾을 수 없습니다.' }, 404);
+
+    // 팀장 정보
+    const leader = await db.prepare(`
+      SELECT u.user_id, u.name, u.phone, u.email, u.login_id,
+             o.name as org_name, o.code as org_code, o.org_id,
+             po.name as parent_org_name
+      FROM users u
+      JOIN organizations o ON u.org_id = o.org_id
+      LEFT JOIN organizations po ON o.parent_org_id = po.org_id
+      WHERE u.user_id = ?
+    `).bind(leaderId).first() as any;
+    if (!leader) return c.json({ error: '팀장을 찾을 수 없습니다.' }, 404);
+
+    // 수수료 정책
+    const policy = await db.prepare(`
+      SELECT * FROM commission_policies
+      WHERE (team_leader_id = ? OR (org_id = ? AND team_leader_id IS NULL))
+        AND is_active = 1
+      ORDER BY team_leader_id DESC, effective_from DESC LIMIT 1
+    `).bind(leaderId, leader.org_id).first() as any;
+
+    // 정산 명세
+    const settlements = await db.prepare(`
+      SELECT s.*, o.external_order_no, o.customer_name, o.address_text,
+             o.service_type, o.requested_date, o.base_amount as order_base_amount
+      FROM settlements s
+      JOIN orders o ON s.order_id = o.order_id
+      WHERE s.run_id = ? AND s.team_leader_id = ?
+      ORDER BY o.requested_date, o.order_id
+    `).bind(runId, leaderId).all();
+    const items = settlements.results as any[];
+
+    if (items.length === 0) return c.json({ error: '해당 팀장의 정산 내역이 없습니다.' }, 404);
+
+    // ★ 산출 절차에 따른 계산서 구성
+    // ① 주문 집계
+    const totalCount = items.length;
+    const totalBaseAmount = items.reduce((s, i) => s + i.base_amount, 0);
+
+    // ② 수수료 정책 적용
+    const commissionMode = items[0]?.commission_mode || 'PERCENT';
+    const commissionRate = items[0]?.commission_rate || 0;
+    const totalCommission = items.reduce((s, i) => s + i.commission_amount, 0);
+
+    // ③ 공제항목 (향후 확장 가능 - 선급금, 벌금 등)
+    const deductions = [];
+    // TODO: 선급금 공제, 지연 벌금 등 추후 확장
+    const totalDeductions = deductions.reduce((s: number, d: any) => s + d.amount, 0);
+
+    // ④ 최종 지급액
+    const totalPayable = items.reduce((s, i) => s + i.payable_amount, 0);
+    const netPayable = totalPayable - totalDeductions;
+
+    // 일자별 소계
+    const dailySummary: Record<string, { count: number; base: number; commission: number; payable: number }> = {};
+    for (const item of items) {
+      const date = item.requested_date || 'unknown';
+      if (!dailySummary[date]) dailySummary[date] = { count: 0, base: 0, commission: 0, payable: 0 };
+      dailySummary[date].count++;
+      dailySummary[date].base += item.base_amount;
+      dailySummary[date].commission += item.commission_amount;
+      dailySummary[date].payable += item.payable_amount;
+    }
+
+    const periodLabel = run.period_type === 'WEEKLY' ? '주간' : '월간';
+
+    return c.json({
+      invoice: {
+        // 헤더
+        invoiceNo: `INV-${runId}-${leaderId}`,
+        issueDate: new Date().toISOString().split('T')[0],
+        periodLabel,
+        periodStart: run.period_start,
+        periodEnd: run.period_end,
+        runId,
+        runStatus: run.status,
+
+        // 수신인
+        recipient: {
+          name: leader.name,
+          phone: leader.phone,
+          email: leader.email,
+          loginId: leader.login_id,
+          orgName: leader.org_name,
+          orgCode: leader.org_code,
+          parentOrgName: leader.parent_org_name,
+        },
+
+        // 수수료 정책
+        commissionPolicy: {
+          mode: commissionMode,
+          rate: commissionRate,
+          label: commissionMode === 'FIXED'
+            ? `정액 ${Number(commissionRate).toLocaleString('ko-KR')}원/건`
+            : `정률 ${commissionRate}%`,
+          effectiveFrom: policy?.effective_from || '-',
+        },
+
+        // ★ 산출 절차
+        calculation: {
+          step1_orderSummary: {
+            label: '① 주문 집계',
+            totalCount,
+            totalBaseAmount,
+          },
+          step2_commission: {
+            label: '② 수수료 적용',
+            mode: commissionMode,
+            rate: commissionRate,
+            totalCommission,
+          },
+          step3_deductions: {
+            label: '③ 공제항목',
+            items: deductions,
+            totalDeductions,
+          },
+          step4_netPayable: {
+            label: '④ 최종 지급액',
+            grossPayable: totalPayable,
+            deductions: totalDeductions,
+            netPayable,
+          },
+        },
+
+        // 일자별 소계
+        dailySummary: Object.entries(dailySummary)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, d]) => ({ date, ...d })),
+
+        // 상세 내역
+        items: items.map((i, idx) => ({
+          seq: idx + 1,
+          orderId: i.order_id,
+          externalOrderNo: i.external_order_no,
+          customerName: i.customer_name,
+          address: i.address_text,
+          serviceType: i.service_type,
+          requestedDate: i.requested_date,
+          baseAmount: i.base_amount,
+          commissionMode: i.commission_mode,
+          commissionRate: i.commission_rate,
+          commissionAmount: i.commission_amount,
+          payableAmount: i.payable_amount,
+          status: i.status,
+        })),
+
+        // 합계
+        totals: {
+          count: totalCount,
+          baseAmount: totalBaseAmount,
+          commission: totalCommission,
+          deductions: totalDeductions,
+          netPayable,
+        },
+      },
+    });
+  });
 
   // ─── 정산 보고서 인쇄용 HTML ───
   router.get('/runs/:run_id/report', async (c) => {
@@ -192,6 +369,105 @@ export function mountReport(router: Hono<Env>) {
         })),
         totals: { count: items.length, base: totalBase, commission: totalComm, payable: totalPay },
       },
+    });
+  });
+
+  // ─── 정산서 이메일 발송 ───
+  router.post('/runs/:run_id/send-email', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const runId = Number(c.req.param('run_id'));
+    if (isNaN(runId)) return c.json({ error: '유효하지 않은 Run ID입니다.' }, 400);
+
+    const apiKey = c.env.RESEND_API_KEY;
+    if (!apiKey) return c.json({ error: '이메일 발송 설정이 되어있지 않습니다. (RESEND_API_KEY 미설정)' }, 500);
+
+    const run = await db.prepare('SELECT * FROM settlement_runs WHERE run_id = ?').bind(runId).first() as any;
+    if (!run) return c.json({ error: '정산 Run을 찾을 수 없습니다.' }, 404);
+
+    // 정산 데이터 팀장별 그룹핑 + 이메일 조회
+    let detailQuery = `
+      SELECT s.*, o.external_order_no, o.customer_name, o.address_text,
+             u.name as team_leader_name, u.email as team_leader_email, u.user_id as leader_user_id
+      FROM settlements s
+      JOIN orders o ON s.order_id = o.order_id
+      JOIN users u ON s.team_leader_id = u.user_id
+      WHERE s.run_id = ?
+    `;
+    const params: any[] = [runId];
+    if (user.org_type === 'REGION') {
+      detailQuery += ' AND s.region_org_id = ?';
+      params.push(user.org_id);
+    }
+    detailQuery += ' ORDER BY s.team_leader_id';
+
+    const details = await db.prepare(detailQuery).bind(...params).all();
+    const settlements = details.results as any[];
+
+    // 팀장별 그룹
+    const byLeader: Record<number, { name: string; email: string; userId: number; items: any[]; totalBase: number; totalComm: number; totalPay: number }> = {};
+    for (const s of settlements) {
+      const key = s.team_leader_id;
+      if (!byLeader[key]) byLeader[key] = { name: s.team_leader_name, email: s.team_leader_email, userId: s.leader_user_id, items: [], totalBase: 0, totalComm: 0, totalPay: 0 };
+      byLeader[key].items.push(s);
+      byLeader[key].totalBase += s.base_amount;
+      byLeader[key].totalComm += s.commission_amount;
+      byLeader[key].totalPay += s.payable_amount;
+    }
+
+    const periodLabel = run.period_type === 'WEEKLY' ? '주간' : '월간';
+    const results: { leaderId: number; name: string; email: string; ok: boolean; error?: string }[] = [];
+
+    for (const [leaderId, data] of Object.entries(byLeader)) {
+      if (!data.email) {
+        results.push({ leaderId: Number(leaderId), name: data.name, email: '', ok: false, error: '이메일 미등록' });
+        continue;
+      }
+
+      const html = buildSettlementEmailHTML({
+        recipientName: data.name,
+        periodLabel,
+        periodStart: run.period_start,
+        periodEnd: run.period_end,
+        totalCount: data.items.length,
+        totalBase: data.totalBase,
+        totalCommission: data.totalComm,
+        totalPayable: data.totalPay,
+        items: data.items.map(i => ({
+          orderNo: i.external_order_no || `#${i.order_id}`,
+          customerName: i.customer_name || '-',
+          baseAmount: i.base_amount,
+          commissionAmount: i.commission_amount,
+          payableAmount: i.payable_amount,
+        })),
+      });
+
+      const emailResult = await sendEmailWithLog(db, { apiKey }, {
+        to: data.email,
+        subject: `[와이비 OMS] ${periodLabel} 정산서 — ${run.period_start}~${run.period_end}`,
+        html,
+        templateType: 'SETTLEMENT_REPORT',
+        recipientUserId: data.userId,
+        metadata: { run_id: runId, period: `${run.period_start}~${run.period_end}` },
+      });
+
+      results.push({ leaderId: Number(leaderId), name: data.name, email: data.email, ok: emailResult.ok, error: emailResult.error });
+    }
+
+    const successCount = results.filter(r => r.ok).length;
+    const failCount = results.filter(r => !r.ok).length;
+
+    return c.json({
+      ok: true,
+      run_id: runId,
+      total_recipients: results.length,
+      sent: successCount,
+      failed: failCount,
+      details: results,
+      message: `${successCount}명에게 정산서 이메일을 발송했습니다.${failCount > 0 ? ` (${failCount}명 실패)` : ''}`,
     });
   });
 }

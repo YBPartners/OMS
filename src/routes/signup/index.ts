@@ -13,6 +13,7 @@ import { normalizePhone, isValidPhone, isValidLoginId, checkRateLimit } from '..
 import { normalizePagination } from '../../lib/validators';
 import { createTeamWithLeader } from '../../services/hr-service';
 import { notifySignupApproved } from '../../services/notification-service';
+import { sendEmailWithLog, buildSignupApprovedEmailHTML } from '../../services/email-service';
 
 const signup = new Hono<Env>();
 
@@ -213,7 +214,7 @@ signup.post('/submit', async (c) => {
   const body = await c.req.json();
 
   // 필수 필드 검증
-  const { verify_token, phone, login_id, password, name, team_name, distributor_org_id, region_ids } = body;
+  const { verify_token, phone, login_id, password, name, team_name, email, distributor_org_id, region_ids } = body;
 
   if (!verify_token) return c.json({ error: '핸드폰 인증 토큰이 필요합니다.' }, 400);
   if (!phone) return c.json({ error: '핸드폰 번호를 입력하세요.' }, 400);
@@ -221,6 +222,7 @@ signup.post('/submit', async (c) => {
   if (!password) return c.json({ error: '비밀번호를 입력하세요.' }, 400);
   if (!name) return c.json({ error: '이름을 입력하세요.' }, 400);
   if (!team_name) return c.json({ error: '팀명을 입력하세요.' }, 400);
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return c.json({ error: '유효한 이메일 주소를 입력하세요. (정산서 수취용)' }, 400);
   if (!distributor_org_id) return c.json({ error: '소속 총판을 선택하세요.' }, 400);
   if (!region_ids || !Array.isArray(region_ids) || region_ids.length === 0) {
     return c.json({ error: '담당 구역을 하나 이상 선택하세요.' }, 400);
@@ -293,13 +295,13 @@ signup.post('/submit', async (c) => {
   // 가입 신청 생성 (BatchBuilder로 원자적)
   const batch = new BatchBuilder(db).label('signup-submit');
 
-  // signup_requests INSERT
+  // signup_requests INSERT (email 포함)
   const requestResult = await db.prepare(`
-    INSERT INTO signup_requests (login_id, password_hash, name, phone, team_name, distributor_org_id,
+    INSERT INTO signup_requests (login_id, password_hash, name, phone, email, team_name, distributor_org_id,
       phone_verified, phone_verify_token, commission_mode, commission_value, status)
-    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 'PENDING')
+    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 'PENDING')
   `).bind(
-    login_id, passwordHash, name, normalized, team_name, distributor_org_id,
+    login_id, passwordHash, name, normalized, email.trim().toLowerCase(), team_name, distributor_org_id,
     verify_token,
     body.commission_mode || null,
     body.commission_value !== undefined ? body.commission_value : null,
@@ -541,6 +543,7 @@ signup.post('/requests/:request_id/approve', async (c) => {
     passwordHash: request.password_hash as string,
     name: request.name as string,
     phone: request.phone as string,
+    email: request.email as string | undefined,
     regionIds: (withinRegions.results as any[]).map(r => r.region_id),
     commissionMode: request.commission_mode as string | null,
     commissionValue: request.commission_value as number | null,
@@ -566,6 +569,26 @@ signup.post('/requests/:request_id/approve', async (c) => {
     orgId: newOrgId,
     name: request.name as string,
   });
+
+  // ★ 이메일 발송 (Resend API 키가 설정된 경우만)
+  if (request.email && c.env.RESEND_API_KEY) {
+    try {
+      await sendEmailWithLog(db, { apiKey: c.env.RESEND_API_KEY }, {
+        to: request.email as string,
+        subject: '[와이비 OMS] 가입이 승인되었습니다',
+        html: buildSignupApprovedEmailHTML({
+          name: request.name as string,
+          loginId: request.login_id as string,
+          teamName: request.team_name as string,
+        }),
+        templateType: 'SIGNUP_APPROVED',
+        recipientUserId: newUserId,
+        metadata: { request_id: requestId, org_id: newOrgId },
+      });
+    } catch (e) {
+      console.error('[Email] 가입 승인 이메일 발송 실패:', e);
+    }
+  }
 
   await writeAuditLog(db, {
     entity_type: 'SIGNUP_REQUEST', entity_id: requestId,
