@@ -166,12 +166,34 @@ export function mountReport(router: Hono<Env>) {
         missingPhotos.push(categoryLabelMap[cat] || cat);
       }
     }
-    // 참고: 사진 없이도 체크리스트만으로 제출 허용 (사진 첨부는 권장 사항)
-    // 필수사진 강제 검증은 향후 정책으로 제어 가능하도록 경고만 로깅
-
+    // 참고: 정책 기반 필수사진 검증 (report_policies 테이블 참조)
+    // 활성 보고서 정책이 있으면 required_photos_json에 따라 강제 검증
     const reportPolicy = await db.prepare(`
       SELECT * FROM report_policies WHERE service_type = ? AND is_active = 1 ORDER BY version DESC LIMIT 1
-    `).bind(order.service_type || 'DEFAULT').first();
+    `).bind(order.service_type || 'DEFAULT').first() as any;
+
+    if (reportPolicy) {
+      try {
+        const reqPhotos = typeof reportPolicy.required_photos_json === 'string'
+          ? JSON.parse(reportPolicy.required_photos_json) : reportPolicy.required_photos_json;
+        if (reqPhotos && typeof reqPhotos === 'object') {
+          const policyMissing: string[] = [];
+          for (const [cat, minCount] of Object.entries(reqPhotos)) {
+            const catUpper = cat.toUpperCase();
+            const count = photos.filter((p: any) => (p.category || '').toUpperCase() === catUpper).length;
+            if (count < (minCount as number)) {
+              policyMissing.push(`${categoryLabelMap[catUpper] || catUpper}(${count}/${minCount})`);
+            }
+          }
+          if (policyMissing.length > 0) {
+            return c.json({
+              error: `보고서 정책(${reportPolicy.name})에 따라 필수 사진이 부족합니다: ${policyMissing.join(', ')}`,
+              policy: reportPolicy.name, missing: policyMissing,
+            }, 400);
+          }
+        }
+      } catch { /* 파싱 실패 시 무시 */ }
+    }
 
     const prevReport = await db.prepare(
       'SELECT MAX(version) as max_ver FROM work_reports WHERE order_id = ?'

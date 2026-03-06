@@ -1,11 +1,12 @@
 // ================================================================
-// 와이비 OMS — 정책 조회 + CRUD v6.0 (Scope Engine 적용)
-// 배분·보고서·수수료 정책 + 지역권 매핑
-// v6.0: CRUD 엔드포인트 추가 (생성/수정/활성화 전환)
+// 와이비 OMS — 정책 조회 + CRUD v7.0 (R4 완성)
+// 배분·보고서·수수료·지표 정책 + 지역권 매핑
+// v7.0: 삭제 API, 감사로그, 지표(metrics) 정책 CRUD 추가
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { requireAuth } from '../../middleware/auth';
+import { writeAuditLog } from '../../lib/audit';
 
 export function mountPolicies(router: Hono<Env>) {
 
@@ -40,6 +41,7 @@ export function mountPolicies(router: Hono<Env>) {
 
     binds.push(id);
     await db.prepare(`UPDATE distribution_policies SET ${updates.join(', ')} WHERE policy_id = ?`).bind(...binds).run();
+    await writeAuditLog(db, { entity_type: 'DISTRIBUTION_POLICY', entity_id: id, action: 'UPDATE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ name, rule_json, is_active }) });
     return c.json({ ok: true, policy_id: id });
   });
 
@@ -63,7 +65,22 @@ export function mountPolicies(router: Hono<Env>) {
       VALUES (?, ?, ?, ?, 1)
     `).bind(name, newVersion, typeof rule_json === 'string' ? rule_json : JSON.stringify(rule_json || {}), effective_from || new Date().toISOString().split('T')[0]).run();
 
+    await writeAuditLog(db, { entity_type: 'DISTRIBUTION_POLICY', entity_id: result.meta.last_row_id as number, action: 'CREATE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ name, version: newVersion }) });
     return c.json({ ok: true, policy_id: result.meta.last_row_id, version: newVersion });
+  });
+
+  // 삭제 (비활성 정책만)
+  router.delete('/policies/distribution/:id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const id = Number(c.req.param('id'));
+    const existing = await db.prepare('SELECT * FROM distribution_policies WHERE policy_id = ?').bind(id).first() as any;
+    if (!existing) return c.json({ error: '정책을 찾을 수 없습니다.' }, 404);
+    if (existing.is_active) return c.json({ error: '활성 정책은 삭제할 수 없습니다. 먼저 비활성화 하세요.' }, 400);
+    await db.prepare('DELETE FROM distribution_policies WHERE policy_id = ?').bind(id).run();
+    await writeAuditLog(db, { entity_type: 'DISTRIBUTION_POLICY', entity_id: id, action: 'DELETE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify(existing) });
+    return c.json({ ok: true, message: '배분 정책이 삭제되었습니다.' });
   });
 
   // ━━━━━━━━━━ 보고서 정책 ━━━━━━━━━━
@@ -100,6 +117,7 @@ export function mountPolicies(router: Hono<Env>) {
 
     binds.push(id);
     await db.prepare(`UPDATE report_policies SET ${updates.join(', ')} WHERE policy_id = ?`).bind(...binds).run();
+    await writeAuditLog(db, { entity_type: 'REPORT_POLICY', entity_id: id, action: 'UPDATE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ name, service_type, is_active }) });
     return c.json({ ok: true, policy_id: id });
   });
 
@@ -129,7 +147,22 @@ export function mountPolicies(router: Hono<Env>) {
       effective_from || new Date().toISOString().split('T')[0]
     ).run();
 
+    await writeAuditLog(db, { entity_type: 'REPORT_POLICY', entity_id: result.meta.last_row_id as number, action: 'CREATE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ name, service_type: st, version: newVersion }) });
     return c.json({ ok: true, policy_id: result.meta.last_row_id, version: newVersion });
+  });
+
+  // 삭제 (비활성 정책만)
+  router.delete('/policies/report/:id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const id = Number(c.req.param('id'));
+    const existing = await db.prepare('SELECT * FROM report_policies WHERE policy_id = ?').bind(id).first() as any;
+    if (!existing) return c.json({ error: '정책을 찾을 수 없습니다.' }, 404);
+    if (existing.is_active) return c.json({ error: '활성 정책은 삭제할 수 없습니다. 먼저 비활성화 하세요.' }, 400);
+    await db.prepare('DELETE FROM report_policies WHERE policy_id = ?').bind(id).run();
+    await writeAuditLog(db, { entity_type: 'REPORT_POLICY', entity_id: id, action: 'DELETE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify(existing) });
+    return c.json({ ok: true, message: '보고서 정책이 삭제되었습니다.' });
   });
 
   // ━━━━━━━━━━ 수수료 정책 ━━━━━━━━━━
@@ -181,6 +214,7 @@ export function mountPolicies(router: Hono<Env>) {
 
     binds.push(id);
     await db.prepare(`UPDATE commission_policies SET ${updates.join(', ')} WHERE commission_policy_id = ?`).bind(...binds).run();
+    await writeAuditLog(db, { entity_type: 'COMMISSION_POLICY', entity_id: id, action: 'UPDATE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ mode, value, is_active, channel_id }) });
     return c.json({ ok: true, commission_policy_id: id });
   });
 
@@ -199,7 +233,22 @@ export function mountPolicies(router: Hono<Env>) {
       VALUES (?, ?, ?, ?, ?, ?, 1)
     `).bind(org_id, team_leader_id || null, mode, value, channel_id || null, effective_from || new Date().toISOString().split('T')[0]).run();
 
+    await writeAuditLog(db, { entity_type: 'COMMISSION_POLICY', entity_id: result.meta.last_row_id as number, action: 'CREATE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ org_id, team_leader_id, mode, value }) });
     return c.json({ ok: true, commission_policy_id: result.meta.last_row_id });
+  });
+
+  // 수수료 삭제 (비활성 정책만)
+  router.delete('/policies/commission/:id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const id = Number(c.req.param('id'));
+    const existing = await db.prepare('SELECT * FROM commission_policies WHERE commission_policy_id = ?').bind(id).first() as any;
+    if (!existing) return c.json({ error: '수수료 정책을 찾을 수 없습니다.' }, 404);
+    if (existing.is_active) return c.json({ error: '활성 정책은 삭제할 수 없습니다. 먼저 비활성화 하세요.' }, 400);
+    await db.prepare('DELETE FROM commission_policies WHERE commission_policy_id = ?').bind(id).run();
+    await writeAuditLog(db, { entity_type: 'COMMISSION_POLICY', entity_id: id, action: 'DELETE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify(existing) });
+    return c.json({ ok: true, message: '수수료 정책이 삭제되었습니다.' });
   });
 
   // ━━━━━━━━━━ 지역권 매핑 ━━━━━━━━━━
@@ -277,6 +326,83 @@ export function mountPolicies(router: Hono<Env>) {
       INSERT INTO org_territories (org_id, territory_id, effective_from) VALUES (?, ?, datetime('now'))
     `).bind(org_id, territoryId).run();
 
+    await writeAuditLog(db, { entity_type: 'TERRITORY', entity_id: territoryId, action: 'REGION.MAPPED', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ territory_id: territoryId, org_id }) });
     return c.json({ ok: true, territory_id: territoryId, org_id });
+  });
+
+  // ━━━━━━━━━━ 지표(Metrics) 정책 ━━━━━━━━━━
+
+  // 조회
+  router.get('/policies/metrics', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const result = await c.env.DB.prepare('SELECT * FROM metrics_policies ORDER BY metrics_policy_id DESC').all();
+    return c.json({ policies: result.results });
+  });
+
+  // 수정
+  router.put('/policies/metrics/:id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const id = Number(c.req.param('id'));
+    let body: any;
+    try { body = await c.req.json(); } catch { return c.json({ error: '잘못된 요청 형식입니다.' }, 400); }
+
+    const existing = await db.prepare('SELECT * FROM metrics_policies WHERE metrics_policy_id = ?').bind(id).first();
+    if (!existing) return c.json({ error: '지표 정책을 찾을 수 없습니다.' }, 404);
+
+    const updates: string[] = [];
+    const binds: any[] = [];
+    if (body.completion_basis !== undefined) { updates.push('completion_basis = ?'); binds.push(body.completion_basis); }
+    if (body.region_intake_basis !== undefined) { updates.push('region_intake_basis = ?'); binds.push(body.region_intake_basis); }
+    if (body.is_active !== undefined) { updates.push('is_active = ?'); binds.push(body.is_active ? 1 : 0); }
+    if (body.effective_from !== undefined) { updates.push('effective_from = ?'); binds.push(body.effective_from); }
+
+    if (updates.length === 0) return c.json({ error: '변경할 항목이 없습니다.' }, 400);
+
+    binds.push(id);
+    await db.prepare(`UPDATE metrics_policies SET ${updates.join(', ')} WHERE metrics_policy_id = ?`).bind(...binds).run();
+    await writeAuditLog(db, { entity_type: 'METRICS_POLICY', entity_id: id, action: 'UPDATE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify(body) });
+    return c.json({ ok: true, metrics_policy_id: id });
+  });
+
+  // 생성
+  router.post('/policies/metrics', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    let body: any;
+    try { body = await c.req.json(); } catch { return c.json({ error: '잘못된 요청 형식입니다.' }, 400); }
+
+    const { completion_basis, region_intake_basis, effective_from } = body;
+    if (!completion_basis || !region_intake_basis) {
+      return c.json({ error: '완료 기준(completion_basis)과 지역접수 기준(region_intake_basis)은 필수입니다.' }, 400);
+    }
+
+    // 기존 활성 비활성화
+    await db.prepare("UPDATE metrics_policies SET is_active = 0").run();
+
+    const result = await db.prepare(`
+      INSERT INTO metrics_policies (completion_basis, region_intake_basis, effective_from, is_active)
+      VALUES (?, ?, ?, 1)
+    `).bind(completion_basis, region_intake_basis, effective_from || new Date().toISOString().split('T')[0]).run();
+
+    await writeAuditLog(db, { entity_type: 'METRICS_POLICY', entity_id: result.meta.last_row_id as number, action: 'CREATE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify(body) });
+    return c.json({ ok: true, metrics_policy_id: result.meta.last_row_id });
+  });
+
+  // 삭제 (비활성만)
+  router.delete('/policies/metrics/:id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const id = Number(c.req.param('id'));
+    const existing = await db.prepare('SELECT * FROM metrics_policies WHERE metrics_policy_id = ?').bind(id).first() as any;
+    if (!existing) return c.json({ error: '지표 정책을 찾을 수 없습니다.' }, 404);
+    if (existing.is_active) return c.json({ error: '활성 정책은 삭제할 수 없습니다.' }, 400);
+    await db.prepare('DELETE FROM metrics_policies WHERE metrics_policy_id = ?').bind(id).run();
+    await writeAuditLog(db, { entity_type: 'METRICS_POLICY', entity_id: id, action: 'DELETE', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify(existing) });
+    return c.json({ ok: true, message: '지표 정책이 삭제되었습니다.' });
   });
 }

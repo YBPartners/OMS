@@ -211,11 +211,12 @@ async function exportCSV(groupBy) {
 // ════════ 정책관리 ════════
 async function renderPolicies(el) {
   showSkeletonLoading(el, 'table');
-  const [distRes, reportRes, commRes, terRes] = await Promise.all([
+  const [distRes, reportRes, commRes, terRes, metricsRes] = await Promise.all([
     api('GET', '/stats/policies/distribution'),
     api('GET', '/stats/policies/report'),
     api('GET', '/stats/policies/commission'),
     api('GET', '/stats/territories'),
+    api('GET', '/stats/policies/metrics'),
   ]);
 
   const activeTab = window._policyTab || 'distribution';
@@ -226,9 +227,9 @@ async function renderPolicies(el) {
 
       <!-- 탭 -->
       <div class="flex gap-1 mb-6 border-b">
-        ${['distribution', 'report', 'commission', 'territory'].map(tab => {
-          const labels = { distribution: '배분 정책', report: '보고서 정책', commission: '수수료 정책', territory: '지역권 매핑' };
-          const icons = { distribution: 'fa-share-nodes', report: 'fa-file-lines', commission: 'fa-percent', territory: 'fa-map-location-dot' };
+        ${['distribution', 'report', 'commission', 'territory', 'metrics'].map(tab => {
+          const labels = { distribution: '배분 정책', report: '보고서 정책', commission: '수수료 정책', territory: '지역권 매핑', metrics: '지표 정책' };
+          const icons = { distribution: 'fa-share-nodes', report: 'fa-file-lines', commission: 'fa-percent', territory: 'fa-map-location-dot', metrics: 'fa-chart-bar' };
           return `<button onclick="window._policyTab='${tab}';renderContent()" class="px-4 py-2 text-sm ${activeTab === tab ? 'tab-active' : 'text-gray-500 hover:text-gray-700'} transition"><i class="fas ${icons[tab]} mr-1"></i>${labels[tab]}</button>`;
         }).join('')}
       </div>
@@ -238,6 +239,7 @@ async function renderPolicies(el) {
         ${activeTab === 'report' ? renderReportPolicyTable(reportRes?.policies || []) : ''}
         ${activeTab === 'commission' ? renderCommissionPolicyTable(commRes?.policies || []) : ''}
         ${activeTab === 'territory' ? renderTerritoryTable(terRes?.territories || []) : ''}
+        ${activeTab === 'metrics' ? renderMetricsPolicyTable(metricsRes?.policies || []) : ''}
       </div>
     </div>`;
 }
@@ -264,6 +266,7 @@ function renderDistPolicyTable(policies) {
           ${canEditPolicy ? `<td class="px-3 py-2 text-center"><div class="flex gap-1 justify-center">
             <button onclick='showEditDistPolicyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
             <button onclick="togglePolicyActive('distribution',${p.policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
+            ${!p.is_active ? `<button onclick="deletePolicy('distribution',${p.policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>` : ''}
           </div></td>` : ''}
         </tr>`).join('')}
       </tbody></table>
@@ -296,6 +299,7 @@ function renderReportPolicyTable(policies) {
           ${canEditPolicy ? `<td class="px-3 py-2 text-center"><div class="flex gap-1 justify-center">
             <button onclick='showEditReportPolicyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
             <button onclick="togglePolicyActive('report',${p.policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
+            ${!p.is_active ? `<button onclick="deletePolicy('report',${p.policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>` : ''}
           </div></td>` : ''}
         </tr>`;
       }).join('')}
@@ -330,6 +334,7 @@ function renderCommissionPolicyTable(policies) {
           ${canEditPolicy ? `<td class="px-3 py-2 text-center"><div class="flex gap-1 justify-center">
             <button onclick='showEditCommissionModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
             <button onclick="toggleCommissionActive(${p.commission_policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
+            ${!p.is_active ? `<button onclick="deleteCommissionPolicy(${p.commission_policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>` : ''}
           </div></td>` : ''}
         </tr>`).join('')}
       </tbody></table>
@@ -360,6 +365,102 @@ function renderTerritoryTable(territories) {
 }
 
 // ═══════ 정책 CRUD 모달/핸들러 ═══════
+
+// ── 지표 정책 테이블 ──
+function renderMetricsPolicyTable(policies) {
+  const canEditPolicy = canEdit('policy');
+  return `
+    <div class="bg-white rounded-xl p-5 border border-gray-100">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h3 class="font-semibold">지표(Metrics) 정책</h3>
+          <p class="text-xs text-gray-500 mt-1">완료 기준 및 지역접수 기준을 정의합니다.</p>
+        </div>
+        ${canEditPolicy ? `<button onclick="showNewMetricsPolicyModal()" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700"><i class="fas fa-plus mr-1"></i>추가</button>` : ''}
+      </div>
+      <table class="w-full text-sm"><thead class="bg-gray-50"><tr>
+        <th class="px-3 py-2 text-left">ID</th>
+        <th class="px-3 py-2 text-left">완료 기준</th>
+        <th class="px-3 py-2 text-left">지역접수 기준</th>
+        <th class="px-3 py-2 text-left">적용일</th>
+        <th class="px-3 py-2 text-center">활성</th>
+        ${canEditPolicy ? '<th class="px-3 py-2 text-center">관리</th>' : ''}
+      </tr></thead><tbody class="divide-y">${policies.map(p => `
+        <tr class="hover:bg-gray-50">
+          <td class="px-3 py-2 font-mono text-xs">${p.metrics_policy_id}</td>
+          <td class="px-3 py-2">${p.completion_basis || '-'}</td>
+          <td class="px-3 py-2">${p.region_intake_basis || '-'}</td>
+          <td class="px-3 py-2 text-xs">${p.effective_from || '-'}</td>
+          <td class="px-3 py-2 text-center">${p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '<span class="text-gray-400">비활성</span>'}</td>
+          ${canEditPolicy ? `<td class="px-3 py-2 text-center"><div class="flex gap-1 justify-center">
+            <button onclick='showEditMetricsPolicyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
+            <button onclick="toggleMetricsActive(${p.metrics_policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'} rounded text-xs hover:opacity-80">${p.is_active ? '비활성' : '활성'}</button>
+            ${!p.is_active ? `<button onclick="deleteMetricsPolicy(${p.metrics_policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>` : ''}
+          </div></td>` : ''}
+        </tr>`).join('')}
+        ${policies.length === 0 ? '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">지표 정책이 없습니다.</td></tr>' : ''}
+      </tbody></table>
+    </div>`;
+}
+function showNewMetricsPolicyModal() {
+  const content = `<div class="space-y-4">
+    <div><label class="block text-xs text-gray-500 mb-1">완료 기준 *</label>
+      <select id="mp-completion" class="w-full border rounded-lg px-3 py-2 text-sm">
+        <option value="SUBMITTED_AT">제출일(SUBMITTED_AT) 기준</option>
+        <option value="HQ_APPROVED_AT">HQ승인일(HQ_APPROVED_AT) 기준</option>
+        <option value="SETTLEMENT_CONFIRMED_AT">정산확정일(SETTLEMENT_CONFIRMED_AT) 기준</option>
+      </select></div>
+    <div><label class="block text-xs text-gray-500 mb-1">지역접수 기준 *</label>
+      <select id="mp-intake" class="w-full border rounded-lg px-3 py-2 text-sm">
+        <option value="DISTRIBUTED_AT">배분완료(DISTRIBUTED_AT) 기준</option>
+        <option value="REGION_ACCEPT_AT">지역접수(REGION_ACCEPT_AT) 기준</option>
+      </select></div>
+    <div><label class="block text-xs text-gray-500 mb-1">적용일</label>
+      <input id="mp-from" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${new Date().toISOString().split('T')[0]}"></div>
+  </div>`;
+  showModal('새 지표 정책', content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitNewMetricsPolicy()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">생성</button>`);
+}
+async function submitNewMetricsPolicy() {
+  const data = { completion_basis: document.getElementById('mp-completion')?.value, region_intake_basis: document.getElementById('mp-intake')?.value, effective_from: document.getElementById('mp-from')?.value };
+  const res = await api('POST', '/stats/policies/metrics', data);
+  if (res?.ok) { showToast('지표 정책 생성 완료', 'success'); closeModal(); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
+}
+function showEditMetricsPolicyModal(p) {
+  const content = `<div class="space-y-4">
+    <div><label class="block text-xs text-gray-500 mb-1">완료 기준</label>
+      <select id="mp-completion" class="w-full border rounded-lg px-3 py-2 text-sm">
+        ${['SUBMITTED_AT','HQ_APPROVED_AT','SETTLEMENT_CONFIRMED_AT'].map(v => `<option value="${v}" ${p.completion_basis===v?'selected':''}>${v}</option>`).join('')}
+      </select></div>
+    <div><label class="block text-xs text-gray-500 mb-1">지역접수 기준</label>
+      <select id="mp-intake" class="w-full border rounded-lg px-3 py-2 text-sm">
+        ${['DISTRIBUTED_AT','REGION_ACCEPT_AT'].map(v => `<option value="${v}" ${p.region_intake_basis===v?'selected':''}>${v}</option>`).join('')}
+      </select></div>
+  </div>`;
+  showModal(`지표 정책 수정 — #${p.metrics_policy_id}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitEditMetricsPolicy(${p.metrics_policy_id})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`);
+}
+async function submitEditMetricsPolicy(id) {
+  const data = { completion_basis: document.getElementById('mp-completion')?.value, region_intake_basis: document.getElementById('mp-intake')?.value };
+  const res = await api('PUT', `/stats/policies/metrics/${id}`, data);
+  if (res?.ok) { showToast('지표 정책 수정 완료', 'success'); closeModal(); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
+}
+async function toggleMetricsActive(id, val) {
+  const res = await api('PUT', `/stats/policies/metrics/${id}`, { is_active: !!val });
+  if (res?.ok) { showToast(val ? '활성화 완료' : '비활성화 완료', 'success'); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
+}
+async function deleteMetricsPolicy(id) {
+  showConfirmModal('지표 정책 삭제', `#${id} 정책을 삭제하시겠습니까?`, async () => {
+    const res = await api('DELETE', `/stats/policies/metrics/${id}`);
+    if (res?.ok) { showToast('삭제 완료', 'success'); renderContent(); }
+    else showToast(res?.error || '삭제 실패', 'error');
+  });
+}
 
 // 배분 정책 — 새 버전 생성
 function showNewDistPolicyModal() {
@@ -543,6 +644,25 @@ async function toggleCommissionActive(id, newActive) {
   const res = await api('PUT', `/stats/policies/commission/${id}`, { is_active: !!newActive });
   if (res?.ok) { showToast(newActive ? '활성화 완료' : '비활성화 완료', 'success'); renderContent(); }
   else showToast(res?.error || '실패', 'error');
+}
+
+// 배분/보고서 정책 삭제
+async function deletePolicy(type, id) {
+  const typeLabel = type === 'distribution' ? '배분' : '보고서';
+  showConfirmModal(`${typeLabel} 정책 삭제`, `#${id} ${typeLabel} 정책을 삭제하시겠습니까?\n(비활성 정책만 삭제 가능)`, async () => {
+    const res = await api('DELETE', `/stats/policies/${type}/${id}`);
+    if (res?.ok) { showToast('삭제 완료', 'success'); renderContent(); }
+    else showToast(res?.error || '삭제 실패', 'error');
+  });
+}
+
+// 수수료 정책 삭제
+async function deleteCommissionPolicy(id) {
+  showConfirmModal('수수료 정책 삭제', `#${id} 수수료 정책을 삭제하시겠습니까?\n(비활성 정책만 삭제 가능)`, async () => {
+    const res = await api('DELETE', `/stats/policies/commission/${id}`);
+    if (res?.ok) { showToast('삭제 완료', 'success'); renderContent(); }
+    else showToast(res?.error || '삭제 실패', 'error');
+  });
 }
 
 // 지역권 매핑 변경
