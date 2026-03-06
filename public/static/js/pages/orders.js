@@ -298,7 +298,7 @@ function _getQuickActions(order) {
     actions.push(`<button onclick="closeDrawer();showEditOrderModal(${order.order_id})" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition"><i class="fas fa-pen-to-square mr-1"></i>수정</button>`);
   }
   if (s === 'RECEIVED') {
-    actions.push(`<button onclick="closeDrawer();deleteOrder(${order.order_id}, '${(order.customer_name||'').replace(/'/g, "\\'")}')" class="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 transition"><i class="fas fa-trash-can mr-1"></i>삭제</button>`);
+    actions.push(`<button onclick="closeDrawer();deleteOrder(${order.order_id}, '${escapeHtml((order.customer_name||'').replace(/'/g, "\\'"))}')" class="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 transition"><i class="fas fa-trash-can mr-1"></i>삭제</button>`);
   }
 
   actions.push(`<button onclick="closeDrawer();showOrderHistoryDrawer(${order.order_id})" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200 transition"><i class="fas fa-clock-rotate-left mr-1"></i>이력 타임라인</button>`);
@@ -306,7 +306,7 @@ function _getQuickActions(order) {
 
   // 미배분 상태 → 수동 배분 버튼
   if (['RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING'].includes(s)) {
-    actions.push(`<button onclick="closeDrawer();showManualDistributeModal(${order.order_id}, '${(order.customer_name||'').replace(/'/g, "\\'")}', '${(order.address_text||'').replace(/'/g, "\\'")}')" class="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs hover:bg-indigo-700 transition"><i class="fas fa-share-nodes mr-1"></i>수동 배분</button>`);
+    actions.push(`<button onclick="closeDrawer();showManualDistributeModal(${order.order_id}, '${escapeHtml((order.customer_name||'').replace(/'/g, "\\'"))}', '${escapeHtml((order.address_text||'').replace(/'/g, "\\'"))}')" class="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs hover:bg-indigo-700 transition"><i class="fas fa-share-nodes mr-1"></i>수동 배분</button>`);
   }
   if (s === 'DISTRIBUTED') {
     actions.push(`<button onclick="closeDrawer();showAssignModal(${order.order_id})" class="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs hover:bg-purple-700 transition"><i class="fas fa-user-plus mr-1"></i>팀장 배정</button>`);
@@ -923,7 +923,7 @@ async function renderDistribute(el) {
                   <div class="text-xs text-gray-500 mt-0.5 truncate">${o.address_text || '-'}</div>
                 </div>
                 <span class="text-sm font-medium whitespace-nowrap text-gray-600">${formatAmount(o.base_amount)}</span>
-                <button onclick="event.stopPropagation();showManualDistributeModal(${o.order_id}, '${(o.customer_name||'').replace(/'/g, "\\'")}', '${(o.address_text||'').replace(/'/g, "\\'")}')" 
+                <button onclick="event.stopPropagation();showManualDistributeModal(${o.order_id}, '${escapeHtml((o.customer_name||'').replace(/'/g, "\\'"))}', '${escapeHtml((o.address_text||'').replace(/'/g, "\\'"))}')" 
                   class="px-2.5 py-1 bg-blue-200 text-blue-800 rounded text-xs hover:bg-blue-300 whitespace-nowrap flex-shrink-0 transition" data-tooltip="수동 배분">
                   <i class="fas fa-share-nodes"></i>
                 </button>
@@ -960,7 +960,7 @@ async function renderDistribute(el) {
                   <div class="text-xs text-red-500 mt-0.5 truncate"><i class="fas fa-location-dot mr-1"></i>${o.admin_dong_code ? `행정동코드(${o.admin_dong_code}) 총판 매핑 없음` : '행정동 매칭 실패'} · ${o.address_text || ''}</div>
                 </div>
                 <span class="text-sm font-medium whitespace-nowrap text-gray-600">${formatAmount(o.base_amount)}</span>
-                <button onclick="event.stopPropagation();showManualDistributeModal(${o.order_id}, '${(o.customer_name||'').replace(/'/g, "\\'")}', '${(o.address_text||'').replace(/'/g, "\\'")}')" 
+                <button onclick="event.stopPropagation();showManualDistributeModal(${o.order_id}, '${escapeHtml((o.customer_name||'').replace(/'/g, "\\'"))}', '${escapeHtml((o.address_text||'').replace(/'/g, "\\'"))}')" 
                   class="px-2.5 py-1 bg-amber-200 text-amber-800 rounded text-xs hover:bg-amber-300 whitespace-nowrap flex-shrink-0 transition" data-tooltip="수동 배분">
                   <i class="fas fa-share-nodes"></i>
                 </button>

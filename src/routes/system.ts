@@ -1,11 +1,13 @@
 // ================================================================
-// 와이비 OMS — 시스템 관리 API v14.0
+// 와이비 OMS — 시스템 관리 API v15.0
 // 백업/복원, 데이터 임포트, 글로벌 검색, 주문 타임라인, 푸시 알림
+// v15.0: SQL 안전성 강화 — 동적 컬럼명 검증, 민감정보 마스킹
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../middleware/auth';
 import { writeAuditLog } from '../lib/audit';
+import { isSafeColumnName, safeAuditDetail } from '../middleware/security';
 
 const system = new Hono<Env>();
 
@@ -524,7 +526,8 @@ system.post('/snapshot/restore', async (c) => {
 
     for (const row of rows) {
       try {
-        const cols = Object.keys(row).filter(k => row[k] !== undefined);
+        const cols = Object.keys(row).filter(k => row[k] !== undefined && isSafeColumnName(k));
+        if (cols.length === 0) { errors++; continue; }
         const vals = cols.map(k => row[k]);
         const placeholders = cols.map(() => '?').join(',');
         await db.prepare(`INSERT OR REPLACE INTO ${table} (${cols.join(',')}) VALUES (${placeholders})`).bind(...vals).run();

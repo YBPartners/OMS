@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 import type { Env } from '../../types';
 import { requireAuth } from '../../middleware/auth';
 import { writeAuditLog } from '../../lib/audit';
-import { hashPassword, verifyPassword, needsRehash, normalizePhone, isValidPhone, isValidLoginId, isValidEmail } from '../../middleware/security';
+import { hashPassword, verifyPassword, needsRehash, normalizePhone, isValidPhone, isValidLoginId, isValidEmail, safeAuditDetail } from '../../middleware/security';
 import { normalizePagination, isValidRole } from '../../lib/validators';
 import { invalidateUserSessions } from '../../services/session-service';
 
@@ -268,7 +268,7 @@ export function mountUsers(router: Hono<Env>) {
       }
     }
 
-    await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: 'UPDATE', actor_id: currentUser.user_id, detail_json: JSON.stringify(body) });
+    await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: 'UPDATE', actor_id: currentUser.user_id, detail_json: safeAuditDetail(body) });
 
     return c.json({ ok: true });
   });

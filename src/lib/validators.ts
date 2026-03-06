@@ -50,7 +50,7 @@ export function normalizePagination(page?: string, limit?: string, maxLimit: num
 }
 
 /** 역할 유효성 검증 */
-const VALID_ROLES = ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'TEAM_LEADER', 'AUDITOR'] as const;
+const VALID_ROLES = ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'TEAM_LEADER', 'AGENCY_LEADER', 'AUDITOR'] as const;
 export function isValidRole(role: string): boolean {
   return VALID_ROLES.includes(role as any);
 }

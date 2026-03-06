@@ -67,7 +67,7 @@ async function executeGlobalSearch(q) {
     el.innerHTML = `
       <div class="py-12 text-center text-gray-400">
         <i class="fas fa-search text-3xl mb-3"></i>
-        <p class="text-sm">'${q}'에 대한 검색 결과가 없습니다</p>
+        <p class="text-sm">'${escapeHtml(q)}'에 대한 검색 결과가 없습니다</p>
       </div>`;
     return;
   }
@@ -85,8 +85,8 @@ async function executeGlobalSearch(q) {
             <i class="fas ${typeIcons[r.type] || 'fa-circle'}"></i>
           </div>
           <div class="flex-1 min-w-0">
-            <div class="font-medium text-sm truncate">${r.title}</div>
-            <div class="text-xs text-gray-500 truncate">${r.subtitle || ''}</div>
+            <div class="font-medium text-sm truncate">${escapeHtml(r.title)}</div>
+            <div class="text-xs text-gray-500 truncate">${escapeHtml(r.subtitle || '')}</div></div>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             ${r.status ? statusBadge(r.status) : ''}

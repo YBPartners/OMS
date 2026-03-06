@@ -16,11 +16,12 @@ import systemRoutes from './routes/system';
 
 const app = new Hono<Env>();
 
-// ─── 글로벌 에러 핸들러 ───
+// ─── 글로벌 에러 핸들러 v2.0 — 실제 에러 메시지 노출 방지 ───
 app.onError((err, c) => {
   const method = c.req.method;
   const path = c.req.path;
   const msg = err.message || '';
+  // 서버 로그에만 상세 에러 기록
   console.error(`[OMS ERROR] ${method} ${path}:`, msg, err.stack ? `\n${err.stack}` : '');
 
   // 에러 분류
@@ -28,12 +29,17 @@ app.onError((err, c) => {
   const isValidation = msg.includes('validation') || msg.includes('required') || msg.includes('invalid');
   const isTimeout = msg.includes('timeout') || msg.includes('Timeout');
   const isNotFound = msg.includes('not found') || msg.includes('NOT_FOUND');
+  const isJsonParse = msg.includes('JSON') || msg.includes('Unexpected token') || msg.includes('SyntaxError');
 
   let userMessage = '서버 오류가 발생했습니다.';
   let status = 500;
   let code = 'INTERNAL_ERROR';
 
-  if (isDbError) {
+  if (isJsonParse) {
+    userMessage = '요청 데이터 형식이 올바르지 않습니다.';
+    status = 400;
+    code = 'PARSE_ERROR';
+  } else if (isDbError) {
     const isTypeError = msg.includes('TYPE_ERROR');
     userMessage = isTypeError ? '데이터 형식 오류입니다. 입력값을 확인해 주세요.' : '데이터 처리 중 오류가 발생했습니다.';
     code = 'DB_ERROR';
@@ -54,7 +60,6 @@ app.onError((err, c) => {
   return c.json({
     error: userMessage,
     code,
-    _debug: msg.substring(0, 200),
   }, status);
 });
 
@@ -80,7 +85,12 @@ app.route('/api/audit', auditRoutes);
 app.route('/api/system', systemRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '19.1.0', system: '와이비 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '20.9.0', system: '와이비 OMS' }));
+
+// ─── API 404 표준화 — 존재하지 않는 API 경로에 대해 명확한 JSON 응답 ───
+app.all('/api/*', (c) => {
+  return c.json({ error: '요청한 API 경로를 찾을 수 없습니다.', code: 'NOT_FOUND', path: c.req.path }, 404);
+});
 
 // ─── Service Worker (루트 경로 서빙 필수) ───
 app.get('/sw.js', async (c) => {

@@ -1,6 +1,6 @@
 // ================================================================
-// 와이비 OMS — 보안 유틸리티 모듈 v2.0
-// PBKDF2 해싱, 입력 검증, rate-limit, 세션 정리
+// 와이비 OMS — 보안 유틸리티 모듈 v3.0
+// PBKDF2 해싱, 입력 검증, rate-limit, 세션 정리, SQL 안전 유틸
 // ================================================================
 
 // ─── PBKDF2 비밀번호 해싱 (Cloudflare Workers 호환) ───
@@ -85,7 +85,7 @@ function hex2buf(hex: string): Uint8Array {
 
 // ─── 입력값 검증 & Sanitize ───
 
-/** 기본 XSS 방어: HTML 태그 제거 */
+/** 기본 XSS 방어: HTML 엔티티 이스케이프 */
 export function sanitizeInput(value: string): string {
   return value
     .replace(/</g, '&lt;')
@@ -93,6 +93,39 @@ export function sanitizeInput(value: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#x27;')
     .replace(/\//g, '&#x2F;');
+}
+
+/** 문자열 입력 자동 trim + XSS 방어 (null/undefined 안전) */
+export function cleanStr(value: any): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  return String(value).trim();
+}
+
+/** 민감 필드를 마스킹한 안전한 감사 로그 상세 생성 */
+export function safeAuditDetail(body: Record<string, any>): string {
+  const SENSITIVE_KEYS = ['password', 'password_hash', 'current_password', 'new_password', 'auth_credentials', 'api_key', 'secret'];
+  const safe: Record<string, any> = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (SENSITIVE_KEYS.some(sk => k.toLowerCase().includes(sk))) {
+      safe[k] = '***';
+    } else {
+      safe[k] = v;
+    }
+  }
+  return JSON.stringify(safe);
+}
+
+/**
+ * SQL 안전 컬럼명 검증 — 알파벳, 숫자, 언더스코어만 허용
+ * 동적 컬럼명을 쿼리에 삽입하기 전 반드시 검증
+ */
+export function isSafeColumnName(name: string): boolean {
+  return /^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(name);
+}
+
+/** 안전한 컬럼명 배열 필터링 */
+export function filterSafeColumns(cols: string[]): string[] {
+  return cols.filter(isSafeColumnName);
 }
 
 /** 전화번호 정규화 (숫자만 추출) */

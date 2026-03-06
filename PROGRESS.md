@@ -45,6 +45,7 @@
 | **R5** | **인사·권한·가입 완성** | **✅ 완료** | **2026-03-06** | **사용자 삭제/이동/다중역할, 조직 수정/삭제 UI, canEdit 버그수정, E2E 35/36** |
 | **R6** | **공통 UI/UX 표준화** | **✅ 완료** | **2026-03-06** | **apiAction() 래퍼, 모달 ESC/포커스/aria, 토스트 스택, formField 접근성, 5개 페이지 리팩토링, E2E 61/62** |
 | **R7** | **대시보드·통계·감사 품질 강화** | **✅ 완료** | **2026-03-06** | **인라인 테이블 5개→renderDataTable, 감사로그 renderPagination, statistics.js 12함수 apiAction 전환, E2E 61/62** |
+| **R8** | **운영 안정성·보안** | **✅ 완료** | **2026-03-06** | **SQL 안전성·쿠키 Secure·XSS 방어·에러 표준화·감사로그 민감정보 마스킹, E2E 61/62** |
 
 ---
 
@@ -975,7 +976,8 @@
 | R5 | **인사·권한·가입** | 사용자·역할·가입신청·대리점·폰인증 | RBAC 정합성, 가입 플로우 완결성 | ✅ 완료 |
 | R6 | **공통 UI/UX·입력체계** | 모달·토스트·테이블·모바일·검색 | 일관성, 접근성, 반응형, 에러 UX | ✅ 완료 |
 | R7 | **대시보드·통계·감사** | 대시보드·통계·대사·감사로그 | 인라인 테이블→renderDataTable, apiAction 전환, 접근성 | ✅ 완료 |
-| R8 | **운영 안정성·보안** | 세션·에러처리·입력검증·SQL주입방어 | 프로덕션 안정성, 엣지 케이스 방어 | ⏳ 대기 |
+| R8 | **운영 안정성·보안** | 세션·에러처리·입력검증·SQL주입방어 | 프로덕션 안정성, 엣지 케이스 방어 | ✅ 완료 |
+| R9 | **나머지 인라인 테이블 전환** | settlement/review/kanban 등 | renderDataTable 확대, formField 재활용 | ⏳ 대기 |
 
 ---
 
@@ -1406,7 +1408,8 @@
 | **R5** | 인사·권한·가입 | 사용자 삭제/이동/다중역할, 조직 CRUD | ✅ 완료 |
 | **R6** | 공통 UI/UX 표준화 | apiAction, 모달/토스트 접근성, 리팩토링 | ✅ 완료 |
 | **R7** | 대시보드·통계·감사 | 인라인테이블→renderDataTable, 성능, 차트 | ✅ 완료 |
-| **R8** | 운영 안정성·보안 | 세션·에러처리·입력검증·SQL주입방어 | ⏳ 대기 |
+| **R8** | 운영 안정성·보안 | SQL 안전성, 쿠키 Secure, XSS 방어, 에러 표준화 | ✅ 완료 |
+| **R9** | 나머지 인라인 테이블 전환 | settlement/review/kanban renderDataTable 확대 | ⏳ 대기 |
 
 ---
 
@@ -1469,3 +1472,86 @@
 | 🟡 P3 | 프로덕션 배포 최적화 | 코드 분할, 지연 로딩, CDN 캐시 | 하 |
 
 **다음 단계 추천:** R8 (운영 안정성·보안: 프로덕션 안정성 강화)
+
+---
+
+### R8: 운영 안정성·보안 — 진단·구현·검증 ✅ (2026-03-06)
+
+> **범위**: SQL 안전성 강화, 쿠키 보안, XSS 방어, 에러 처리 표준화, 감사로그 민감정보 마스킹
+> **E2E**: HR 35/36 (100%) + Policy 26/26 (100%) = 61/62 총 통과
+
+#### R8-1단계: 현황 진단 ✅
+
+| # | 문제 | 위치 | 심각도 | 유형 |
+|---|------|------|--------|------|
+| 1 | 🔴 **snapshot/restore 동적 컬럼명 미검증** — `Object.keys(row)`로 컬럼명 생성, SQL 인젝션 가능 | system.ts L527 | CRITICAL | SQL 인젝션 |
+| 2 | 🟠 **sanitizeInput 정의만 존재, 사용 0곳** — XSS 방어 함수 미사용 | security.ts | HIGH | XSS |
+| 3 | 🟠 **쿠키에 Secure 플래그 없음** — HTTPS 환경에서 필수 | auth.ts L99 | HIGH | 보안 |
+| 4 | 🟠 **감사로그에 body 전체 JSON.stringify** — 비밀번호 등 민감정보 노출 가능 | users.ts L271 | MEDIUM | 정보노출 |
+| 5 | 🟡 **글로벌 에러 핸들러 `_debug` 필드** — 실제 에러 메시지 클라이언트 노출 | index.tsx L57 | MEDIUM | 정보노출 |
+| 6 | 🟡 **API 404 미표준화** — 존재하지 않는 API 경로에 HTML 404 반환 | index.tsx | LOW | UX |
+| 7 | 🟡 **AGENCY_LEADER 역할 validators.ts 누락** — `VALID_ROLES` 배열에 미포함 | validators.ts L53 | MEDIUM | 버그 |
+
+#### R8-2단계: 백엔드 보안 수정 ✅
+
+**security.ts v3.0:**
+- `safeAuditDetail(body)` — 민감 필드(password, secret, credentials 등) 자동 마스킹 (`***`)
+- `isSafeColumnName(name)` — SQL 동적 컬럼명 검증 (알파벳/숫자/언더스코어만 허용)
+- `filterSafeColumns(cols)` — 안전한 컬럼명 배열 필터링
+- `cleanStr(value)` — null/undefined 안전 문자열 변환
+
+**system.ts v15.0:**
+- 스냅샷 복원 시 `isSafeColumnName()` 검증 추가 — 악의적 컬럼명 차단
+- import 함수는 기존 `allowedCols` 화이트리스트로 이미 안전 확인
+
+**auth.ts:**
+- `Set-Cookie`에 `Secure` 플래그 추가 (로그인/로그아웃 모두)
+
+**users.ts:**
+- 감사로그에 `safeAuditDetail(body)` 적용 — 비밀번호 필드 `***` 마스킹
+
+**validators.ts:**
+- `VALID_ROLES`에 `AGENCY_LEADER` 추가
+
+#### R8-3단계: 에러 처리 강화 ✅
+
+**index.tsx 글로벌 에러 핸들러 v2.0:**
+- `_debug` 필드 제거 — 프로덕션에서 실제 에러 메시지 클라이언트 비노출
+- JSON 파싱 에러(`SyntaxError`) 감지 추가 → `400 PARSE_ERROR` 응답
+- **API 404 핸들러** 추가 — `app.all('/api/*')` catch-all로 명확한 JSON 404 응답
+- 버전 업데이트 → v20.9.0
+
+#### R8-4단계: 프론트엔드 XSS 방어 ✅
+
+**ui.js v4.0:**
+- `escapeHtml(str)` — HTML 엔티티 이스케이프 (`&`, `<`, `>`, `"`, `'`)
+- `safeText(str)` — 안전한 텍스트 삽입 유틸
+
+**system.js:**
+- 글로벌 검색 결과 표시에 `escapeHtml()` 적용 (검색어, 제목, 부제)
+
+**orders.js:**
+- onclick 이벤트에 삽입되는 고객명/주소 텍스트에 `escapeHtml()` 적용 (6곳)
+
+#### R8-5단계: 검증 ✅
+
+- E2E: HR 35/36 (100%) + Policy 26/26 (100%) = 61/62 총 통과
+- 빌드: dist/_worker.js 278.66 kB
+- 헬스체크: v20.9.0 정상
+- Secure 쿠키: 로그인 응답에 `Secure` 플래그 확인
+- API 404: `/api/nonexistent` → `{"error":"요청한 API 경로를 찾을 수 없습니다.","code":"NOT_FOUND"}` 확인
+
+### 변경 통계
+- 7 files changed: security.ts(+40), system.ts(+5), auth.ts(+2), users.ts(+2), validators.ts(+1), index.tsx(+15,-10), ui.js(+15), system.js(+3), orders.js(+6)
+- E2E: HR 35/36 + Policy 26/26 = 61/62 (100%)
+- 빌드: 278.66 kB
+
+**R9 우선순위 제안:**
+
+| 우선순위 | 항목 | 설명 | 난이도 |
+|---|---|---|---|
+| 🟠 P1 | 나머지 인라인 테이블 전환 | settlement/review/kanban 등 renderDataTable 확대 | 중 |
+| 🟡 P2 | 프로덕션 배포 최적화 | 코드 분할, 지연 로딩, CDN 캐시 | 하 |
+| 🟡 P3 | Playwright E2E | 프론트엔드 브라우저 자동 테스트 | 하 |
+
+**다음 단계 추천:** R9 (나머지 인라인 테이블 전환 + 프로덕션 최적화)

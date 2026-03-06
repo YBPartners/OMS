@@ -96,7 +96,7 @@ auth.post('/login', async (c) => {
     cleanExpiredSessions(db).catch(() => {});
   }
 
-  const setCookie = `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`;
+  const setCookie = `session_id=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400`;
   
   return c.json({
     session_id: sessionId,
@@ -126,7 +126,7 @@ auth.post('/logout', async (c) => {
     // ★ Session Service를 통한 세션 삭제 + KV 캐시 제거 (v2.0)
     await deleteSession(c.env.DB, sessionId, c.env.SESSION_CACHE);
   }
-  return c.json({ ok: true }, 200, { 'Set-Cookie': 'session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' });
+  return c.json({ ok: true }, 200, { 'Set-Cookie': 'session_id=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0' });
 });
 
 // ─── 쿠키에서 session_id 추출 헬퍼 ───

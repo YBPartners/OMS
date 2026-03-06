@@ -1,7 +1,21 @@
 // ============================================================
-// 와이비 OMS — Core UI Module v3.0
-// 토스트, 모달, 포맷터, 뱃지, 로딩
+// 와이비 OMS — Core UI Module v4.0
+// 토스트, 모달, 포맷터, 뱃지, 로딩, XSS 방어
 // ============================================================
+
+// ─── XSS 방어: HTML 엔티티 이스케이프 ───
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
+/** 안전한 텍스트 삽입 — HTML 이스케이프 적용 */
+function safeText(str) { return escapeHtml(str); }
 
 // ─── 포맷터 ───
 function formatAmount(v) { return v != null ? Number(v).toLocaleString('ko-KR') + '원' : '-'; }
