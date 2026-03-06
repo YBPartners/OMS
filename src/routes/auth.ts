@@ -86,8 +86,8 @@ auth.post('/login', async (c) => {
     agencyTeamIds = teamMappings.results.map((r: any) => r.team_user_id as number);
   }
 
-  // ★ Session Service를 통한 세션 생성 (도메인 분리)
-  const { sessionId, expiresAt } = await createSession(db, user.user_id as number);
+  // ★ Session Service를 통한 세션 생성 + KV 캐시 (v2.0)
+  const { sessionId, expiresAt } = await createSession(db, user.user_id as number, 5, c.env.SESSION_CACHE);
 
   await writeAuditLog(db, { entity_type: 'USER', entity_id: user.user_id as number, action: 'LOGIN', actor_id: user.user_id as number });
 
@@ -123,8 +123,8 @@ auth.post('/logout', async (c) => {
   // X-Session-Id 헤더 또는 Cookie에서 session_id 추출
   const sessionId = c.req.header('X-Session-Id') || getSessionCookie(c);
   if (sessionId) {
-    // ★ Session Service를 통한 세션 삭제 (도메인 분리)
-    await deleteSession(c.env.DB, sessionId);
+    // ★ Session Service를 통한 세션 삭제 + KV 캐시 제거 (v2.0)
+    await deleteSession(c.env.DB, sessionId, c.env.SESSION_CACHE);
   }
   return c.json({ ok: true }, 200, { 'Set-Cookie': 'session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' });
 });

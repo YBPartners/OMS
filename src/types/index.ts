@@ -37,6 +37,7 @@ export type AuditEventCode =
 export interface Env {
   Bindings: {
     DB: D1Database;
+    SESSION_CACHE: KVNamespace;
   };
   Variables: {
     user: SessionUser | null;

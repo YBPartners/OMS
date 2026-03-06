@@ -10,5 +10,11 @@
       "database_name": "dahada-production",
       "database_id": "0b7aedd5-7510-44d3-8b81-d421b03fffa6"
     }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "SESSION_CACHE",
+      "id": "5024085768aa47ba943e4e65a454795e"
+    }
   ]
 }

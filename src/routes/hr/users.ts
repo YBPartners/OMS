@@ -301,8 +301,8 @@ export function mountUsers(router: Hono<Env>) {
     await db.prepare("UPDATE users SET status = ?, updated_at = datetime('now') WHERE user_id = ?").bind(status, userId).run();
 
     if (status === 'INACTIVE') {
-      // ★ Session Service를 통한 세션 무효화 (교차 도메인 분리)
-      await invalidateUserSessions(db, userId);
+      // ★ Session Service를 통한 세션 무효화 + KV 캐시 제거 (v2.0)
+      await invalidateUserSessions(db, userId, c.env.SESSION_CACHE);
     }
 
     await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: status === 'ACTIVE' ? 'ACTIVATE' : 'DEACTIVATE', actor_id: currentUser.user_id });
@@ -332,8 +332,8 @@ export function mountUsers(router: Hono<Env>) {
     const passwordHash = await hashPassword(newPassword);
 
     await db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE user_id = ?").bind(passwordHash, userId).run();
-    // ★ Session Service를 통한 세션 무효화 (교차 도메인 분리)
-    await invalidateUserSessions(db, userId);
+    // ★ Session Service를 통한 세션 무효화 + KV 캐시 제거 (v2.0)
+    await invalidateUserSessions(db, userId, c.env.SESSION_CACHE);
 
     await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: 'RESET_PASSWORD', actor_id: currentUser.user_id });
 
@@ -415,8 +415,8 @@ export function mountUsers(router: Hono<Env>) {
     await db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE user_id = ?`).bind(...params).run();
 
     if (password) {
-      // ★ Session Service를 통한 세션 무효화 (교차 도메인 분리)
-      await invalidateUserSessions(db, userId);
+      // ★ Session Service를 통한 세션 무효화 + KV 캐시 제거 (v2.0)
+      await invalidateUserSessions(db, userId, c.env.SESSION_CACHE);
     }
 
     await writeAuditLog(db, { entity_type: 'USER', entity_id: userId, action: 'SET_CREDENTIALS', actor_id: currentUser.user_id, detail_json: JSON.stringify({ login_id_changed: !!login_id, password_changed: !!password }) });
