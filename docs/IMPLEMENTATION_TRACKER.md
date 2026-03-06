@@ -1,9 +1,9 @@
 # 와이비 OMS — 구현 추적 문서 (Implementation Tracker)
 
 > **최종 업데이트**: 2026-03-06
-> **버전**: v18.1.0
+> **버전**: v19.0.0
 > **이 문서는 대화 압축/토큰 초과 시 컨텍스트 복구용입니다.**
-> **항상 이 파일 + ARCHITECTURE.md + PROGRESS.md 를 먼저 읽어 현재 진행 상황을 파악하세요.**
+> **항상 이 파일 + ARCHITECTURE.md + PROGRESS.md + CONVERSATION_CONTEXT.md 를 먼저 읽어 현재 진행 상황을 파악하세요.**
 
 ---
 
@@ -14,21 +14,24 @@
 | **ARCHITECTURE.md** | `/home/user/webapp/ARCHITECTURE.md` | 시스템 구조, 기술 스택, API 맵, DB 모델, 서비스 레이어 |
 | **PROGRESS.md** | `/home/user/webapp/PROGRESS.md` | Phase별 진행 상태, 미구현 목록, 알려진 이슈 |
 | **IMPLEMENTATION_TRACKER.md** | 이 파일 | 세부 체크리스트, 설계 결정, 파일 경로 |
+| **CONVERSATION_CONTEXT.md** | `/home/user/webapp/docs/CONVERSATION_CONTEXT.md` | 직전 대화 컨텍스트 (이어가기용) |
 | **README.md** | `/home/user/webapp/README.md` | 프로젝트 개요, 테스트 계정, API 요약 |
-| **ARCHITECTURE_INNOVATION_v5.0.md** | `/home/user/webapp/docs/` | 10가지 혁신 포인트 상세 설계 |
-| **DESIGN_v4.0_team_signup_system.md** | `/home/user/webapp/docs/` | 팀장 가입 시스템 상세 설계 |
 
 ---
 
 ## 현재 상태 요약
 
-- **전체 Phase**: 0~18.1 완료 (Phase 18.1: 역할별 대시보드 접근 권한 + TEAM/AGENCY 개인 대시보드)
-- **프로덕션 배포**: ✅ https://dahada-oms.pages.dev (v18.1.0)
+- **전체 Phase**: 0~18.1 + D-1~D-6 완료
+- **최신 Phase**: D-6 (주문 채널 API 연동 + 브랜드 채널 + 법인→총판 치환)
+- **프로덕션 배포**: ✅ https://dahada-oms.pages.dev
 - **로컬 개발**: ✅ PM2 + wrangler pages dev, port 3000
 - **서비스 레이어**: ✅ 5개 서비스, 모듈 간 교차 의존성 해소
 - **E2E 테스트**: ✅ 50/50 통과 (15개 영역, `tests/e2e.sh`)
-- **코드량**: Backend 9,037 + Frontend 11,031 + SW 143 + CSS 419 + SQL 1,338 + E2E 386 = **22,354줄**
-- **알려진 이슈**: signup SQL 오류 ✅해결, 로그아웃 세션 버그 ✅해결, Tailwind CDN 경고 (경미)
+- **코드량**: Backend 10,093 + Frontend 12,249 + SW 143 + CSS 420 + SQL 1,245 + E2E 386 = **24,536줄**
+- **마이그레이션**: 13개 (0001~0013, 최신: 0013_channel_api_integration.sql)
+- **DB 테이블**: 44개
+- **주문 채널**: 5개 (아정당/삼성/엘지/캐리어/로컬) — 에어컨 세척 브랜드별
+- **조직 명칭**: "법인" → "총판" 전체 치환 완료
 
 ---
 
@@ -198,6 +201,18 @@
 - [x] app.js: TEAM_LEADER 기본 페이지 dashboard 변경
 - [x] 커밋 e6d11db, 4 files, +121/-52
 
+### ✅ Phase D-6: 주문 채널 API 연동 + 브랜드 채널 정리
+- [x] 0013_channel_api_integration.sql — order_channels에 16개 API 연동 필드 추가
+- [x] GET /api/hr/channels/:id — 채널 상세 (API 설정 포함)
+- [x] POST /api/hr/channels/:id/test-api — API 연결 테스트
+- [x] POST /api/hr/channels/:id/sync — 주문 동기화 (필드 매핑, 중복체크, 자동 생성)
+- [x] DELETE /api/hr/channels/:id — 채널 삭제
+- [x] 인증 방식: NONE, API_KEY, BEARER, BASIC, CUSTOM_HEADER
+- [x] channels.js 전면 재작성 (탭 UI: API 설정/필드 매핑/동기화 상태)
+- [x] 채널명 에어컨 브랜드별 변경 (아정당/삼성/엘지/캐리어/로컬)
+- [x] "법인" → "총판" 전체 치환 (24개 파일, 158건, DB 데이터 포함)
+- [x] 커밋 3개: 50b036c, 1996aca, 604dd84
+
 ### ✅ Phase 16: 품질 강화 + 문서 정비 + E2E 테스트
 - [x] 프로덕션 DB 마이그레이션 0006~0010 적용 완료
 - [x] ARCHITECTURE.md v16.0 전면 갱신 (구조, API, E2E, 코드 통계)
@@ -268,18 +283,18 @@
 ## 파일 경로 참조
 
 - 프로젝트 루트: `/home/user/webapp/`
-- 백엔드 소스: `/home/user/webapp/src/` (46파일, 8,890줄)
+- 백엔드 소스: `/home/user/webapp/src/` (48파일, 10,093줄)
 - **서비스 레이어**: `/home/user/webapp/src/services/` (6파일, 634줄)
-- **채널+대리점 API**: `/home/user/webapp/src/routes/hr/channels-agency.ts` (373줄) ← v7.0 신규
-- 프론트엔드: `/home/user/webapp/public/static/js/` (24파일, 11,107줄)
-- **모바일 CSS**: `/home/user/webapp/public/static/css/mobile.css` (419줄) ← v9.0 신규
-- **채널 페이지**: `/home/user/webapp/public/static/js/pages/channels.js` (145줄) ← v7.0
-- **대리점 페이지**: `/home/user/webapp/public/static/js/pages/agency.js` (400줄) ← v7.0
-- **대시보드 차트**: `/home/user/webapp/public/static/js/pages/dashboard.js` (~250줄) ← v8.0 Chart.js
-- **CSV 유틸리티**: `/home/user/webapp/public/static/js/core/ui.js` exportToCSV() ← v8.0
-- **카메라 첨부/파일명**: `/home/user/webapp/public/static/js/pages/my-orders.js` handleFileAttach() ← v17.1
-- **사진업로드 API**: `/home/user/webapp/src/routes/orders/report.ts` generateFileName() ← v17.1
-- 마이그레이션: `/home/user/webapp/migrations/` (11파일, 최신 0011_photo_upload.sql)
+- **채널+대리점 API**: `/home/user/webapp/src/routes/hr/channels-agency.ts` ← 채널 API 연동 + 대리점
+- 프론트엔드: `/home/user/webapp/public/static/js/` (23파일, 12,249줄)
+- **모바일 CSS**: `/home/user/webapp/public/static/css/mobile.css` (420줄)
+- **채널 페이지**: `/home/user/webapp/public/static/js/pages/channels.js` ← API 설정/필드매핑/동기화 UI
+- **대리점 페이지**: `/home/user/webapp/public/static/js/pages/agency.js`
+- **대시보드 차트**: `/home/user/webapp/public/static/js/pages/dashboard.js` ← Chart.js + SVG 히트맵
+- **CSV 유틸리티**: `/home/user/webapp/public/static/js/core/ui.js` exportToCSV()
+- **카메라 첨부/파일명**: `/home/user/webapp/public/static/js/pages/my-orders.js` handleFileAttach()
+- **사진업로드 API**: `/home/user/webapp/src/routes/orders/report.ts` generateFileName()
+- 마이그레이션: `/home/user/webapp/migrations/` (13파일, 최신 0013_channel_api_integration.sql)
 - 시드 데이터: `/home/user/webapp/seed.sql` + `/home/user/webapp/seed/`
 - 설계 문서: `/home/user/webapp/docs/`
 - 아키텍처: `/home/user/webapp/ARCHITECTURE.md`
@@ -302,14 +317,18 @@
 
 ---
 
-## v7.0 신규 API 참조
+## v7.0~v19.0 채널 API 참조
 
-### 채널 API (hr/channels-agency.ts → mountChannels)
+### 채널 API (hr/channels-agency.ts)
 | Method | Path | 설명 |
 |--------|------|------|
 | GET | /api/hr/channels | 채널 목록 + 주문 수/금액 통계 |
+| GET | /api/hr/channels/:id | 채널 상세 (API 설정 포함) ★ v19.0 |
 | POST | /api/hr/channels | 채널 생성 (코드 정규식: `[A-Z0-9_]{2,30}`) |
-| PUT | /api/hr/channels/:channel_id | 채널 수정 |
+| PUT | /api/hr/channels/:channel_id | 채널 수정 (API 설정 포함) |
+| POST | /api/hr/channels/:id/test-api | API 연결 테스트 ★ v19.0 |
+| POST | /api/hr/channels/:id/sync | 주문 동기화 실행 ★ v19.0 |
+| DELETE | /api/hr/channels/:id | 채널 삭제 ★ v19.0 |
 
 ### 대리점 API (hr/channels-agency.ts → mountAgency)
 | Method | Path | 설명 |

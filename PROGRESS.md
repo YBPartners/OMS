@@ -1,8 +1,8 @@
 # 와이비 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-06
-> **현재 버전**: v18.1.0
-> **총 코드량**: Backend 9,037줄 (46 TS) + Frontend 11,031줄 (24 JS) + SW 143줄 + CSS 419줄 + SQL 1,338줄 + E2E 386줄 = **22,354줄**
+> **현재 버전**: v19.0.0
+> **총 코드량**: Backend 10,093줄 (48 TS) + Frontend 12,249줄 (23 JS) + SW 143줄 + CSS 420줄 + SQL 1,245줄 + E2E 386줄 = **24,536줄**
 
 ---
 
@@ -33,6 +33,58 @@
 | **17.1** | **보고서/영수증 – 모바일 카메라 첨부 + 파일명 규칙화** | **✅ 완료** | **2026-03-06** | **카메라 촬영/갤러리, Base64 저장, 파일명 자동생성, 0011 마이그레이션** |
 | **18.0** | **KV 캐시 세션 검증 – D1 쿼리 최소화** | **✅ 완료** | **2026-03-06** | **SESSION_CACHE KV, session-service v2.0, API 요청당 D1 쿼리 3→0회** |
 | **18.1** | **역할별 대시보드 접근 권한 – TEAM/AGENCY 개인 대시보드** | **✅ 완료** | **2026-03-06** | **TEAM_LEADER/AGENCY_LEADER 대시보드 접근, 역할 기반 UI 분기, 퍼널 차트 대체** |
+| **D-1** | **이메일 필수 + Resend 연동** | **✅ 완료** | **2026-03-06** | **가입 이메일 필수, Resend 이메일 발송 인프라** |
+| **D-3** | **Tailwind PostCSS** | **✅ 완료** | **2026-03-06** | **CDN → PostCSS 빌드 전환** |
+| **D-4** | **SVG 히트맵** | **✅ 완료** | **2026-03-06** | **지역별 히트맵 SVG 시각화** |
+| **D-5** | **딜러 수수료 자동분배 + 인보이스** | **✅ 완료** | **2026-03-06** | **수수료 자동분배, 팀장별 인보이스, 일괄인쇄** |
+| **D-6** | **주문 채널 API 연동 + 브랜드 채널 정리** | **✅ 완료** | **2026-03-06** | **채널별 API 설정/테스트/동기화, 필드매핑, 에어컨 브랜드별 채널, 법인→총판 치환** |
+
+---
+
+## Phase D-6 — 주문 채널 API 연동 + 브랜드 채널 정리 ✅ (2026-03-06)
+
+> **목적**: 주문 채널 = 본사가 주문을 수신하는 외부 발송처. 각 채널에 API 연동 설정을 할 수 있도록 구현.
+
+### D-6-1: DB 마이그레이션 (0013_channel_api_integration.sql) ✅
+- `order_channels` 테이블에 16개 API 연동 필드 추가
+  - `api_endpoint`, `api_method`, `auth_type`, `auth_credentials`
+  - `request_headers`, `request_body_template`, `response_type`
+  - `field_mapping`, `data_path`, `polling_interval_min`
+  - `last_sync_at/status/message/count`, `total_synced_count`, `api_enabled`
+- 기존 테스트 채널(DEFAULT, KT, LGU, SK) 비활성화
+- 아정당(AJD) 채널 신규 생성 (우선순위 100)
+
+### D-6-2: 백엔드 채널 API 엔드포인트 확장 ✅
+- `GET /api/hr/channels/:id` — 채널 상세 (API 설정 포함)
+- `POST /api/hr/channels/:id/test-api` — API 연결 테스트 (응답시간, 레코드 수, 파싱 가능 여부)
+- `POST /api/hr/channels/:id/sync` — 주문 동기화 (필드 매핑 → 중복체크 → 자동 주문 생성)
+- `DELETE /api/hr/channels/:id` — 채널 삭제
+- 인증 방식: NONE, API_KEY, BEARER, BASIC, CUSTOM_HEADER 지원
+- `field_mapping` JSON으로 외부 API 응답 필드 → OMS 주문 필드 매핑
+
+### D-6-3: 프론트엔드 채널 관리 페이지 전면 개편 ✅
+- 탭 UI: API 설정 / 필드 매핑 / 동기화 상태
+- API 연결 테스트 버튼 (응답 시간, 레코드 수, 성공/실패)
+- 동기화 실행 버튼 (신규 주문 수, 중복 건너뛴 수)
+- 중첩 경로 지원 (예: `result.data[].customer_name`)
+
+### D-6-4: 채널명 에어컨 세척 브랜드별 변경 ✅
+- 기본 채널 → 로컬 (LOCAL, 우선순위 10)
+- KT 주문원장 → 삼성 (SAMSUNG, 우선순위 90)
+- LG U+ 주문원장 → 엘지 (LG, 우선순위 80)
+- SK 주문원장 → 캐리어 (CARRIER, 우선순위 70)
+- 모든 5개 채널 활성화 완료
+
+### D-6-5: "법인" → "총판" 전체 치환 ✅
+- **24개 파일**, 158건 일괄 치환
+- JS 7 + TS 7 + SQL 4 + CSS 1 + MD 5개 파일
+- DB 데이터: 서울/경기/인천/부산 **지역법인 → 지역총판**
+- 전체 프로젝트에서 "법인" **0건** 확인
+
+### 변경 통계
+- 마이그레이션 1개: 0013_channel_api_integration.sql
+- 커밋 3개: 50b036c(채널 API 연동), 1996aca(채널명 변경), 604dd84(법인→총판)
+- 주요 변경 파일: channels-agency.ts(백엔드), channels.js(프론트엔드, ~42KB)
 
 ---
 
