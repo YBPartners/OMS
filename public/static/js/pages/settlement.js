@@ -37,43 +37,28 @@ async function renderSettlement(el) {
         </div>
       </div>` : ''}
 
-      <div class="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50 text-gray-600"><tr>
-            <th class="px-4 py-3 text-left">ID</th><th class="px-4 py-3 text-left">유형</th>
-            <th class="px-4 py-3 text-left">기간</th><th class="px-4 py-3 text-center">상태</th>
-            <th class="px-4 py-3 text-right">건수</th><th class="px-4 py-3 text-right">기본금액</th>
-            <th class="px-4 py-3 text-right">수수료</th><th class="px-4 py-3 text-right">지급액</th>
-            <th class="px-4 py-3 text-center">관리</th>
-          </tr></thead>
-          <tbody class="divide-y">
-            ${runs.map(r => {
-              const rs = OMS.RUN_STATUS[r.status] || { label: r.status, color: 'bg-gray-100 text-gray-700' };
-              return `
-              <tr class="ix-table-row" onclick="viewRunDetail(${r.run_id})"
-                  oncontextmenu="showRunContextMenu(event, ${JSON.stringify(r).replace(/"/g, '&quot;')})">
-                <td class="px-4 py-3 font-mono text-gray-500 link-item">${r.run_id}</td>
-                <td class="px-4 py-3"><span class="text-xs px-2 py-0.5 rounded bg-gray-100">${r.period_type === 'WEEKLY' ? '주간' : '월간'}</span></td>
-                <td class="px-4 py-3 text-xs">${r.period_start} ~ ${r.period_end}</td>
-                <td class="px-4 py-3 text-center"><span class="status-badge ${rs.color}"><i class="fas ${rs.icon} mr-1"></i>${rs.label}</span></td>
-                <td class="px-4 py-3 text-right link-item">${r.total_count || 0}건</td>
-                <td class="px-4 py-3 text-right">${formatAmount(r.total_base_amount)}</td>
-                <td class="px-4 py-3 text-right text-red-600">${formatAmount(r.total_commission_amount)}</td>
-                <td class="px-4 py-3 text-right font-bold text-green-600">${formatAmount(r.total_payable_amount)}</td>
-                <td class="px-4 py-3 text-center" onclick="event.stopPropagation()">
-                  <div class="flex gap-1 justify-center">
-                    <button onclick="viewRunDetail(${r.run_id})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200" data-tooltip="상세"><i class="fas fa-eye"></i></button>
-                    ${r.status !== 'DRAFT' && currentUser?.roles?.includes('TEAM_LEADER') ? `<button onclick="showTeamInvoice(${r.run_id}, ${currentUser.user_id})" class="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs hover:bg-amber-200" data-tooltip="내 계산서"><i class="fas fa-file-invoice-dollar mr-1"></i>계산서</button>` : ''}
-                    ${r.status === 'DRAFT' && canEdit('policy') ? `<button onclick="calculateRun(${r.run_id})" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200" data-tooltip="산출"><i class="fas fa-calculator mr-1"></i>산출</button>` : ''}
-                    ${r.status === 'CALCULATED' && canEdit('policy') ? `<button onclick="confirmRun(${r.run_id})" class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200" data-tooltip="확정"><i class="fas fa-check mr-1"></i>확정</button>` : ''}
-                  </div>
-                </td>
-              </tr>`;
-            }).join('')}
-            ${runs.length === 0 ? '<tr><td colspan="9" class="px-4 py-8 text-center text-gray-400">정산 Run이 없습니다. "정산 Run 생성" 버튼을 클릭하세요.</td></tr>' : ''}
-          </tbody>
-        </table>
-      </div>
+      ${renderDataTable({
+        columns: [
+          { key: 'run_id', label: 'ID', render: r => `<span class="font-mono text-gray-500 link-item">${r.run_id}</span>` },
+          { key: 'period_type', label: '유형', render: r => `<span class="text-xs px-2 py-0.5 rounded bg-gray-100">${r.period_type === 'WEEKLY' ? '주간' : '월간'}</span>` },
+          { key: 'period', label: '기간', render: r => `<span class="text-xs">${r.period_start} ~ ${r.period_end}</span>` },
+          { key: 'status', label: '상태', align: 'center', render: r => { const rs = OMS.RUN_STATUS[r.status] || { label: r.status, color: 'bg-gray-100 text-gray-700' }; return `<span class="status-badge ${rs.color}"><i class="fas ${rs.icon} mr-1"></i>${rs.label}</span>`; } },
+          { key: 'total_count', label: '건수', align: 'right', render: r => `<span class="link-item">${r.total_count || 0}건</span>` },
+          { key: 'total_base_amount', label: '기본금액', align: 'right', render: r => formatAmount(r.total_base_amount) },
+          { key: 'total_commission_amount', label: '수수료', align: 'right', render: r => `<span class="text-red-600">${formatAmount(r.total_commission_amount)}</span>` },
+          { key: 'total_payable_amount', label: '지급액', align: 'right', render: r => `<span class="font-bold text-green-600">${formatAmount(r.total_payable_amount)}</span>` },
+          { key: '_actions', label: '관리', align: 'center', render: r => `<div class="flex gap-1 justify-center" onclick="event.stopPropagation()">
+            <button onclick="viewRunDetail(${r.run_id})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200" data-tooltip="상세"><i class="fas fa-eye"></i></button>
+            ${r.status !== 'DRAFT' && currentUser?.roles?.includes('TEAM_LEADER') ? `<button onclick="showTeamInvoice(${r.run_id}, ${currentUser.user_id})" class="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs hover:bg-amber-200" data-tooltip="내 계산서"><i class="fas fa-file-invoice-dollar mr-1"></i>계산서</button>` : ''}
+            ${r.status === 'DRAFT' && canEdit('policy') ? `<button onclick="calculateRun(${r.run_id})" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200" data-tooltip="산출"><i class="fas fa-calculator mr-1"></i>산출</button>` : ''}
+            ${r.status === 'CALCULATED' && canEdit('policy') ? `<button onclick="confirmRun(${r.run_id})" class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200" data-tooltip="확정"><i class="fas fa-check mr-1"></i>확정</button>` : ''}
+          </div>` },
+        ],
+        rows: runs,
+        onRowClick: 'viewRunDetail',
+        emptyText: '정산 Run이 없습니다. "정산 Run 생성" 버튼을 클릭하세요.',
+        caption: '정산 Run 목록',
+      })}
     </div>`;
 }
 
@@ -401,23 +386,18 @@ async function renderReconciliation(el) {
       <!-- Run 이력 -->
       <div class="bg-white rounded-xl p-5 border border-gray-100">
         <h3 class="font-semibold mb-4"><i class="fas fa-history mr-2 text-indigo-500"></i>대사 실행 이력</h3>
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50"><tr>
-            <th class="px-4 py-2 text-left">ID</th><th class="px-4 py-2 text-left">기간</th>
-            <th class="px-4 py-2 text-center">상태</th><th class="px-4 py-2 text-right">이슈 수</th>
-            <th class="px-4 py-2 text-left">실행시간</th>
-          </tr></thead>
-          <tbody class="divide-y">${runs.map(r => `
-            <tr class="hover:bg-gray-50">
-              <td class="px-4 py-2 font-mono text-gray-500">${r.run_id}</td>
-              <td class="px-4 py-2 text-xs">${r.date_range_start} ~ ${r.date_range_end}</td>
-              <td class="px-4 py-2 text-center"><span class="status-badge ${r.status === 'DONE' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">${r.status}</span></td>
-              <td class="px-4 py-2 text-right font-bold ${(r.total_issues || 0) > 0 ? 'text-red-600' : 'text-green-600'}">${r.total_issues || 0}</td>
-              <td class="px-4 py-2 text-xs text-gray-500">${formatDate(r.started_at)}</td>
-            </tr>`).join('')}
-            ${runs.length === 0 ? '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">대사 실행 기록 없음</td></tr>' : ''}
-          </tbody>
-        </table>
+        ${renderDataTable({
+          columns: [
+            { key: 'run_id', label: 'ID', render: r => `<span class="font-mono text-gray-500">${r.run_id}</span>` },
+            { key: 'period', label: '기간', render: r => `<span class="text-xs">${r.date_range_start} ~ ${r.date_range_end}</span>` },
+            { key: 'status', label: '상태', align: 'center', render: r => `<span class="status-badge ${r.status === 'DONE' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">${r.status}</span>` },
+            { key: 'total_issues', label: '이슈 수', align: 'right', render: r => `<span class="font-bold ${(r.total_issues || 0) > 0 ? 'text-red-600' : 'text-green-600'}">${r.total_issues || 0}</span>` },
+            { key: 'started_at', label: '실행시간', render: r => `<span class="text-xs text-gray-500">${formatDate(r.started_at)}</span>` },
+          ],
+          rows: runs,
+          emptyText: '대사 실행 기록 없음',
+          caption: '대사 실행 이력',
+        })}
       </div>
     </div>`;
 }

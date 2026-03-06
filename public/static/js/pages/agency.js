@@ -414,30 +414,21 @@ async function showAgencyOnboardingModal() {
       <div class="flex gap-2 mb-4">
         <button onclick="showAgencyOnboardRequestModal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"><i class="fas fa-plus mr-1"></i>온보딩 신청</button>
       </div>
-      ${requests.length === 0 ? '<p class="text-center text-gray-400 py-8">온보딩 신청 내역이 없습니다.</p>' : `
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50"><tr>
-          <th class="px-3 py-2 text-left">신청자</th>
-          <th class="px-3 py-2 text-left">소속</th>
-          <th class="px-3 py-2 text-center">상태</th>
-          <th class="px-3 py-2 text-left">비고</th>
-          <th class="px-3 py-2 text-left">신청일</th>
-          <th class="px-3 py-2 text-center">액션</th>
-        </tr></thead>
-        <tbody class="divide-y">${requests.map(r => `
-          <tr class="hover:bg-gray-50">
-            <td class="px-3 py-2 font-medium">${r.agency_name}</td>
-            <td class="px-3 py-2 text-gray-600">${r.region_name || ''} / ${r.org_name}</td>
-            <td class="px-3 py-2 text-center"><span class="px-2 py-0.5 rounded text-xs font-medium ${statusColors[r.status] || 'bg-gray-100'}">${statusLabels[r.status] || r.status}</span></td>
-            <td class="px-3 py-2 text-gray-500 text-xs">${r.note || '-'}</td>
-            <td class="px-3 py-2 text-xs text-gray-500">${formatDate(r.created_at)}</td>
-            <td class="px-3 py-2 text-center">${r.status === 'PENDING' ? `
-              <button onclick="approveOnboarding(${r.id})" class="px-2 py-1 bg-green-500 text-white rounded text-xs mr-1 hover:bg-green-600">승인</button>
-              <button onclick="rejectOnboarding(${r.id})" class="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600">반려</button>
-            ` : `<span class="text-xs text-gray-400">${r.approved_by_name || '-'}</span>`}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>`}
+      ${requests.length === 0 ? '<p class="text-center text-gray-400 py-8">온보딩 신청 내역이 없습니다.</p>' : renderDataTable({
+        columns: [
+          { key: 'agency_name', label: '신청자', render: r => `<span class="font-medium">${escapeHtml(r.agency_name)}</span>` },
+          { key: 'org_name', label: '소속', render: r => `<span class="text-gray-600">${escapeHtml(r.region_name || '')} / ${escapeHtml(r.org_name)}</span>` },
+          { key: 'status', label: '상태', align: 'center', render: r => `<span class="px-2 py-0.5 rounded text-xs font-medium ${statusColors[r.status] || 'bg-gray-100'}">${statusLabels[r.status] || r.status}</span>` },
+          { key: 'note', label: '비고', render: r => `<span class="text-gray-500 text-xs">${escapeHtml(r.note || '-')}</span>` },
+          { key: 'created_at', label: '신청일', render: r => `<span class="text-xs text-gray-500">${formatDate(r.created_at)}</span>` },
+          { key: '_actions', label: '액션', align: 'center', render: r => r.status === 'PENDING' ? `
+            <button onclick="approveOnboarding(${r.id})" class="px-2 py-1 bg-green-500 text-white rounded text-xs mr-1 hover:bg-green-600">승인</button>
+            <button onclick="rejectOnboarding(${r.id})" class="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600">반려</button>
+          ` : `<span class="text-xs text-gray-400">${escapeHtml(r.approved_by_name || '-')}</span>` },
+        ],
+        rows: requests,
+        caption: '온보딩 신청 내역',
+      })}
     </div>`;
 
   showModal('<i class="fas fa-store text-blue-500 mr-2"></i>대리점 온보딩 관리', content,

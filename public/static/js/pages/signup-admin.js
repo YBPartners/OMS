@@ -25,48 +25,28 @@ async function renderHRSignupRequests(el) {
       <span class="ml-auto text-sm text-gray-500">총 <strong>${total}</strong>건</span>
     `)}
     
-    <div class="bg-white rounded-xl border border-gray-100 overflow-hidden">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50"><tr>
-          <th class="px-3 py-2.5 text-left">ID</th>
-          <th class="px-3 py-2.5 text-left">신청자</th>
-          <th class="px-3 py-2.5 text-left">팀명</th>
-          <th class="px-3 py-2.5 text-left">총판</th>
-          <th class="px-3 py-2.5 text-center">구역</th>
-          <th class="px-3 py-2.5 text-center">관할외</th>
-          <th class="px-3 py-2.5 text-center">충돌</th>
-          <th class="px-3 py-2.5 text-center">상태</th>
-          <th class="px-3 py-2.5 text-left">신청일</th>
-          <th class="px-3 py-2.5 text-center">관리</th>
-        </tr></thead>
-        <tbody class="divide-y">${requests.map(r => {
-          const sBadge = r.status === 'APPROVED' ? 'bg-green-100 text-green-700' 
-            : r.status === 'REJECTED' ? 'bg-red-100 text-red-700' 
-            : 'bg-yellow-100 text-yellow-700';
-          const sLabel = r.status === 'APPROVED' ? '승인' : r.status === 'REJECTED' ? '반려' : '대기';
-          return `
-          <tr class="hover:bg-gray-50">
-            <td class="px-3 py-2 font-mono text-xs text-gray-500">${r.request_id}</td>
-            <td class="px-3 py-2 font-medium">${r.name}</td>
-            <td class="px-3 py-2 text-xs">${r.team_name}</td>
-            <td class="px-3 py-2 text-xs">${r.distributor_name}</td>
-            <td class="px-3 py-2 text-center">${r.region_count || 0}</td>
-            <td class="px-3 py-2 text-center">${r.outside_region_count > 0 ? `<span class="text-amber-600 font-medium">${r.outside_region_count}</span>` : '-'}</td>
-            <td class="px-3 py-2 text-center">${r.conflict_count > 0 ? `<span class="text-red-600 font-medium">${r.conflict_count}</span>` : '-'}</td>
-            <td class="px-3 py-2 text-center"><span class="status-badge ${sBadge}">${sLabel}</span></td>
-            <td class="px-3 py-2 text-xs text-gray-500">${(r.created_at || '').split('T')[0]}</td>
-            <td class="px-3 py-2 text-center">
-              <button onclick="showSignupDetail(${r.request_id})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200" title="상세"><i class="fas fa-eye"></i></button>
-              ${r.status === 'PENDING' ? `
-                <button onclick="approveSignup(${r.request_id}, '${r.name}')" class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 ml-1" title="승인"><i class="fas fa-check"></i></button>
-                <button onclick="rejectSignup(${r.request_id}, '${r.name}')" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 ml-1" title="반려"><i class="fas fa-times"></i></button>
-              ` : ''}
-            </td>
-          </tr>`;
-        }).join('')}
-        ${requests.length === 0 ? '<tr><td colspan="10" class="px-3 py-8 text-center text-gray-400">가입 신청이 없습니다.</td></tr>' : ''}
-        </tbody>
-      </table>
+    ${renderDataTable({
+      columns: [
+        { key: 'request_id', label: 'ID', render: r => `<span class="font-mono text-xs text-gray-500">${r.request_id}</span>` },
+        { key: 'name', label: '신청자', render: r => `<span class="font-medium">${escapeHtml(r.name)}</span>` },
+        { key: 'team_name', label: '팀명', render: r => `<span class="text-xs">${escapeHtml(r.team_name)}</span>` },
+        { key: 'distributor_name', label: '총판', render: r => `<span class="text-xs">${escapeHtml(r.distributor_name)}</span>` },
+        { key: 'region_count', label: '구역', align: 'center', render: r => r.region_count || 0 },
+        { key: 'outside_region_count', label: '관할외', align: 'center', render: r => r.outside_region_count > 0 ? `<span class="text-amber-600 font-medium">${r.outside_region_count}</span>` : '-' },
+        { key: 'conflict_count', label: '충돌', align: 'center', render: r => r.conflict_count > 0 ? `<span class="text-red-600 font-medium">${r.conflict_count}</span>` : '-' },
+        { key: 'status', label: '상태', align: 'center', render: r => { const sBadge = r.status === 'APPROVED' ? 'bg-green-100 text-green-700' : r.status === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'; const sLabel = r.status === 'APPROVED' ? '승인' : r.status === 'REJECTED' ? '반려' : '대기'; return `<span class="status-badge ${sBadge}">${sLabel}</span>`; } },
+        { key: 'created_at', label: '신청일', render: r => `<span class="text-xs text-gray-500">${(r.created_at || '').split('T')[0]}</span>` },
+        { key: '_actions', label: '관리', align: 'center', render: r => `
+          <button onclick="showSignupDetail(${r.request_id})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200" title="상세"><i class="fas fa-eye"></i></button>
+          ${r.status === 'PENDING' ? `
+            <button onclick="approveSignup(${r.request_id}, '${escapeHtml(r.name)}')" class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 ml-1" title="승인"><i class="fas fa-check"></i></button>
+            <button onclick="rejectSignup(${r.request_id}, '${escapeHtml(r.name)}')" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 ml-1" title="반려"><i class="fas fa-times"></i></button>
+          ` : ''}` },
+      ],
+      rows: requests,
+      emptyText: '가입 신청이 없습니다.',
+      caption: '가입신청 목록',
+    })}
       ${total > pg.limit ? renderPagination(total, pg.page, pg.limit, 'goSignupPage') : ''}
     </div>`;
 }
@@ -249,54 +229,23 @@ async function renderHRRegionAddRequests(el) {
       <span class="ml-auto text-sm text-gray-500">총 <strong>${total}</strong>건</span>
     `)}
     
-    <div class="bg-white rounded-xl border border-gray-100 overflow-hidden">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50"><tr>
-          <th class="px-3 py-2.5 text-left">ID</th>
-          <th class="px-3 py-2.5 text-left">신청자/팀</th>
-          <th class="px-3 py-2.5 text-left">요청 구역</th>
-          <th class="px-3 py-2.5 text-left">총판</th>
-          <th class="px-3 py-2.5 text-center">충돌</th>
-          <th class="px-3 py-2.5 text-center">상태</th>
-          <th class="px-3 py-2.5 text-center">관리</th>
-        </tr></thead>
-        <tbody class="divide-y">${requests.map(r => {
-          const sBadge = r.status === 'APPROVED' ? 'bg-green-100 text-green-700' 
-            : r.status === 'REJECTED' ? 'bg-red-100 text-red-700'
-            : r.status === 'CONFLICT' ? 'bg-orange-100 text-orange-700'
-            : 'bg-yellow-100 text-yellow-700';
-          const sLabel = r.status === 'APPROVED' ? '승인' : r.status === 'REJECTED' ? '반려' : r.status === 'CONFLICT' ? '충돌' : '대기';
-          return `
-          <tr class="hover:bg-gray-50 ${r.status === 'CONFLICT' ? 'bg-orange-50/50' : ''}">
-            <td class="px-3 py-2 font-mono text-xs text-gray-500">${r.request_id}</td>
-            <td class="px-3 py-2">
-              <div class="text-xs">${r.applicant_name || '-'}</div>
-              <div class="text-[10px] text-gray-400">${r.team_name || ''}</div>
-            </td>
-            <td class="px-3 py-2 text-xs">
-              ${r.sido} ${r.sigungu}<br>
-              <span class="text-gray-500">${r.eupmyeondong}</span>
-            </td>
-            <td class="px-3 py-2 text-xs">${r.distributor_name}</td>
-            <td class="px-3 py-2 text-center">
-              ${r.conflict_org_name ? `<span class="text-orange-600 text-xs" title="${r.conflict_detail || ''}">${r.conflict_org_name}</span>` : '-'}
-            </td>
-            <td class="px-3 py-2 text-center"><span class="status-badge ${sBadge}">${sLabel}</span></td>
-            <td class="px-3 py-2 text-center">
-              ${r.status === 'PENDING' || r.status === 'CONFLICT' ? `
-                <button onclick="approveRegionAdd(${r.request_id}, ${r.status === 'CONFLICT'}, '${(r.conflict_org_name||'').replace(/'/g, "\\'")}')" 
-                  class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200" title="승인"><i class="fas fa-check"></i></button>
-                <button onclick="rejectRegionAdd(${r.request_id})" 
-                  class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 ml-1" title="반려"><i class="fas fa-times"></i></button>
-              ` : `
-                <button onclick="showRegionAddDetail(${r.request_id})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200"><i class="fas fa-eye"></i></button>
-              `}
-            </td>
-          </tr>`;
-        }).join('')}
-        ${requests.length === 0 ? '<tr><td colspan="7" class="px-3 py-8 text-center text-gray-400">추가 지역 요청이 없습니다.</td></tr>' : ''}
-        </tbody>
-      </table>
+    ${renderDataTable({
+      columns: [
+        { key: 'request_id', label: 'ID', render: r => `<span class="font-mono text-xs text-gray-500">${r.request_id}</span>` },
+        { key: 'applicant_name', label: '신청자/팀', render: r => `<div class="text-xs">${escapeHtml(r.applicant_name || '-')}</div><div class="text-[10px] text-gray-400">${escapeHtml(r.team_name || '')}</div>` },
+        { key: 'region', label: '요청 구역', render: r => `<span class="text-xs">${escapeHtml(r.sido)} ${escapeHtml(r.sigungu)}<br><span class="text-gray-500">${escapeHtml(r.eupmyeondong)}</span></span>` },
+        { key: 'distributor_name', label: '총판', render: r => `<span class="text-xs">${escapeHtml(r.distributor_name)}</span>` },
+        { key: 'conflict', label: '충돌', align: 'center', render: r => r.conflict_org_name ? `<span class="text-orange-600 text-xs" title="${escapeHtml(r.conflict_detail || '')}">${escapeHtml(r.conflict_org_name)}</span>` : '-' },
+        { key: 'status', label: '상태', align: 'center', render: r => { const sBadge = r.status === 'APPROVED' ? 'bg-green-100 text-green-700' : r.status === 'REJECTED' ? 'bg-red-100 text-red-700' : r.status === 'CONFLICT' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'; const sLabel = r.status === 'APPROVED' ? '승인' : r.status === 'REJECTED' ? '반려' : r.status === 'CONFLICT' ? '충돌' : '대기'; return `<span class="status-badge ${sBadge}">${sLabel}</span>`; } },
+        { key: '_actions', label: '관리', align: 'center', render: r => r.status === 'PENDING' || r.status === 'CONFLICT' ? `
+          <button onclick="approveRegionAdd(${r.request_id}, ${r.status === 'CONFLICT'}, '${escapeHtml((r.conflict_org_name||'').replace(/'/g, "\\'"))}')" class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200" title="승인"><i class="fas fa-check"></i></button>
+          <button onclick="rejectRegionAdd(${r.request_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 ml-1" title="반려"><i class="fas fa-times"></i></button>
+        ` : `<button onclick="showRegionAddDetail(${r.request_id})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200"><i class="fas fa-eye"></i></button>` },
+      ],
+      rows: requests,
+      emptyText: '추가 지역 요청이 없습니다.',
+      caption: '추가지역 요청 목록',
+    })}
       ${total > pg.limit ? renderPagination(total, pg.page, pg.limit, 'goRegionAddPage') : ''}
     </div>`;
 }

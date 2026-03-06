@@ -689,23 +689,18 @@ async function renderMyStats(el) {
         <!-- 일별 통계 -->
         <div class="bg-white rounded-xl p-5 border border-gray-100">
           <h3 class="font-semibold mb-4"><i class="fas fa-calendar-days mr-2 text-green-500"></i>일별 현황 (최근 7일)</h3>
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50"><tr>
-              <th class="px-3 py-2 text-left">날짜</th><th class="px-3 py-2 text-right">수임</th>
-              <th class="px-3 py-2 text-right">제출</th><th class="px-3 py-2 text-right">승인</th>
-              <th class="px-3 py-2 text-right">지급액</th>
-            </tr></thead>
-            <tbody class="divide-y">${stats.map(s => `
-              <tr class="hover:bg-gray-50">
-                <td class="px-3 py-2 text-xs">${s.date}</td>
-                <td class="px-3 py-2 text-right">${s.intake_count || 0}</td>
-                <td class="px-3 py-2 text-right">${s.submitted_count || 0}</td>
-                <td class="px-3 py-2 text-right">${s.hq_approved_count || 0}</td>
-                <td class="px-3 py-2 text-right font-bold text-green-600">${formatAmount(s.payable_amount_sum)}</td>
-              </tr>`).join('')}
-              ${stats.length === 0 ? '<tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">데이터 없음</td></tr>' : ''}
-            </tbody>
-          </table>
+          ${renderDataTable({
+            columns: [
+              { key: 'date', label: '날짜', render: s => `<span class="text-xs">${s.date}</span>` },
+              { key: 'intake_count', label: '수임', align: 'right', render: s => s.intake_count || 0 },
+              { key: 'submitted_count', label: '제출', align: 'right', render: s => s.submitted_count || 0 },
+              { key: 'hq_approved_count', label: '승인', align: 'right', render: s => s.hq_approved_count || 0 },
+              { key: 'payable_amount_sum', label: '지급액', align: 'right', render: s => `<span class="font-bold text-green-600">${formatAmount(s.payable_amount_sum)}</span>` },
+            ],
+            rows: stats,
+            emptyText: '데이터 없음',
+            caption: '일별 현황 (최근 7일)',
+          })}
         </div>
       </div>
 
@@ -713,20 +708,16 @@ async function renderMyStats(el) {
       <!-- 원장 -->
       <div class="bg-white rounded-xl p-5 border border-gray-100 mt-6">
         <h3 class="font-semibold mb-4"><i class="fas fa-wallet mr-2 text-amber-500"></i>정산 원장</h3>
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50"><tr>
-            <th class="px-3 py-2 text-left">날짜</th><th class="px-3 py-2 text-right">확정건수</th>
-            <th class="px-3 py-2 text-right">확정지급액</th><th class="px-3 py-2 text-right">전금액</th>
-          </tr></thead>
-          <tbody class="divide-y">${ledger.map(l => `
-            <tr class="hover:bg-gray-50">
-              <td class="px-3 py-2 text-xs">${l.date}</td>
-              <td class="px-3 py-2 text-right">${l.confirmed_count}</td>
-              <td class="px-3 py-2 text-right font-bold text-green-600">${formatAmount(l.confirmed_payable_sum)}</td>
-              <td class="px-3 py-2 text-right">${formatAmount(l.transferred_amount)}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
+        ${renderDataTable({
+          columns: [
+            { key: 'date', label: '날짜', render: l => `<span class="text-xs">${l.date}</span>` },
+            { key: 'confirmed_count', label: '확정건수', align: 'right' },
+            { key: 'confirmed_payable_sum', label: '확정지급액', align: 'right', render: l => `<span class="font-bold text-green-600">${formatAmount(l.confirmed_payable_sum)}</span>` },
+            { key: 'transferred_amount', label: '전금액', align: 'right', render: l => formatAmount(l.transferred_amount) },
+          ],
+          rows: ledger,
+          caption: '정산 원장',
+        })}
       </div>` : ''}
     </div>`;
 }

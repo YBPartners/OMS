@@ -58,41 +58,28 @@ async function renderHRUsers(el) {
       <button onclick="showCreateUserModal()" class="ml-auto px-4 py-2 bg-teal-600 text-white rounded-lg text-sm"><i class="fas fa-user-plus mr-1"></i>신규 등록</button>
     </div>
 
-    <div class="bg-white rounded-xl border border-gray-100 overflow-hidden">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50"><tr>
-          <th class="px-3 py-2 text-left">ID</th><th class="px-3 py-2 text-left">이름</th>
-          <th class="px-3 py-2 text-left">로그인ID</th><th class="px-3 py-2 text-left">소속</th>
-          <th class="px-3 py-2 text-left">역할</th><th class="px-3 py-2 text-left">연락처</th>
-          <th class="px-3 py-2 text-center">폰인증</th><th class="px-3 py-2 text-center">상태</th>
-          <th class="px-3 py-2 text-center">관리</th>
-        </tr></thead>
-        <tbody class="divide-y">${users.map(u => `
-          <tr class="ix-table-row"
-              oncontextmenu="showHRUserContextMenu(event, ${JSON.stringify(u).replace(/"/g, '&quot;')})"
-              data-preview="user" data-preview-id="${u.user_id}" data-preview-title="${u.name}">
-            <td class="px-3 py-2 font-mono text-xs text-gray-500">${u.user_id}</td>
-            <td class="px-3 py-2 font-medium">${u.name}</td>
-            <td class="px-3 py-2 font-mono text-xs">${u.login_id}</td>
-            <td class="px-3 py-2 text-xs">${u.org_name || '-'} <span class="text-gray-400">(${u.org_type})</span></td>
-            <td class="px-3 py-2">${(u.roles || []).map(r => `<span class="status-badge bg-gray-100 text-gray-700 text-[10px]">${r}</span>`).join(' ')}</td>
-            <td class="px-3 py-2 text-xs">${formatPhone(u.phone)}</td>
-            <td class="px-3 py-2 text-center">${u.phone_verified ? '<i class="fas fa-check-circle text-green-500"></i>' : '<i class="fas fa-times-circle text-gray-300"></i>'}</td>
-            <td class="px-3 py-2 text-center"><span class="status-badge ${u.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">${u.status}</span></td>
-            <td class="px-3 py-2 text-center" onclick="event.stopPropagation()">
-              <div class="flex gap-1 justify-center">
-                <button onclick="showEditUserModal(${u.user_id})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200" data-tooltip="수정"><i class="fas fa-edit"></i></button>
-                <button onclick="showCredentialModal(${u.user_id}, '${u.name}')" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200" data-tooltip="ID/PW 설정"><i class="fas fa-key"></i></button>
-                <button onclick="resetUserPw(${u.user_id}, '${u.name}')" class="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs hover:bg-amber-200" data-tooltip="PW 초기화"><i class="fas fa-undo"></i></button>
-                <button onclick="toggleUserStatus(${u.user_id}, '${u.status}', '${u.name}')" class="px-2 py-1 ${u.status === 'ACTIVE' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'} rounded text-xs hover:opacity-80" data-tooltip="${u.status === 'ACTIVE' ? '비활성화' : '활성화'}"><i class="fas ${u.status === 'ACTIVE' ? 'fa-ban' : 'fa-check'}"></i></button>
-                ${currentUser.roles.includes('SUPER_ADMIN') ? `<button onclick="deleteUser(${u.user_id}, '${u.name.replace(/'/g, "\\'") }')" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200" data-tooltip="삭제"><i class="fas fa-trash"></i></button>` : ''}
-              </div>
-            </td>
-          </tr>`).join('')}
-          ${users.length === 0 ? '<tr><td colspan="9" class="px-3 py-8 text-center text-gray-400">사용자가 없습니다.</td></tr>' : ''}
-        </tbody>
-      </table>
-    </div>`;
+    ${renderDataTable({
+      columns: [
+        { key: 'user_id', label: 'ID', render: u => `<span class="font-mono text-xs text-gray-500">${u.user_id}</span>` },
+        { key: 'name', label: '이름', render: u => `<span class="font-medium">${escapeHtml(u.name)}</span>` },
+        { key: 'login_id', label: '로그인ID', render: u => `<span class="font-mono text-xs">${escapeHtml(u.login_id)}</span>` },
+        { key: 'org_name', label: '소속', render: u => `<span class="text-xs">${escapeHtml(u.org_name || '-')} <span class="text-gray-400">(${u.org_type})</span></span>` },
+        { key: 'roles', label: '역할', render: u => (u.roles || []).map(r => `<span class="status-badge bg-gray-100 text-gray-700 text-[10px]">${r}</span>`).join(' ') },
+        { key: 'phone', label: '연락처', render: u => `<span class="text-xs">${formatPhone(u.phone)}</span>` },
+        { key: 'phone_verified', label: '폰인증', align: 'center', render: u => u.phone_verified ? '<i class="fas fa-check-circle text-green-500"></i>' : '<i class="fas fa-times-circle text-gray-300"></i>' },
+        { key: 'status', label: '상태', align: 'center', render: u => `<span class="status-badge ${u.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">${u.status}</span>` },
+        { key: '_actions', label: '관리', align: 'center', render: u => `<div class="flex gap-1 justify-center" onclick="event.stopPropagation()">
+          <button onclick="showEditUserModal(${u.user_id})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200" data-tooltip="수정"><i class="fas fa-edit"></i></button>
+          <button onclick="showCredentialModal(${u.user_id}, '${escapeHtml(u.name)}')" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200" data-tooltip="ID/PW 설정"><i class="fas fa-key"></i></button>
+          <button onclick="resetUserPw(${u.user_id}, '${escapeHtml(u.name)}')" class="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs hover:bg-amber-200" data-tooltip="PW 초기화"><i class="fas fa-undo"></i></button>
+          <button onclick="toggleUserStatus(${u.user_id}, '${u.status}', '${escapeHtml(u.name)}')" class="px-2 py-1 ${u.status === 'ACTIVE' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'} rounded text-xs hover:opacity-80" data-tooltip="${u.status === 'ACTIVE' ? '비활성화' : '활성화'}"><i class="fas ${u.status === 'ACTIVE' ? 'fa-ban' : 'fa-check'}"></i></button>
+          ${currentUser.roles.includes('SUPER_ADMIN') ? `<button onclick="deleteUser(${u.user_id}, '${escapeHtml(u.name)}')" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200" data-tooltip="삭제"><i class="fas fa-trash"></i></button>` : ''}
+        </div>` },
+      ],
+      rows: users,
+      emptyText: '사용자가 없습니다.',
+      caption: '사용자 목록',
+    })}`;
 }
 
 function applyHRUserFilter() {
@@ -381,37 +368,25 @@ async function renderHRCommission(el) {
       <button onclick="showCreateCommissionModal()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm"><i class="fas fa-plus mr-1"></i>수수료 정책 추가</button>
     </div>
 
-    <div class="bg-white rounded-xl border border-gray-100 overflow-hidden">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50"><tr>
-          <th class="px-4 py-3 text-left">ID</th><th class="px-4 py-3 text-left">지역총판</th>
-          <th class="px-4 py-3 text-left">대상 팀장</th><th class="px-4 py-3 text-left">채널</th><th class="px-4 py-3 text-center">유형</th>
-          <th class="px-4 py-3 text-right">값</th><th class="px-4 py-3 text-left">적용시작</th>
-          <th class="px-4 py-3 text-center">활성</th><th class="px-4 py-3 text-center">관리</th>
-        </tr></thead>
-        <tbody class="divide-y">${policies.map(p => `
-          <tr class="hover:bg-gray-50">
-            <td class="px-4 py-3 font-mono text-xs">${p.commission_policy_id}</td>
-            <td class="px-4 py-3">${p.org_name}</td>
-            <td class="px-4 py-3">${p.team_leader_name || '<span class="text-gray-400">총판 기본</span>'}</td>
-            <td class="px-4 py-3">${p.channel_name || '<span class="text-gray-400">전체</span>'}</td>
-            <td class="px-4 py-3 text-center"><span class="status-badge ${p.mode === 'PERCENT' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}">${p.mode === 'PERCENT' ? '정률' : '정액'}</span></td>
-            <td class="px-4 py-3 text-right font-bold">${p.mode === 'PERCENT' ? p.value + '%' : formatAmount(p.value)}</td>
-            <td class="px-4 py-3 text-xs">${p.effective_from || '-'}</td>
-            <td class="px-4 py-3 text-center">${p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '비활성'}</td>
-            <td class="px-4 py-3 text-center">
-              <div class="flex gap-1 justify-center">
-                <button onclick="showEditCommissionModal(${p.commission_policy_id}, ${JSON.stringify(p).replace(/"/g, '&quot;')})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
-                ${currentUser.roles.includes('SUPER_ADMIN') || currentUser.roles.includes('HQ_OPERATOR') ? `
-                  <button onclick="deleteCommission(${p.commission_policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>
-                ` : ''}
-              </div>
-            </td>
-          </tr>`).join('')}
-          ${policies.length === 0 ? '<tr><td colspan="9" class="px-4 py-8 text-center text-gray-400">수수료 정책이 없습니다.</td></tr>' : ''}
-        </tbody>
-      </table>
-    </div>`;
+    ${renderDataTable({
+      columns: [
+        { key: 'commission_policy_id', label: 'ID', render: p => `<span class="font-mono text-xs">${p.commission_policy_id}</span>` },
+        { key: 'org_name', label: '지역총판' },
+        { key: 'team_leader_name', label: '대상 팀장', render: p => p.team_leader_name || '<span class="text-gray-400">총판 기본</span>' },
+        { key: 'channel_name', label: '채널', render: p => p.channel_name || '<span class="text-gray-400">전체</span>' },
+        { key: 'mode', label: '유형', align: 'center', render: p => `<span class="status-badge ${p.mode === 'PERCENT' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}">${p.mode === 'PERCENT' ? '정률' : '정액'}</span>` },
+        { key: 'value', label: '값', align: 'right', render: p => `<span class="font-bold">${p.mode === 'PERCENT' ? p.value + '%' : formatAmount(p.value)}</span>` },
+        { key: 'effective_from', label: '적용시작', render: p => `<span class="text-xs">${p.effective_from || '-'}</span>` },
+        { key: 'is_active', label: '활성', align: 'center', render: p => p.is_active ? '<span class="text-green-600 font-bold">활성</span>' : '비활성' },
+        { key: '_actions', label: '관리', align: 'center', render: p => `<div class="flex gap-1 justify-center">
+          <button onclick="showEditCommissionModal(${p.commission_policy_id}, ${JSON.stringify(p).replace(/"/g, '&quot;')})" class="px-2 py-1 bg-gray-100 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
+          ${currentUser.roles.includes('SUPER_ADMIN') || currentUser.roles.includes('HQ_OPERATOR') ? `<button onclick="deleteCommission(${p.commission_policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200"><i class="fas fa-trash"></i></button>` : ''}
+        </div>` },
+      ],
+      rows: policies,
+      emptyText: '수수료 정책이 없습니다.',
+      caption: '수수료 정책 목록',
+    })`;
 
   // 모달에서 사용할 데이터 저장
   window._commOrgs = orgs;
