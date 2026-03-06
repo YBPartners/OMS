@@ -433,6 +433,14 @@ export function mountDistributors(router: Hono<Env>) {
   // ═══════════════════════════════════════════════════════════════
 
   // ─── 조직 트리 조회 (HQ > REGION > TEAM) ───
+  // ★ 별칭 경로: 프론트엔드 호환 (distributors/tree → org-tree)
+  router.get('/distributors/tree', async (c) => {
+    // org-tree와 동일 핸들러로 포워딩
+    const url = new URL(c.req.url);
+    url.pathname = url.pathname.replace('/distributors/tree', '/org-tree');
+    return c.redirect(url.pathname + url.search, 307);
+  });
+
   router.get('/org-tree', async (c) => {
     const authErr = requireAuth(c);
     if (authErr) return authErr;
@@ -467,12 +475,41 @@ export function mountDistributors(router: Hono<Env>) {
     teamParams.push('ACTIVE');
     const teamOrgs = await db.prepare(teamQuery).bind(...teamParams).all();
 
-    // 트리 구성
+    // ★ 팀장(사용자) 정보 조회 — 조직별 활성 멤버
+    const membersQuery = `
+      SELECT u.user_id, u.name, u.login_id, u.phone, u.org_id, u.status,
+             GROUP_CONCAT(r.code) as role_codes
+      FROM users u
+      LEFT JOIN user_roles ur ON u.user_id = ur.user_id
+      LEFT JOIN roles r ON ur.role_id = r.role_id
+      WHERE u.status = 'ACTIVE'
+      GROUP BY u.user_id
+      ORDER BY u.name
+    `;
+    const members = await db.prepare(membersQuery).all();
+    const membersByOrg: Record<number, any[]> = {};
+    (members.results as any[]).forEach(m => {
+      if (!membersByOrg[m.org_id]) membersByOrg[m.org_id] = [];
+      membersByOrg[m.org_id].push({
+        user_id: m.user_id, name: m.name, login_id: m.login_id,
+        phone: m.phone, roles: m.role_codes ? m.role_codes.split(',') : [], status: m.status,
+      });
+    });
+
+    // 트리 구성 (멤버 포함)
     const tree = (hqOrgs.results as any[]).map(hq => ({
       ...hq,
+      members: membersByOrg[hq.org_id] || [],
+      member_count: (membersByOrg[hq.org_id] || []).length,
       children: (regionOrgs.results as any[]).map(region => ({
         ...region,
-        children: (teamOrgs.results as any[]).filter(team => team.parent_org_id === region.org_id),
+        members: membersByOrg[region.org_id] || [],
+        member_count: (membersByOrg[region.org_id] || []).length,
+        children: (teamOrgs.results as any[]).filter(team => team.parent_org_id === region.org_id).map(team => ({
+          ...team,
+          members: membersByOrg[team.org_id] || [],
+          member_count: (membersByOrg[team.org_id] || []).length,
+        })),
       })),
     }));
 

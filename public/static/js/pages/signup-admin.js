@@ -398,6 +398,8 @@ function renderTreeNode(org, depth) {
   const c = colors[org.org_type] || 'gray';
   const ic = icons[org.org_type] || 'fa-circle';
   const children = org.children || [];
+  const members = org.members || [];
+  const roleLabels = OMS.ROLE_LABELS || {};
   
   return `
     <div style="margin-left:${indent}px" class="border-l-2 border-${c}-200 pl-3 py-1">
@@ -412,6 +414,19 @@ function renderTreeNode(org, depth) {
         ${org.member_count !== undefined ? `<span class="text-xs text-gray-400">${org.member_count}명</span>` : ''}
         <span class="status-badge ${org.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'} text-[10px]">${org.status}</span>
       </div>
+      ${members.length > 0 ? `
+      <div class="ml-9 mt-1 space-y-0.5">
+        ${members.map(m => {
+          const roleStr = (m.roles || []).map(r => roleLabels[r] || r).join(', ');
+          const isLeader = (m.roles || []).some(r => ['TEAM_LEADER','REGION_ADMIN','SUPER_ADMIN','HQ_OPERATOR'].includes(r));
+          return `<div class="flex items-center gap-2 text-xs ${isLeader ? 'text-gray-700' : 'text-gray-400'}">
+            <i class="fas ${isLeader ? 'fa-user-tie text-amber-500' : 'fa-user text-gray-300'} w-3 text-center"></i>
+            <span class="${isLeader ? 'font-medium' : ''}">${m.name}</span>
+            <span class="text-[10px] text-gray-400">${roleStr}</span>
+            ${m.phone ? `<span class="text-[10px] text-gray-300">${m.phone}</span>` : ''}
+          </div>`;
+        }).join('')}
+      </div>` : ''}
       ${children.map(ch => renderTreeNode(ch, depth + 1)).join('')}
     </div>`;
 }
