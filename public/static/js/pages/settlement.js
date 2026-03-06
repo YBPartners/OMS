@@ -271,7 +271,7 @@ async function viewRunDetail(runId) {
         <div class="max-h-60 overflow-y-auto">
           <table class="w-full text-sm">
             <thead class="bg-gray-50 sticky top-0"><tr>
-              <th class="px-3 py-2 text-left">주문</th><th class="px-3 py-2 text-left">고객</th><th class="px-3 py-2 text-left">법인</th>
+              <th class="px-3 py-2 text-left">주문</th><th class="px-3 py-2 text-left">고객</th><th class="px-3 py-2 text-left">총판</th>
               <th class="px-3 py-2 text-left">팀장</th><th class="px-3 py-2 text-right">금액</th>
               <th class="px-3 py-2 text-center">수수료</th><th class="px-3 py-2 text-right">지급액</th>
             </tr></thead>
@@ -674,7 +674,7 @@ async function exportSettlementCSV(runId) {
   const res = await api('GET', `/settlements/runs/${runId}/export`);
   if (!res?.rows) return showToast('내보내기 실패', 'error');
 
-  const headers = ['정산ID', '주문ID', '외부주문번호', '고객명', '주소', '서비스', '기본금액', '수수료방식', '수수료율', '수수료', '지급액', '상태', '팀장', '지역법인'];
+  const headers = ['정산ID', '주문ID', '외부주문번호', '고객명', '주소', '서비스', '기본금액', '수수료방식', '수수료율', '수수료', '지급액', '상태', '팀장', '지역총판'];
   const rows = res.rows.map(r => [
     r.settlement_id, r.order_id, r.external_order_no || '', r.customer_name || '', r.address_text || '',
     r.service_type || '', r.base_amount, r.commission_mode, r.commission_rate,
@@ -1209,7 +1209,7 @@ async function exportSettlementExcel(runId) {
     { label: '지급액', key: 'payable_amount' },
     { label: '상태', key: 'status' },
     { label: '팀장', key: 'team_leader_name' },
-    { label: '지역법인', key: 'region_name' },
+    { label: '지역총판', key: 'region_name' },
   ];
 
   exportToExcel(res.rows, columns, `settlement_run_${runId}`, '정산내역');

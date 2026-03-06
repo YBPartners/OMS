@@ -1,12 +1,12 @@
 -- ============================================================
 -- 기존 데이터 마이그레이션: 조직 체계 변환
--- 법인(REGION) → 총판으로 이름 변경
+-- 총판(REGION) → 총판으로 이름 변경
 -- 기존 팀장(REGION에 직속) → TEAM org 생성 후 재매핑
 -- ============================================================
 
--- 1. 기존 지역법인 → 총판으로 이름 변경
-UPDATE organizations SET name = REPLACE(name, '지역법인', '총판'), updated_at = datetime('now') 
-WHERE org_type = 'REGION' AND name LIKE '%지역법인%';
+-- 1. 기존 지역총판 → 총판으로 이름 변경
+UPDATE organizations SET name = REPLACE(name, '지역총판', '총판'), updated_at = datetime('now') 
+WHERE org_type = 'REGION' AND name LIKE '%지역총판%';
 
 -- 2. 기존 팀장들을 위한 TEAM 조직 생성
 -- 각 팀장에게 개별 TEAM org를 만들고 parent_org_id를 현재 소속 REGION으로 설정

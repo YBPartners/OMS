@@ -79,7 +79,7 @@ export function mountDashboard(router: Hono<Env>) {
     }
     regionQuery += ' GROUP BY org.org_id';
 
-    // TEAM_LEADER / AGENCY_LEADER는 지역법인 요약 불필요 (자기 주문만 보이므로)
+    // TEAM_LEADER / AGENCY_LEADER는 지역총판 요약 불필요 (자기 주문만 보이므로)
     const isTeamRole = user.roles.includes('TEAM_LEADER') && !user.roles.some(r => ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'AUDITOR'].includes(r));
     const regionSummary = !isTeamRole
       ? await db.prepare(regionQuery).bind(...regionParams).all()

@@ -50,9 +50,9 @@
 - **타이틀**: "대시보드" → "내 대시보드"
 - **요약 카드 7종** (TEAM 전용): 내 전체 주문, 배정됨(준비), 수행중, 제출/완료, 반려, 정산확정, 총 금액
 - **차트 라벨**: "상태별 분포" → "내 주문 상태별 분포" 등
-- **바 차트**: 지역법인별(빈 배열) → **퍼널 데이터 기반 수평 바 차트** 대체
+- **바 차트**: 지역총판별(빈 배열) → **퍼널 데이터 기반 수평 바 차트** 대체
 - **퍼널 섹션**: "주문 처리 퍼널" → "내 주문 처리 현황"
-- **지역법인 테이블**: TEAM 유저에게 숨김 (region_summary 빈 배열)
+- **지역총판 테이블**: TEAM 유저에게 숨김 (region_summary 빈 배열)
 - **미해결 이슈 섹션**: HQ 전용, TEAM에게 미표시
 - **매출 추이/정산 현황 차트**: HQ/REGION 전용, TEAM에게 미표시
 - **폴링 카드 업데이트**: TEAM 유저용 카드 값 매핑 대응
@@ -63,14 +63,14 @@
 - Scope Engine이 TEAM_LEADER의 자기 주문만 반환 (기존 로직 활용)
 
 ### 데이터 접근 범위 (역할별)
-| 역할 | 대시보드 접근 | 데이터 범위 | 지역법인 테이블 | 매출/정산 차트 |
+| 역할 | 대시보드 접근 | 데이터 범위 | 지역총판 테이블 | 매출/정산 차트 |
 |------|-------------|------------|----------------|---------------|
-| SUPER_ADMIN | ✅ | 전체 | ✅ 4개 법인 | ✅ |
-| HQ_OPERATOR | ✅ | 전체 | ✅ 4개 법인 | ✅ |
-| REGION_ADMIN | ✅ | 자기 지역 | ✅ 자기 법인만 | ✅ |
+| SUPER_ADMIN | ✅ | 전체 | ✅ 4개 총판 | ✅ |
+| HQ_OPERATOR | ✅ | 전체 | ✅ 4개 총판 | ✅ |
+| REGION_ADMIN | ✅ | 자기 지역 | ✅ 자기 총판만 | ✅ |
 | AGENCY_LEADER | ✅ | 자기+하위 팀장 | ❌ | ❌ |
 | TEAM_LEADER | ✅ **신규** | 자기 주문만 | ❌ | ❌ |
-| AUDITOR | ✅ | 전체 (읽기) | ✅ 4개 법인 | ✅ |
+| AUDITOR | ✅ | 전체 (읽기) | ✅ 4개 총판 | ✅ |
 
 ### 변경 통계
 - 4 files changed, +121 insertions, -52 deletions
@@ -482,7 +482,7 @@
 > **목적**: 미배분 주문의 개별/일괄 수동배분 기능 완성 및 UX 개선
 
 ### 7.1-1: 주문관리 페이지 일괄배분 ✅
-- 배치 액션바의 '일괄 배분' 버튼 → 지역법인 선택 모달로 변경 (alert 제거)
+- 배치 액션바의 '일괄 배분' 버튼 → 지역총판 선택 모달로 변경 (alert 제거)
 - `showOrderBatchDistributeModal()` 함수 신규 구현
 - `submitOrderBatchDistribute()` → `POST /api/orders/batch-distribute` API 호출
 - 결과 모달: 처리대상/성공/실패 통계 표시
@@ -652,7 +652,7 @@
 ### 구현 내역
 - [x] 주문관리 페이지: 일괄배분 버튼 → 실제 배분 모달 (placeholder alert 제거)
 - [x] 배분관리 페이지: 선택배분(showBatchDistributeModal) 모달 구현
-- [x] 수동 배분 모달 UI 개선 (주문번호·고객명·주소 표시, 지역법인 선택)
+- [x] 수동 배분 모달 UI 개선 (주문번호·고객명·주소 표시, 지역총판 선택)
 - [x] 드로어 빠른액션: 미배분(RECEIVED/VALIDATED/DISTRIBUTION_PENDING) 주문에 "수동 배분" 버튼 추가
 - [x] POST /api/orders/batch-distribute 연동 (최대 100건 일괄)
 - [x] PATCH /api/orders/:id/distribution 연동 (개별 수동 재배분)
@@ -696,7 +696,7 @@
 - [x] 리사이즈 시 데스크탑↔모바일 자동 전환
 
 ### 9-2: 주요 페이지 모바일 최적화
-- [x] 주문 테이블: 모바일에서 불필요 컬럼 자동 숨김 (주소/주문번호/지역법인/팀장/요청일/진행)
+- [x] 주문 테이블: 모바일에서 불필요 컬럼 자동 숨김 (주소/주문번호/지역총판/팀장/요청일/진행)
 - [x] 칸반 보드: 모바일에서 세로 배치 + 컬럼 접기 + 300px max-height
 - [x] 드로어: 모바일 풀스크린 (width: 100%)
 - [x] 모달: 95% 폭 반응형
@@ -759,10 +759,10 @@
 |------|--------|----------|----------|
 | HQ 총괄관리자 | admin | admin123 | HQ |
 | HQ 운영자 | hq_operator | admin123 | HQ |
-| 서울 지역법인 관리자 | seoul_admin | admin123 | REGION |
-| 경기 지역법인 관리자 | gyeonggi_admin | admin123 | REGION |
-| 인천 지역법인 관리자 | incheon_admin | admin123 | REGION |
-| 부산 지역법인 관리자 | busan_admin | admin123 | REGION |
+| 서울 지역총판 관리자 | seoul_admin | admin123 | REGION |
+| 경기 지역총판 관리자 | gyeonggi_admin | admin123 | REGION |
+| 인천 지역총판 관리자 | incheon_admin | admin123 | REGION |
+| 부산 지역총판 관리자 | busan_admin | admin123 | REGION |
 | 서울 팀장1 | leader_seoul_1 | admin123 | REGION (팀) |
 | 서울 팀장2 | leader_seoul_2 | admin123 | REGION (팀) |
 | 경기 팀장1 | leader_gyeonggi_1 | admin123 | REGION (팀) |

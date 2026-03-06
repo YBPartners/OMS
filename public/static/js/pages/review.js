@@ -25,7 +25,7 @@ async function renderReviewRegion(el) {
   el.innerHTML = `
     <div class="fade-in">
       <div class="flex items-center justify-between mb-6">
-        <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-clipboard-check mr-2 text-lime-600"></i>1차 검수 (지역법인)</h2>
+        <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-clipboard-check mr-2 text-lime-600"></i>1차 검수 (지역총판)</h2>
         <div class="flex gap-2 items-center">
           ${reviewState.selectedRegion.size > 0 ? `
             <span class="text-sm text-purple-600 font-medium"><i class="fas fa-check-square mr-1"></i>${reviewState.selectedRegion.size}건 선택</span>

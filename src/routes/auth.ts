@@ -182,7 +182,7 @@ auth.get('/organizations', async (c) => {
   return c.json({ organizations: result.results });
 });
 
-// 팀장 목록 (지역법인별)
+// 팀장 목록 (지역총판별)
 auth.get('/team-leaders', async (c) => {
   const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
   if (authErr) return authErr;

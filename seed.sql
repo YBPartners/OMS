@@ -6,7 +6,7 @@
 INSERT OR IGNORE INTO roles (code, name, description) VALUES
   ('SUPER_ADMIN', '슈퍼관리자', '전권 - 와이비 HQ'),
   ('HQ_OPERATOR', 'HQ 운영자', '본사 운영(수신/배분/대사/최종검수/정산/통계)'),
-  ('REGION_ADMIN', '지역법인 관리자', '지역법인 운영(배정/1차검수/지역정산/통계)'),
+  ('REGION_ADMIN', '지역총판 관리자', '지역총판 운영(배정/1차검수/지역정산/통계)'),
   ('TEAM_LEADER', '팀장', '현장 수행/보고서 제출/본인 통계 조회'),
   ('AUDITOR', '감사/조회', '읽기 전용 + 대사/통계 열람');
 
@@ -14,24 +14,24 @@ INSERT OR IGNORE INTO roles (code, name, description) VALUES
 INSERT OR IGNORE INTO organizations (org_id, org_type, name, code, status) VALUES
   (1, 'HQ', '와이비 본사', 'DAHADA_HQ', 'ACTIVE');
 
--- 조직: 지역법인 4개
+-- 조직: 지역총판 4개
 INSERT OR IGNORE INTO organizations (org_id, org_type, name, code, status) VALUES
-  (2, 'REGION', '서울지역법인', 'REGION_SEOUL', 'ACTIVE'),
-  (3, 'REGION', '경기지역법인', 'REGION_GYEONGGI', 'ACTIVE'),
-  (4, 'REGION', '인천지역법인', 'REGION_INCHEON', 'ACTIVE'),
-  (5, 'REGION', '부산지역법인', 'REGION_BUSAN', 'ACTIVE');
+  (2, 'REGION', '서울지역총판', 'REGION_SEOUL', 'ACTIVE'),
+  (3, 'REGION', '경기지역총판', 'REGION_GYEONGGI', 'ACTIVE'),
+  (4, 'REGION', '인천지역총판', 'REGION_INCHEON', 'ACTIVE'),
+  (5, 'REGION', '부산지역총판', 'REGION_BUSAN', 'ACTIVE');
 
 -- 사용자: HQ 관리자 (password: admin123 → SHA-256 해시)
 INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo) VALUES
   (1, 1, 'admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '시스템관리자', '01000000000', 'admin@yb.co.kr', 'ACTIVE', 1, '2024-01-01', '전권 관리자'),
   (2, 1, 'hq_operator', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'HQ운영자', '01000000001', 'operator@yb.co.kr', 'ACTIVE', 1, '2024-01-15', NULL);
 
--- 사용자: 지역법인 관리자
+-- 사용자: 지역총판 관리자
 INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo) VALUES
-  (3, 2, 'seoul_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '서울관리자', '01011110001', 'seoul@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '서울지역법인 담당'),
-  (4, 3, 'gyeonggi_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '경기관리자', '01022220001', 'gyeonggi@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '경기지역법인 담당'),
-  (5, 4, 'incheon_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '인천관리자', '01033330001', 'incheon@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '인천지역법인 담당'),
-  (6, 5, 'busan_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '부산관리자', '01044440001', 'busan@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '부산지역법인 담당');
+  (3, 2, 'seoul_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '서울관리자', '01011110001', 'seoul@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '서울지역총판 담당'),
+  (4, 3, 'gyeonggi_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '경기관리자', '01022220001', 'gyeonggi@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '경기지역총판 담당'),
+  (5, 4, 'incheon_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '인천관리자', '01033330001', 'incheon@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '인천지역총판 담당'),
+  (6, 5, 'busan_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '부산관리자', '01044440001', 'busan@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '부산지역총판 담당');
 
 -- 사용자: 팀장
 INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo) VALUES
@@ -94,7 +94,7 @@ INSERT OR IGNORE INTO territories (territory_id, sido, sigungu, eupmyeondong, ad
   (13, '부산광역시', '해운대구', '우동', '2635010100', '2635010100'),
   (14, '부산광역시', '부산진구', '부전동', '2623010100', '2623010100');
 
--- 조직-지역권 매핑 (서울→서울법인, 경기→경기법인, ...)
+-- 조직-지역권 매핑 (서울→서울총판, 경기→경기총판, ...)
 INSERT OR IGNORE INTO org_territories (org_id, territory_id, effective_from) VALUES
   (2, 1, '2024-01-01'), (2, 2, '2024-01-01'), (2, 3, '2024-01-01'),
   (2, 4, '2024-01-01'), (2, 5, '2024-01-01'), (2, 6, '2024-01-01'),
@@ -141,13 +141,13 @@ INSERT OR IGNORE INTO admin_regions (region_id, sido, sigungu, eupmyeondong, adm
 
 -- 조직-행정구역 매핑 (가입 시 총판 관할 구역 확인용)
 INSERT OR IGNORE INTO org_region_mappings (org_id, region_id) VALUES
-  -- 서울지역법인(org_id=2) → 서울 행정구역
+  -- 서울지역총판(org_id=2) → 서울 행정구역
   (2, 1), (2, 2), (2, 3), (2, 4), (2, 5), (2, 6), (2, 7), (2, 8),
-  -- 경기지역법인(org_id=3) → 경기 행정구역
+  -- 경기지역총판(org_id=3) → 경기 행정구역
   (3, 9), (3, 10), (3, 11), (3, 12), (3, 13), (3, 14),
-  -- 인천지역법인(org_id=4) → 인천 행정구역
+  -- 인천지역총판(org_id=4) → 인천 행정구역
   (4, 15), (4, 16), (4, 17),
-  -- 부산지역법인(org_id=5) → 부산 행정구역
+  -- 부산지역총판(org_id=5) → 부산 행정구역
   (5, 18), (5, 19), (5, 20);
 
 -- 배분 정책 (v1)
@@ -158,7 +158,7 @@ INSERT OR IGNORE INTO distribution_policies (policy_id, name, version, rule_json
 INSERT OR IGNORE INTO report_policies (policy_id, name, version, service_type, required_photos_json, required_checklist_json, require_receipt) VALUES
   (1, '기본 보고서 정책 v1', 1, 'DEFAULT', '{"BEFORE":1,"AFTER":1,"WASH":1,"RECEIPT":1}', '["작업완료확인","고객서명확인","현장정리확인"]', 1);
 
--- 수수료 정책: 지역법인별 기본(팀장 미지정 = 지역 기본)
+-- 수수료 정책: 지역총판별 기본(팀장 미지정 = 지역 기본)
 INSERT OR IGNORE INTO commission_policies (commission_policy_id, org_id, team_leader_id, mode, value, effective_from) VALUES
   (1, 2, NULL, 'PERCENT', 7.5, '2024-01-01'),  -- 서울: 7.5%
   (2, 3, NULL, 'PERCENT', 8.0, '2024-01-01'),  -- 경기: 8.0%
@@ -228,7 +228,7 @@ INSERT OR IGNORE INTO reviews (review_id, report_id, order_id, stage, reviewer_i
 -- 상태 이력 (일부)
 INSERT OR IGNORE INTO order_status_history (order_id, from_status, to_status, actor_id, note, created_at) VALUES
   (1, 'RECEIVED', 'VALIDATED', 1, '자동 유효성 통과', '2026-03-01 08:30:00'),
-  (1, 'VALIDATED', 'DISTRIBUTED', 1, '서울법인 배분', '2026-03-01 09:00:00'),
+  (1, 'VALIDATED', 'DISTRIBUTED', 1, '서울총판 배분', '2026-03-01 09:00:00'),
   (1, 'DISTRIBUTED', 'ASSIGNED', 3, '김팀장 배정', '2026-03-01 10:00:00'),
   (1, 'ASSIGNED', 'IN_PROGRESS', 7, '작업 시작', '2026-03-01 11:00:00'),
   (1, 'IN_PROGRESS', 'SUBMITTED', 7, '보고서 제출', '2026-03-01 15:00:00'),

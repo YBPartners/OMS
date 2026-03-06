@@ -47,7 +47,7 @@ export function mountCommission(router: Hono<Env>) {
     let body: any;
     try { body = await c.req.json(); } catch { return c.json({ error: '잘못된 요청 형식입니다.' }, 400); }
 
-    if (!body.org_id) return c.json({ error: '지역법인은 필수입니다.' }, 400);
+    if (!body.org_id) return c.json({ error: '지역총판은 필수입니다.' }, 400);
     if (!body.mode || !['PERCENT', 'FIXED'].includes(body.mode)) return c.json({ error: '수수료 유형은 PERCENT(정률) 또는 FIXED(정액)입니다.' }, 400);
     if (body.value === undefined || body.value === null || isNaN(Number(body.value)) || Number(body.value) < 0) {
       return c.json({ error: '수수료 값은 0 이상의 숫자여야 합니다.' }, 400);
@@ -58,7 +58,7 @@ export function mountCommission(router: Hono<Env>) {
 
     if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
       if (Number(body.org_id) !== user.org_id) {
-        return c.json({ error: '자기 법인의 수수료만 설정할 수 있습니다.' }, 403);
+        return c.json({ error: '자기 총판의 수수료만 설정할 수 있습니다.' }, 403);
       }
     }
 
@@ -106,7 +106,7 @@ export function mountCommission(router: Hono<Env>) {
 
     if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
       if (existing.org_id !== user.org_id) {
-        return c.json({ error: '자기 법인의 수수료만 수정할 수 있습니다.' }, 403);
+        return c.json({ error: '자기 총판의 수수료만 수정할 수 있습니다.' }, 403);
       }
     }
 

@@ -169,7 +169,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_admin_dong ON orders(admin_dong_code);
 CREATE INDEX IF NOT EXISTS idx_orders_batch ON orders(batch_id);
 CREATE INDEX IF NOT EXISTS idx_orders_date ON orders(requested_date);
 
--- 13. 주문 배분 (와이비→지역법인)
+-- 13. 주문 배분 (와이비→지역총판)
 CREATE TABLE IF NOT EXISTS order_distributions (
   distribution_id INTEGER PRIMARY KEY AUTOINCREMENT,
   order_id INTEGER NOT NULL REFERENCES orders(order_id),
@@ -184,7 +184,7 @@ CREATE INDEX IF NOT EXISTS idx_dist_order ON order_distributions(order_id);
 CREATE INDEX IF NOT EXISTS idx_dist_region ON order_distributions(region_org_id);
 CREATE INDEX IF NOT EXISTS idx_dist_date ON order_distributions(distributed_at);
 
--- 14. 주문 할당 (지역법인→팀장)
+-- 14. 주문 할당 (지역총판→팀장)
 CREATE TABLE IF NOT EXISTS order_assignments (
   assignment_id INTEGER PRIMARY KEY AUTOINCREMENT,
   order_id INTEGER NOT NULL REFERENCES orders(order_id),
@@ -343,7 +343,7 @@ CREATE INDEX IF NOT EXISTS idx_recon_run ON reconciliation_issues(run_id);
 CREATE INDEX IF NOT EXISTS idx_recon_type ON reconciliation_issues(type);
 CREATE INDEX IF NOT EXISTS idx_recon_severity ON reconciliation_issues(severity);
 
--- 24. 지역법인 일자별 통계
+-- 24. 지역총판 일자별 통계
 CREATE TABLE IF NOT EXISTS region_daily_stats (
   date TEXT NOT NULL,
   region_org_id INTEGER NOT NULL REFERENCES organizations(org_id),

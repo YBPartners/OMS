@@ -14,10 +14,10 @@
 조직 테이블: organizations (org_type: HQ | REGION)
 계층 관계:
   HQ(본사, org_id=1)
-  +-- REGION(서울법인, org_id=2) --> territories(서울 6개동)
-  +-- REGION(경기법인, org_id=3) --> territories(경기 4개동)
-  +-- REGION(인천법인, org_id=4) --> territories(인천 2개동)
-  +-- REGION(부산법인, org_id=5) --> territories(부산 2개동)
+  +-- REGION(서울총판, org_id=2) --> territories(서울 6개동)
+  +-- REGION(경기총판, org_id=3) --> territories(경기 4개동)
+  +-- REGION(인천총판, org_id=4) --> territories(인천 2개동)
+  +-- REGION(부산총판, org_id=5) --> territories(부산 2개동)
 
 사용자:
   users.org_id -> organizations.org_id (소속 조직)
@@ -64,7 +64,7 @@
 |---|------|----------|
 | 1 | 가입 대상 | 팀장(TEAM_LEADER)만 자가 가입 |
 | 2 | 총판 생성 | SUPER_ADMIN이 직접 생성 (계정+조직 동시) |
-| 3 | 명칭 통일 | 법인장 = 총판 (UI 표기 "총판"으로 통일) |
+| 3 | 명칭 통일 | 총판장 = 총판 (UI 표기 "총판"으로 통일) |
 | 4 | 총판 권역 | 시도 기준 선택 -> 하위 자동 매핑, 읍면동 단위 세부 조정 |
 | 5 | 팀 관할 | 읍면동 복수 선택 가능, 시도 걸쳐도 OK |
 | 6 | 팀장 승인 | 총판(REGION_ADMIN)이 승인, 체크리스트+수수료 설정 필수 |
@@ -72,7 +72,7 @@
 | 8 | OTP | 개발모드 (화면 표시), 추후 실제 SMS 연동 |
 | 9 | 행정구역 | 전국 데이터 + UI 필터링 |
 | 10 | 조직 관리 | 트리/테이블 전환, 일평균(누계) 처리 건수 표시 |
-| 11 | 기존 데이터(A) | 서울/경기/인천/부산 법인 -> 이름만 "총판"으로 변경 |
+| 11 | 기존 데이터(A) | 서울/경기/인천/부산 총판 -> 이름만 "총판"으로 변경 |
 | 12 | 기존 팀장(B) | TEAM org 생성 후 재매핑 |
 | 13 | 총판 생성 UX(C) | 조직 + 관리자 계정 한 번에 생성 |
 | 14 | 팀-총판 관계(D) | 기본 1:1, SUPER_ADMIN에서 추가 매핑 가능 |
@@ -526,7 +526,7 @@ public/static/js/core/
 
 seed 데이터 변경:
 ```sql
--- (A) 법인 -> 총판 이름 변경
+-- (A) 총판 -> 총판 이름 변경
 UPDATE organizations SET name = '서울총판' WHERE org_id = 2;
 UPDATE organizations SET name = '경기총판' WHERE org_id = 3;
 UPDATE organizations SET name = '인천총판' WHERE org_id = 4;

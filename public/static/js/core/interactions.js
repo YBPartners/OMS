@@ -341,7 +341,7 @@ async function getPreviewContent(type, id) {
             <div class="grid grid-cols-2 gap-2 text-xs">
               <div><span class="text-gray-400">주문번호</span><div class="font-mono">#${o.order_id}</div></div>
               <div><span class="text-gray-400">금액</span><div class="font-bold text-blue-600">${formatAmount(o.base_amount)}</div></div>
-              <div><span class="text-gray-400">지역법인</span><div>${o.region_name || '-'}</div></div>
+              <div><span class="text-gray-400">지역총판</span><div>${o.region_name || '-'}</div></div>
               <div><span class="text-gray-400">팀장</span><div>${o.team_leader_name || '-'}</div></div>
             </div>
             <div class="text-xs text-gray-500"><i class="fas fa-map-marker-alt mr-1"></i>${o.address_text || '-'}</div>

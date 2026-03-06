@@ -284,7 +284,7 @@ AUDITOR: dashboard, statistics, audit-log, notifications
 ```
 getUserScope(user) → { orgFilter, userFilter, orgIds, agencyTeamIds }
 SUPER_ADMIN: 전체 데이터
-REGION_ADMIN: 자기 지역법인 + 하위 팀 데이터
+REGION_ADMIN: 자기 지역총판 + 하위 팀 데이터
 AGENCY_LEADER: 자신 + agency_team_mappings 하위 팀장 데이터
 TEAM_LEADER: 자기 팀 데이터만
 ```
@@ -396,7 +396,7 @@ IX 전역 상태: activePopover, activeContextMenu, activeDrawer, activeTooltip,
 | GET | /api/stats/policies/distribution | 배분 정책 목록 |
 | GET | /api/stats/policies/report | 보고서 정책 목록 |
 | GET | /api/stats/policies/commission | 수수료 정책 목록 |
-| GET | /api/stats/territories | 지역-법인 매핑 |
+| GET | /api/stats/territories | 지역-총판 매핑 |
 | POST | /api/stats/policies/distribution | 배분 정책 생성 (v15.0) |
 | PUT | /api/stats/policies/distribution/:id | 배분 정책 수정 (v15.0) |
 | POST | /api/stats/policies/report | 보고서 정책 생성 (v15.0) |

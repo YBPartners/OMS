@@ -89,9 +89,9 @@ async function renderDashboard(el) {
           </div>
         </div>
 
-        <!-- 지역법인별 바 차트 (TEAM은 퍼널로 대체) -->
+        <!-- 지역총판별 바 차트 (TEAM은 퍼널로 대체) -->
         <div class="bg-white rounded-xl p-6 border border-gray-100">
-          <h3 class="text-sm font-semibold mb-4"><i class="fas fa-chart-bar mr-2 text-indigo-500"></i>${isTeam ? '내 주문 진행 현황' : '지역법인별 주문 현황'}</h3>
+          <h3 class="text-sm font-semibold mb-4"><i class="fas fa-chart-bar mr-2 text-indigo-500"></i>${isTeam ? '내 주문 진행 현황' : '지역총판별 주문 현황'}</h3>
           <div class="relative" style="height:220px;">
             <canvas id="chart-region-bar"></canvas>
           </div>
@@ -140,10 +140,10 @@ async function renderDashboard(el) {
         </div>
         
         ${!isTeam ? `
-        <!-- 지역법인별 현황 테이블 -->
+        <!-- 지역총판별 현황 테이블 -->
         <div class="bg-white rounded-xl p-6 border border-gray-100">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold"><i class="fas fa-building mr-2 text-indigo-500"></i>지역법인별 현황</h3>
+            <h3 class="text-lg font-semibold"><i class="fas fa-building mr-2 text-indigo-500"></i>지역총판별 현황</h3>
             <button onclick="navigateTo('statistics')" class="text-xs text-blue-500 hover:text-blue-700 transition" data-tooltip="통계 페이지로 이동">
               <i class="fas fa-chart-bar mr-1"></i>통계
             </button>
@@ -151,7 +151,7 @@ async function renderDashboard(el) {
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
               <thead><tr class="border-b text-gray-500">
-                <th class="py-2 text-left">지역법인</th><th class="py-2 text-right">진행중</th><th class="py-2 text-right">검수대기</th><th class="py-2 text-right">정산대기</th><th class="py-2 text-right">정산완료</th>
+                <th class="py-2 text-left">지역총판</th><th class="py-2 text-right">진행중</th><th class="py-2 text-right">검수대기</th><th class="py-2 text-right">정산대기</th><th class="py-2 text-right">정산완료</th>
               </tr></thead>
               <tbody>
                 ${(dashRes.region_summary || []).map(r => `
@@ -316,7 +316,7 @@ function _renderDashCharts(funnel, regionSummary) {
     });
   }
 
-  // 2) 지역법인별 바 차트 / TEAM은 진행현황 수평 바 차트
+  // 2) 지역총판별 바 차트 / TEAM은 진행현황 수평 바 차트
   const barCtx = document.getElementById('chart-region-bar');
   if (barCtx) {
     const isTeamDash = currentUser && (currentUser.org_type === 'TEAM' || currentUser.roles.includes('TEAM_LEADER'));
@@ -356,12 +356,12 @@ function _renderDashCharts(funnel, regionSummary) {
         }
       });
     } else if (regionSummary.length > 0) {
-      // HQ/REGION 유저: 지역법인별 바 차트
+      // HQ/REGION 유저: 지역총판별 바 차트
       const regionColors = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981'];
       _dashCharts.regionBar = new Chart(barCtx, {
         type: 'bar',
         data: {
-          labels: regionSummary.map(r => r.region_name.replace('지역법인', '')),
+          labels: regionSummary.map(r => r.region_name.replace('지역총판', '')),
           datasets: [
             { label: '진행중', data: regionSummary.map(r => r.active_orders), backgroundColor: '#60a5fa', borderRadius: 4 },
             { label: '검수대기', data: regionSummary.map(r => r.pending_review), backgroundColor: '#fbbf24', borderRadius: 4 },
@@ -466,7 +466,7 @@ function showFunnelContextMenu(e, status, label, count) {
   ], { title: `${label} (${count}건)` });
 }
 
-// ─── 지역법인 컨텍스트 메뉴 ───
+// ─── 지역총판 컨텍스트 메뉴 ───
 function showRegionContextMenu(e, orgId, regionName) {
   e.preventDefault();
   showContextMenu(e.clientX, e.clientY, [
@@ -479,7 +479,7 @@ function showRegionContextMenu(e, orgId, regionName) {
   ], { title: regionName });
 }
 
-// ─── 지역법인 상세 모달 (Chart.js 포함) ───
+// ─── 지역총판 상세 모달 (Chart.js 포함) ───
 async function showRegionDetailModal(orgId, regionName) {
   const [statsRes, leadersRes] = await Promise.all([
     api('GET', `/stats/regions/daily?region_org_id=${orgId}`),
@@ -691,7 +691,7 @@ function _renderRevenueTrendCharts(daily, byRegion) {
     _dashCharts.regionRevenue = new Chart(regionCtx, {
       type: 'bar',
       data: {
-        labels: byRegion.map(r => r.region_name?.replace('지역법인', '') || ''),
+        labels: byRegion.map(r => r.region_name?.replace('지역총판', '') || ''),
         datasets: [
           {
             label: '매출액 (만원)',
@@ -864,7 +864,7 @@ function _renderSettlementCharts(statuses, byRegion) {
     _dashCharts.settlementRegion = new Chart(regionCtx, {
       type: 'bar',
       data: {
-        labels: byRegion.map(r => r.region_name?.replace('지역법인', '') || ''),
+        labels: byRegion.map(r => r.region_name?.replace('지역총판', '') || ''),
         datasets: [
           { label: '확정', data: byRegion.map(r => r.confirmed || 0), backgroundColor: '#22c55e', borderRadius: 4 },
           { label: '지급', data: byRegion.map(r => r.paid || 0), backgroundColor: '#10b981', borderRadius: 4 },
@@ -970,7 +970,7 @@ function _renderRegionHeatmap(regionSummary) {
   const el = document.getElementById('region-heatmap');
   if (!el) return;
 
-  // 지역법인 코드 → region_name 매핑 (대시보드 region_summary에서)
+  // 지역총판 코드 → region_name 매핑 (대시보드 region_summary에서)
   const regionData = {};
   (regionSummary || []).forEach(r => {
     const total = (r.active_orders || 0) + (r.pending_review || 0) + (r.ready_for_settlement || 0) + (r.settled || 0);
@@ -998,7 +998,7 @@ function _renderRegionHeatmap(regionSummary) {
     { id: 'jeju', name: '제주', cx: 115, cy: 345, r: 20, match: '제주' },
   ];
 
-  // 지역법인이 관할하는 광역시/도 매핑
+  // 지역총판이 관할하는 광역시/도 매핑
   const orgToRegions = {};
   for (const [rName, rData] of Object.entries(regionData)) {
     regions.forEach(reg => {
@@ -1067,7 +1067,7 @@ function _renderRegionHeatmap(regionSummary) {
 
   svgContent += `</svg>`;
 
-  // 하단에 활성 지역법인 요약
+  // 하단에 활성 지역총판 요약
   let summaryHtml = '<div class="flex flex-wrap gap-3 mt-4 justify-center">';
   for (const [rName, rData] of Object.entries(regionData)) {
     const total = rData.total;

@@ -38,13 +38,13 @@ async function renderStatistics(el) {
         <button onclick="refreshStats()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition"><i class="fas fa-search mr-1"></i>조회</button>
       </div>
 
-      <!-- 지역법인별 통계 -->
+      <!-- 지역총판별 통계 -->
       <div class="bg-white rounded-xl p-5 border border-gray-100 mb-6">
-        <h3 class="font-semibold mb-4"><i class="fas fa-building mr-2 text-blue-500"></i>지역법인별 통계</h3>
+        <h3 class="font-semibold mb-4"><i class="fas fa-building mr-2 text-blue-500"></i>지역총판별 통계</h3>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead class="bg-gray-50"><tr>
-              <th class="px-3 py-2 text-left">날짜</th><th class="px-3 py-2 text-left">지역법인</th>
+              <th class="px-3 py-2 text-left">날짜</th><th class="px-3 py-2 text-left">지역총판</th>
               <th class="px-3 py-2 text-right">인입</th><th class="px-3 py-2 text-right">팀장배정</th>
               <th class="px-3 py-2 text-right">완료</th><th class="px-3 py-2 text-right">지역승인</th>
               <th class="px-3 py-2 text-right">HQ승인</th><th class="px-3 py-2 text-right">정산확정</th>
@@ -76,7 +76,7 @@ async function renderStatistics(el) {
           <table class="w-full text-sm">
             <thead class="bg-gray-50"><tr>
               <th class="px-3 py-2 text-left">날짜</th><th class="px-3 py-2 text-left">팀장명</th>
-              <th class="px-3 py-2 text-left">법인</th><th class="px-3 py-2 text-right">수임</th>
+              <th class="px-3 py-2 text-left">총판</th><th class="px-3 py-2 text-right">수임</th>
               <th class="px-3 py-2 text-right">제출</th><th class="px-3 py-2 text-right">HQ승인</th>
               <th class="px-3 py-2 text-right">정산확정</th><th class="px-3 py-2 text-right">지급액합</th>
             </tr></thead>
@@ -273,7 +273,7 @@ function renderCommissionPolicyTable(policies) {
       </div>
       <p class="text-xs text-gray-500 mb-3">정률(PERCENT): 주문금액의 %를 수수료로 차감 · 정액(FIXED): 건당 고정금액 차감</p>
       <table class="w-full text-sm"><thead class="bg-gray-50"><tr>
-        <th class="px-3 py-2 text-left">ID</th><th class="px-3 py-2 text-left">지역법인</th>
+        <th class="px-3 py-2 text-left">ID</th><th class="px-3 py-2 text-left">지역총판</th>
         <th class="px-3 py-2 text-left">대상 팀장</th><th class="px-3 py-2 text-center">유형</th>
         <th class="px-3 py-2 text-right">값</th><th class="px-3 py-2 text-left">적용일</th>
         <th class="px-3 py-2 text-center">활성</th>
@@ -282,7 +282,7 @@ function renderCommissionPolicyTable(policies) {
         <tr class="hover:bg-gray-50">
           <td class="px-3 py-2">${p.commission_policy_id}</td>
           <td class="px-3 py-2">${p.org_name}</td>
-          <td class="px-3 py-2">${p.team_leader_name || '<span class="text-gray-400">법인 기본</span>'}</td>
+          <td class="px-3 py-2">${p.team_leader_name || '<span class="text-gray-400">총판 기본</span>'}</td>
           <td class="px-3 py-2 text-center"><span class="status-badge ${p.mode === 'PERCENT' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}">${p.mode === 'PERCENT' ? '정률' : '정액'}</span></td>
           <td class="px-3 py-2 text-right font-bold">${p.mode === 'PERCENT' ? p.value + '%' : formatAmount(p.value)}</td>
           <td class="px-3 py-2 text-xs">${p.effective_from || '-'}</td>
@@ -299,11 +299,11 @@ function renderCommissionPolicyTable(policies) {
 function renderTerritoryTable(territories) {
   return `
     <div class="bg-white rounded-xl p-5 border border-gray-100">
-      <h3 class="font-semibold mb-4">지역권 ↔ 지역법인 매핑</h3>
+      <h3 class="font-semibold mb-4">지역권 ↔ 지역총판 매핑</h3>
       <table class="w-full text-sm"><thead class="bg-gray-50"><tr>
         <th class="px-3 py-2 text-left">시도</th><th class="px-3 py-2 text-left">시군구</th>
         <th class="px-3 py-2 text-left">읍면동</th><th class="px-3 py-2 text-left">행정동코드</th>
-        <th class="px-3 py-2 text-left">배정 법인</th>
+        <th class="px-3 py-2 text-left">배정 총판</th>
         ${canEdit('policy') ? '<th class="px-3 py-2 text-center">관리</th>' : ''}
       </tr></thead><tbody class="divide-y">${territories.map(t => `
         <tr class="hover:bg-gray-50">
@@ -447,9 +447,9 @@ async function showNewCommissionModal() {
   const orgsRes = await api('GET', '/auth/organizations');
   const orgs = orgsRes?.organizations || [];
   const content = `<div class="space-y-4">
-    <div><label class="block text-xs text-gray-500 mb-1">대상 법인</label>
+    <div><label class="block text-xs text-gray-500 mb-1">대상 총판</label>
       <select id="cp-org" class="w-full border rounded-lg px-3 py-2 text-sm">${orgs.map(o => `<option value="${o.org_id}">${o.name} (${o.org_type})</option>`).join('')}</select></div>
-    <div><label class="block text-xs text-gray-500 mb-1">대상 팀장 ID (비우면 법인 기본)</label>
+    <div><label class="block text-xs text-gray-500 mb-1">대상 팀장 ID (비우면 총판 기본)</label>
       <input id="cp-leader" type="number" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="선택사항"></div>
     <div class="grid grid-cols-2 gap-3">
       <div><label class="block text-xs text-gray-500 mb-1">유형</label>
@@ -477,7 +477,7 @@ async function submitNewCommission() {
 // 수수료 정책 — 수정
 function showEditCommissionModal(p) {
   const content = `<div class="space-y-4">
-    <div class="bg-gray-50 rounded-lg p-3 text-sm"><strong>${p.org_name}</strong> ${p.team_leader_name ? '· 팀장: ' + p.team_leader_name : '· 법인 기본'}</div>
+    <div class="bg-gray-50 rounded-lg p-3 text-sm"><strong>${p.org_name}</strong> ${p.team_leader_name ? '· 팀장: ' + p.team_leader_name : '· 총판 기본'}</div>
     <div class="grid grid-cols-2 gap-3">
       <div><label class="block text-xs text-gray-500 mb-1">유형</label>
         <select id="cp-edit-mode" class="w-full border rounded-lg px-3 py-2 text-sm"><option value="PERCENT" ${p.mode==='PERCENT'?'selected':''}>정률 (%)</option><option value="FIXED" ${p.mode==='FIXED'?'selected':''}>정액 (원)</option></select></div>
@@ -511,7 +511,7 @@ async function showTerritoryMappingModal(territoryId, currentOrgName) {
   const orgs = (orgsRes?.organizations || []).filter(o => o.org_type === 'REGION');
   const content = `<div class="space-y-4">
     <div class="bg-gray-50 rounded-lg p-3 text-sm">현재 배정: <strong class="${currentOrgName ? 'text-purple-700' : 'text-red-500'}">${currentOrgName || '미매핑'}</strong></div>
-    <div><label class="block text-xs text-gray-500 mb-1">새 배정 법인 (REGION)</label>
+    <div><label class="block text-xs text-gray-500 mb-1">새 배정 총판 (REGION)</label>
       <select id="tm-org" class="w-full border rounded-lg px-3 py-2 text-sm">${orgs.map(o => `<option value="${o.org_id}">${o.name}</option>`).join('')}</select></div>
   </div>`;
   showModal(`지역권 매핑 변경 — #${territoryId}`, content, `

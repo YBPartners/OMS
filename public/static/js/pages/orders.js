@@ -69,7 +69,7 @@ async function renderOrders(el) {
                   onchange="toggleAllOrderSelection(this.checked)" data-tooltip="전체 선택/해제">
               </th>
               <th class="px-3 py-3 text-left">ID</th><th class="px-3 py-3 text-left">주문번호</th><th class="px-3 py-3 text-left">고객명</th>
-              <th class="px-3 py-3 text-left">주소</th><th class="px-3 py-3 text-right">금액</th><th class="px-3 py-3 text-left">지역법인</th>
+              <th class="px-3 py-3 text-left">주소</th><th class="px-3 py-3 text-right">금액</th><th class="px-3 py-3 text-left">지역총판</th>
               <th class="px-3 py-3 text-left">팀장</th><th class="px-3 py-3 text-center">상태</th><th class="px-3 py-3 text-left">요청일</th>
               <th class="px-3 py-3 text-center">진행</th><th class="px-3 py-3 text-center w-10"></th>
             </tr></thead>
@@ -162,7 +162,7 @@ async function showOrderDetailDrawer(orderId) {
           <div class="text-sm mt-1">${o.customer_phone || '-'}</div>
         </div>
         <div class="bg-gray-50 rounded-lg p-3">
-          <div class="text-[10px] text-gray-400 uppercase">지역법인</div>
+          <div class="text-[10px] text-gray-400 uppercase">지역총판</div>
           <div class="text-sm mt-1">${o.region_name || '-'}</div>
         </div>
         <div class="bg-gray-50 rounded-lg p-3">
@@ -347,7 +347,7 @@ async function showOrderDetail(orderId) {
         <div><label class="text-xs text-gray-500">행정동코드</label><div class="font-mono text-xs">${o.admin_dong_code || '-'}</div></div>
         <div><label class="text-xs text-gray-500">금액</label><div class="font-bold text-blue-600">${formatAmount(o.base_amount)}</div></div>
         <div><label class="text-xs text-gray-500">상태</label><div>${statusBadge(o.status)}</div></div>
-        <div><label class="text-xs text-gray-500">지역법인</label><div>${o.region_name || '-'}</div></div>
+        <div><label class="text-xs text-gray-500">지역총판</label><div>${o.region_name || '-'}</div></div>
         <div><label class="text-xs text-gray-500">배정팀장</label><div>${o.team_leader_name || '-'}</div></div>
         <div><label class="text-xs text-gray-500">요청일</label><div>${o.requested_date || '-'}</div></div>
       </div>
@@ -616,10 +616,10 @@ async function renderDistribute(el) {
           </div>
           <i class="fas fa-arrow-right text-2xl text-blue-400 animate-pulse"></i>
           <div class="grid grid-cols-2 gap-2">
-            <div class="text-center px-3 py-2 bg-purple-50 rounded-lg border border-purple-200"><div class="text-xs font-bold text-purple-700">서울법인</div></div>
-            <div class="text-center px-3 py-2 bg-purple-50 rounded-lg border border-purple-200"><div class="text-xs font-bold text-purple-700">경기법인</div></div>
-            <div class="text-center px-3 py-2 bg-purple-50 rounded-lg border border-purple-200"><div class="text-xs font-bold text-purple-700">인천법인</div></div>
-            <div class="text-center px-3 py-2 bg-purple-50 rounded-lg border border-purple-200"><div class="text-xs font-bold text-purple-700">부산법인</div></div>
+            <div class="text-center px-3 py-2 bg-purple-50 rounded-lg border border-purple-200"><div class="text-xs font-bold text-purple-700">서울총판</div></div>
+            <div class="text-center px-3 py-2 bg-purple-50 rounded-lg border border-purple-200"><div class="text-xs font-bold text-purple-700">경기총판</div></div>
+            <div class="text-center px-3 py-2 bg-purple-50 rounded-lg border border-purple-200"><div class="text-xs font-bold text-purple-700">인천총판</div></div>
+            <div class="text-center px-3 py-2 bg-purple-50 rounded-lg border border-purple-200"><div class="text-xs font-bold text-purple-700">부산총판</div></div>
           </div>
         </div>
       </div>
@@ -728,7 +728,7 @@ async function executeDistributeWithModal() {
   showModal('자동 배분 실행 중...', `
     <div class="text-center py-8">
       <div class="animate-spin w-16 h-16 mx-auto mb-4"><i class="fas fa-cogs text-4xl text-blue-500"></i></div>
-      <p class="text-gray-600">행정동 기준으로 지역법인에 주문을 배분하고 있습니다...</p>
+      <p class="text-gray-600">행정동 기준으로 지역총판에 주문을 배분하고 있습니다...</p>
     </div>`, '', { large: true });
   const res = await api('POST', '/orders/distribute');
   closeModal();
@@ -744,7 +744,7 @@ async function executeDistributeWithModal() {
       </div>
       ${regionSummary.length > 0 ? `
       <div>
-        <h4 class="font-semibold mb-3"><i class="fas fa-building mr-1 text-indigo-500"></i>지역법인별 배분 결과</h4>
+        <h4 class="font-semibold mb-3"><i class="fas fa-building mr-1 text-indigo-500"></i>지역총판별 배분 결과</h4>
         <div class="grid grid-cols-2 gap-3">${regionSummary.map((r, i) => `
           <div class="ix-clickable rounded-xl p-4 border-2 ${i % 4 === 0 ? 'border-blue-300 bg-blue-50' : i % 4 === 1 ? 'border-purple-300 bg-purple-50' : i % 4 === 2 ? 'border-green-300 bg-green-50' : 'border-orange-300 bg-orange-50'}">
             <div class="flex items-center justify-between mb-2"><span class="font-bold">${r.name}</span><span class="text-lg font-bold">${r.count}건</span></div>
@@ -771,12 +771,12 @@ async function showManualDistributeModal(orderId, customerName, addressText) {
         ${addressText ? `<div class="text-xs text-gray-500"><i class="fas fa-location-dot mr-1"></i>${addressText}</div>` : ''}
       </div>` : ''}
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-building mr-1 text-indigo-500"></i>배분할 지역법인 선택</label>
+        <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-building mr-1 text-indigo-500"></i>배분할 지역총판 선택</label>
         <select id="manual-region" class="w-full border-2 border-gray-200 rounded-lg px-3 py-3 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 transition">
           ${regions.map(r => `<option value="${r.org_id}">${r.name} (${r.code})</option>`).join('')}
         </select>
       </div>
-      <p class="text-xs text-gray-400"><i class="fas fa-info-circle mr-1"></i>행정동 자동매칭이 불가한 경우 수동으로 지역법인을 지정합니다.</p>
+      <p class="text-xs text-gray-400"><i class="fas fa-info-circle mr-1"></i>행정동 자동매칭이 불가한 경우 수동으로 지역총판을 지정합니다.</p>
     </div>`;
   showModal(`<i class="fas fa-share-nodes mr-2 text-indigo-500"></i>수동 배분 — 주문 #${orderId}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 transition">취소</button>
@@ -789,7 +789,7 @@ async function submitManualDistribute(orderId) {
   else showToast(res?.error || '배분 실패', 'error');
 }
 
-// ─── 선택 일괄 배분 모달 (배분관리 페이지 — 여러 주문 → 지역법인) ───
+// ─── 선택 일괄 배분 모달 (배분관리 페이지 — 여러 주문 → 지역총판) ───
 async function showBatchDistributeModal() {
   const ids = [...distributeState.selected];
   if (ids.length === 0) { showToast('배분할 주문을 선택하세요.', 'warning'); return; }
@@ -819,7 +819,7 @@ async function showBatchDistributeModal() {
           </div>`).join('')}
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-building mr-1 text-indigo-500"></i>배분할 지역법인 선택</label>
+        <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-building mr-1 text-indigo-500"></i>배분할 지역총판 선택</label>
         <select id="batch-dist-region" class="w-full border-2 border-gray-200 rounded-lg px-3 py-3 text-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200 transition">
           ${regions.map(r => `<option value="${r.org_id}">${r.name} (${r.code})</option>`).join('')}
         </select>
@@ -849,7 +849,7 @@ async function submitBatchDistribute() {
         <div class="bg-green-50 rounded-xl p-3 text-center border border-green-200"><div class="text-2xl font-bold text-green-600">${res.success || 0}</div><div class="text-xs text-green-500">배분 성공</div></div>
         <div class="bg-red-50 rounded-xl p-3 text-center border border-red-200"><div class="text-2xl font-bold text-red-600">${res.fail || 0}</div><div class="text-xs text-red-500">실패</div></div>
       </div>
-      <div class="text-sm text-gray-600"><i class="fas fa-building mr-1 text-indigo-500"></i>배분 법인: <span class="font-semibold">${res.region_name || ''}</span></div>
+      <div class="text-sm text-gray-600"><i class="fas fa-building mr-1 text-indigo-500"></i>배분 총판: <span class="font-semibold">${res.region_name || ''}</span></div>
     </div>`,
     `<button onclick="closeModal();renderContent()" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">확인</button>`, { large: true });
 }
@@ -875,7 +875,7 @@ async function showOrderBatchDistributeModal() {
         RECEIVED/VALIDATED/DISTRIBUTION_PENDING 상태의 주문만 배분됩니다. 이미 배분된 주문은 재배분됩니다.
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-building mr-1 text-indigo-500"></i>배분할 지역법인 선택</label>
+        <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-building mr-1 text-indigo-500"></i>배분할 지역총판 선택</label>
         <select id="order-batch-dist-region" class="w-full border-2 border-gray-200 rounded-lg px-3 py-3 text-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200 transition">
           ${regions.map(r => `<option value="${r.org_id}">${r.name} (${r.code})</option>`).join('')}
         </select>
@@ -905,7 +905,7 @@ async function submitOrderBatchDistribute() {
         <div class="bg-green-50 rounded-xl p-3 text-center border border-green-200"><div class="text-2xl font-bold text-green-600">${res.success || 0}</div><div class="text-xs text-green-500">배분 성공</div></div>
         <div class="bg-red-50 rounded-xl p-3 text-center border border-red-200"><div class="text-2xl font-bold text-red-600">${res.fail || 0}</div><div class="text-xs text-red-500">실패</div></div>
       </div>
-      <div class="text-sm text-gray-600"><i class="fas fa-building mr-1 text-indigo-500"></i>배분 법인: <span class="font-semibold">${res.region_name || ''}</span></div>
+      <div class="text-sm text-gray-600"><i class="fas fa-building mr-1 text-indigo-500"></i>배분 총판: <span class="font-semibold">${res.region_name || ''}</span></div>
     </div>`,
     `<button onclick="closeModal();renderContent()" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">확인</button>`, { large: true });
 }
@@ -931,7 +931,7 @@ async function exportOrdersCSV() {
     { label: '행정동코드', key: 'admin_dong_code' },
     { label: '금액', key: 'base_amount' },
     { label: '상태', value: (o) => STATUS_LABELS[o.status] || o.status },
-    { label: '지역법인', key: 'region_name' },
+    { label: '지역총판', key: 'region_name' },
     { label: '담당팀장', key: 'team_leader_name' },
     { label: '요청일', key: 'requested_date' },
     { label: '등록일', key: 'created_at' },
@@ -959,7 +959,7 @@ async function exportOrdersExcel() {
     { label: '행정동코드', key: 'admin_dong_code' },
     { label: '금액', key: 'base_amount' },
     { label: '상태', value: (o) => STATUS_LABELS[o.status] || o.status },
-    { label: '지역법인', key: 'region_name' },
+    { label: '지역총판', key: 'region_name' },
     { label: '담당팀장', key: 'team_leader_name' },
     { label: '요청일', key: 'requested_date' },
     { label: '등록일', key: 'created_at' },

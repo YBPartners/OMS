@@ -83,16 +83,16 @@ webapp/
 |------|--------|------|-----------|
 | `SUPER_ADMIN` | 총괄관리자 | 전체 | 모든 기능, 시스템 설정, 채널관리 |
 | `HQ_OPERATOR` | HQ운영자 | 본사 | 주문/배분/HQ검수/정산/대사/통계/인사/채널 |
-| `REGION_ADMIN` | 파트장 | 자기 법인 | 칸반배정/1차검수/팀장관리/통계/대리점관리 |
+| `REGION_ADMIN` | 파트장 | 자기 총판 | 칸반배정/1차검수/팀장관리/통계/대리점관리 |
 | `AGENCY_LEADER` | 대리점장 | 하위 팀장 | 배정/1차검수/하위팀장관리/내주문 ★ v7.0 |
 | `TEAM_LEADER` | 팀장 | 자기 주문 | 작업시작/보고서제출/내 현황 |
 | `AUDITOR` | 감사/조회 | 전체(읽기) | 대사/통계/이력 조회 |
 
 ### 2.2 스코프 제한 규칙
-- **REGION_ADMIN**: 자기 법인 + 하위 팀 데이터
+- **REGION_ADMIN**: 자기 총판 + 하위 팀 데이터
 - **AGENCY_LEADER**: 자신의 주문 + agency_team_mappings 하위 팀장 데이터 ★ v7.0
 - **TEAM_LEADER**: 자신의 팀 데이터만
-- **HR 스코프**: REGION은 자기 법인 팀장만 등록/수정 가능
+- **HR 스코프**: REGION은 자기 총판 팀장만 등록/수정 가능
 
 ---
 
@@ -212,7 +212,7 @@ commission_policies.updated_at TEXT  -- (기존 이슈 #3 해결)
 1. **대시보드** — 스코프 내 현황
 2. **칸반(배정)** — 드래그앤드롭 팀장 배정
 3. **1차검수** — SUBMITTED 주문 승인/반려
-4. **팀장관리** — 자기 법인 팀장/대리점 관리
+4. **팀장관리** — 자기 총판 팀장/대리점 관리
 5. **통계** — 스코프 내 통계
 
 ### AGENCY 콘솔 (3개 화면) ★ v7.0
@@ -257,10 +257,10 @@ pm2 logs yb-oms --nostream
 |------|----|----|------|
 | SUPER_ADMIN | admin | admin123 | 와이비(HQ) |
 | HQ_OPERATOR | hq_operator | admin123 | 와이비(HQ) |
-| REGION_ADMIN | seoul_admin | admin123 | 서울지역법인 |
-| REGION_ADMIN | gyeonggi_admin | admin123 | 경기지역법인 |
-| TEAM_LEADER | leader_seoul_1 | admin123 | 서울지역법인 |
-| TEAM_LEADER | leader_gyeonggi_1 | admin123 | 경기지역법인 |
+| REGION_ADMIN | seoul_admin | admin123 | 서울지역총판 |
+| REGION_ADMIN | gyeonggi_admin | admin123 | 경기지역총판 |
+| TEAM_LEADER | leader_seoul_1 | admin123 | 서울지역총판 |
+| TEAM_LEADER | leader_gyeonggi_1 | admin123 | 경기지역총판 |
 
 ### 9.3 npm 스크립트
 ```bash

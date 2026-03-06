@@ -191,7 +191,7 @@ export function mountPolicies(router: Hono<Env>) {
     const db = c.env.DB;
     const { org_id, team_leader_id, mode, value, channel_id, effective_from } = await c.req.json();
 
-    if (!org_id || !mode || value === undefined) return c.json({ error: '법인ID, 유형, 값은 필수입니다.' }, 400);
+    if (!org_id || !mode || value === undefined) return c.json({ error: '총판ID, 유형, 값은 필수입니다.' }, 400);
     if (!['FIXED', 'PERCENT'].includes(mode)) return c.json({ error: "유형은 FIXED 또는 PERCENT입니다." }, 400);
 
     const result = await db.prepare(`
@@ -264,7 +264,7 @@ export function mountPolicies(router: Hono<Env>) {
     const territoryId = Number(c.req.param('territory_id'));
     const { org_id } = await c.req.json();
 
-    if (!org_id) return c.json({ error: '법인 ID는 필수입니다.' }, 400);
+    if (!org_id) return c.json({ error: '총판 ID는 필수입니다.' }, 400);
 
     // 기존 매핑 종료
     await db.prepare(`

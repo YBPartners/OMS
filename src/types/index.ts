@@ -98,7 +98,7 @@ export const STATUS_LABELS: Record<string, string> = {
 // ─── OrgType 한글 라벨 ───
 export const ORG_TYPE_LABELS: Record<OrgType, string> = {
   HQ: '본사',
-  REGION: '총판',      // v5.0: REGION = 총판 (구 지역법인)
+  REGION: '총판',      // v5.0: REGION = 총판 (구 지역총판)
   TEAM: '팀',
 };
 

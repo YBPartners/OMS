@@ -333,7 +333,7 @@ async function renderHRCommission(el) {
     <div class="bg-white rounded-xl border border-gray-100 overflow-hidden">
       <table class="w-full text-sm">
         <thead class="bg-gray-50"><tr>
-          <th class="px-4 py-3 text-left">ID</th><th class="px-4 py-3 text-left">지역법인</th>
+          <th class="px-4 py-3 text-left">ID</th><th class="px-4 py-3 text-left">지역총판</th>
           <th class="px-4 py-3 text-left">대상 팀장</th><th class="px-4 py-3 text-left">채널</th><th class="px-4 py-3 text-center">유형</th>
           <th class="px-4 py-3 text-right">값</th><th class="px-4 py-3 text-left">적용시작</th>
           <th class="px-4 py-3 text-center">활성</th><th class="px-4 py-3 text-center">관리</th>
@@ -342,7 +342,7 @@ async function renderHRCommission(el) {
           <tr class="hover:bg-gray-50">
             <td class="px-4 py-3 font-mono text-xs">${p.commission_policy_id}</td>
             <td class="px-4 py-3">${p.org_name}</td>
-            <td class="px-4 py-3">${p.team_leader_name || '<span class="text-gray-400">법인 기본</span>'}</td>
+            <td class="px-4 py-3">${p.team_leader_name || '<span class="text-gray-400">총판 기본</span>'}</td>
             <td class="px-4 py-3">${p.channel_name || '<span class="text-gray-400">전체</span>'}</td>
             <td class="px-4 py-3 text-center"><span class="status-badge ${p.mode === 'PERCENT' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}">${p.mode === 'PERCENT' ? '정률' : '정액'}</span></td>
             <td class="px-4 py-3 text-right font-bold">${p.mode === 'PERCENT' ? p.value + '%' : formatAmount(p.value)}</td>
@@ -376,14 +376,14 @@ function showCreateCommissionModal() {
   const content = `
     <form id="create-comm-form" class="space-y-4">
       <div class="grid grid-cols-2 gap-4">
-        <div><label class="block text-xs text-gray-500 mb-1">지역법인 *</label>
+        <div><label class="block text-xs text-gray-500 mb-1">지역총판 *</label>
           <select id="comm-org" name="org_id" required class="w-full border rounded-lg px-3 py-2 text-sm" onchange="updateCommLeaderOptions()">
             <option value="">선택</option>
             ${orgs.map(o => `<option value="${o.org_id}" ${o.org_id === currentUser.org_id ? 'selected' : ''}>${o.name}</option>`).join('')}
           </select></div>
-        <div><label class="block text-xs text-gray-500 mb-1">대상 팀장 (비워두면 법인 기본)</label>
+        <div><label class="block text-xs text-gray-500 mb-1">대상 팀장 (비워두면 총판 기본)</label>
           <select id="comm-leader" name="team_leader_id" class="w-full border rounded-lg px-3 py-2 text-sm">
-            <option value="">법인 기본</option>
+            <option value="">총판 기본</option>
             ${leaders.map(l => `<option value="${l.user_id}" data-org="${l.org_id}">${l.name} (${l.org_name})</option>`).join('')}
           </select></div>
         <div><label class="block text-xs text-gray-500 mb-1">수수료 유형 *</label>
@@ -433,10 +433,10 @@ function showEditCommissionModal(policyId, policyData) {
   const content = `
     <form id="edit-comm-form" class="space-y-4">
       <div class="grid grid-cols-2 gap-4">
-        <div><label class="block text-xs text-gray-500 mb-1">지역법인</label>
+        <div><label class="block text-xs text-gray-500 mb-1">지역총판</label>
           <input disabled class="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50" value="${p.org_name}"></div>
         <div><label class="block text-xs text-gray-500 mb-1">대상 팀장</label>
-          <input disabled class="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50" value="${p.team_leader_name || '법인 기본'}"></div>
+          <input disabled class="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50" value="${p.team_leader_name || '총판 기본'}"></div>
         <div><label class="block text-xs text-gray-500 mb-1">수수료 유형</label>
           <select name="mode" class="w-full border rounded-lg px-3 py-2 text-sm">
             <option value="PERCENT" ${p.mode === 'PERCENT' ? 'selected' : ''}>정률</option>

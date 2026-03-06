@@ -114,7 +114,7 @@ export function mountDistribute(router: Hono<Env>) {
     return c.json({ ok: true, order_id: orderId, region_org_id });
   });
 
-  // ─── 일괄 수동 배분 (여러 주문 → 하나의 지역법인) ───
+  // ─── 일괄 수동 배분 (여러 주문 → 하나의 지역총판) ───
   router.post('/batch-distribute', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
     if (authErr) return authErr;
@@ -124,12 +124,12 @@ export function mountDistribute(router: Hono<Env>) {
     const { order_ids, region_org_id } = await c.req.json();
 
     if (!order_ids?.length) return c.json({ error: '주문 ID 목록은 필수입니다.' }, 400);
-    if (!region_org_id) return c.json({ error: '지역법인 ID는 필수입니다.' }, 400);
+    if (!region_org_id) return c.json({ error: '지역총판 ID는 필수입니다.' }, 400);
     if (order_ids.length > 100) return c.json({ error: '한 번에 최대 100건까지 배분 가능합니다.' }, 400);
 
-    // 지역법인 확인
+    // 지역총판 확인
     const org = await db.prepare("SELECT org_id, name FROM organizations WHERE org_id = ? AND org_type = 'REGION'").bind(region_org_id).first();
-    if (!org) return c.json({ error: '유효한 지역법인이 아닙니다.' }, 400);
+    if (!org) return c.json({ error: '유효한 지역총판이 아닙니다.' }, 400);
 
     const policy = await db.prepare('SELECT version FROM distribution_policies WHERE is_active = 1 ORDER BY version DESC LIMIT 1').first();
     const policyVersion = policy?.version || 1;
