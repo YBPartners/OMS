@@ -214,8 +214,8 @@ app.get('/ads.txt', async (c) => {
       });
     }
   } catch (e) { /* DB 없으면 기본값 */ }
-  // 기본 빈 ads.txt (Google AdSense에서 발급받은 코드를 시스템관리에서 설정)
-  return new Response('# ads.txt - Configure in Airflow System Admin > Ad Settings\n', {
+  // 기본 ads.txt
+  return new Response('google.com, pub-6838924334474689, DIRECT, f08c47fec0942fa0\n', {
     headers: { 'Content-Type': 'text/plain; charset=utf-8' }
   });
 });
@@ -234,8 +234,8 @@ app.get('*', async (c) => {
     return c.notFound();
   }
   
-  // DB에서 AdSense 계정 ID 조회
-  let adsenseAccount = '';
+  // DB에서 AdSense 계정 ID 조회 (폴백: 하드코딩)
+  let adsenseAccount = 'ca-pub-6838924334474689';
   try {
     const result = await c.env.DB.prepare(
       "SELECT value FROM ad_settings WHERE key = 'adsense_client_id'"
