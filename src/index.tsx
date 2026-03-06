@@ -343,6 +343,20 @@ function getIndexHtml(adsenseAccount: string = ''): string {
 <body class="bg-gray-50 min-h-screen">
   <div id="app"></div>
   
+  <!-- SW 강제 갱신: 이전 yb-oms 캐시 정리 -->
+  <script>
+  (async()=>{
+    if('serviceWorker' in navigator){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      for(const r of regs){r.update();}
+    }
+    if('caches' in window){
+      const keys=await caches.keys();
+      for(const k of keys){if(k.startsWith('yb-oms'))await caches.delete(k);}
+    }
+  })();
+  </script>
+  
   <!-- Core modules (load order matters) -->
   <script src="/static/js/core/constants.js?v=${V}"></script>
   <script src="/static/js/core/api.js?v=${V}"></script>
