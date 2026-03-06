@@ -85,6 +85,7 @@ async function renderHRUsers(el) {
                 <button onclick="showCredentialModal(${u.user_id}, '${u.name}')" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200" data-tooltip="ID/PW 설정"><i class="fas fa-key"></i></button>
                 <button onclick="resetUserPw(${u.user_id}, '${u.name}')" class="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs hover:bg-amber-200" data-tooltip="PW 초기화"><i class="fas fa-undo"></i></button>
                 <button onclick="toggleUserStatus(${u.user_id}, '${u.status}', '${u.name}')" class="px-2 py-1 ${u.status === 'ACTIVE' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'} rounded text-xs hover:opacity-80" data-tooltip="${u.status === 'ACTIVE' ? '비활성화' : '활성화'}"><i class="fas ${u.status === 'ACTIVE' ? 'fa-ban' : 'fa-check'}"></i></button>
+                ${currentUser.roles.includes('SUPER_ADMIN') ? `<button onclick="deleteUser(${u.user_id}, '${u.name.replace(/'/g, "\\'") }')" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200" data-tooltip="삭제"><i class="fas fa-trash"></i></button>` : ''}
               </div>
             </td>
           </tr>`).join('')}
@@ -282,18 +283,34 @@ async function renderHROrgs(el) {
           <div class="flex items-center gap-4 text-sm text-gray-600">
             <span><i class="fas fa-users mr-1"></i>활성 ${o.active_members || 0}명 / 전체 ${o.total_members || 0}명</span>
             <span><i class="fas fa-user-tie mr-1"></i>팀장 ${o.active_leaders || 0}명</span>
+            ${o.child_team_count ? `<span><i class="fas fa-sitemap mr-1"></i>하위팀 ${o.child_team_count}개</span>` : ''}
           </div>
+          ${canEdit('admin') && o.org_type !== 'HQ' ? `
+          <div class="flex gap-2 mt-3 pt-3 border-t">
+            <button onclick='showEditOrgModal(${JSON.stringify(o).replace(/'/g,"&#39;")})' class="px-3 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit mr-1"></i>수정</button>
+            ${o.status === 'ACTIVE' ? `<button onclick="deactivateOrg(${o.org_id},'${o.name.replace(/'/g,"\\'")}')" class="px-3 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100"><i class="fas fa-ban mr-1"></i>비활성화</button>` : `<button onclick="reactivateOrg(${o.org_id})" class="px-3 py-1 bg-green-50 text-green-600 rounded text-xs hover:bg-green-100"><i class="fas fa-check mr-1"></i>활성화</button>`}
+          </div>` : ''}
         </div>
       `).join('')}
     </div>`;
 }
 
-function showCreateOrgModal() {
+async function showCreateOrgModal() {
+  const orgsRes = await api('GET', '/hr/organizations');
+  const regionOrgs = (orgsRes?.organizations || []).filter(o => o.org_type === 'REGION' && o.status === 'ACTIVE');
   const content = `
     <form id="create-org-form" class="space-y-4">
       <div><label class="block text-xs text-gray-500 mb-1">조직명 *</label><input name="name" required class="w-full border rounded-lg px-3 py-2 text-sm"></div>
       <div><label class="block text-xs text-gray-500 mb-1">유형 *</label>
-        <select name="org_type" required class="w-full border rounded-lg px-3 py-2 text-sm"><option value="REGION">REGION</option><option value="HQ">HQ</option></select></div>
+        <select name="org_type" required class="w-full border rounded-lg px-3 py-2 text-sm" onchange="document.getElementById('parent-org-row').style.display=this.value==='TEAM'?'block':'none'">
+          <option value="REGION">REGION (지역총판)</option>
+          <option value="TEAM">TEAM (팀)</option>
+        </select></div>
+      <div id="parent-org-row" style="display:none"><label class="block text-xs text-gray-500 mb-1">상위 총판 *</label>
+        <select name="parent_org_id" class="w-full border rounded-lg px-3 py-2 text-sm" id="parent-org-select">
+          <option value="">선택하세요</option>
+          ${regionOrgs.map(o => `<option value="${o.org_id}">${o.name} (${o.code || '-'})</option>`).join('')}
+        </select></div>
       <div><label class="block text-xs text-gray-500 mb-1">코드 (영문대문자)</label><input name="code" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="REGION_DAEJEON"></div>
     </form>`;
   showModal('조직 등록', content, `
@@ -306,6 +323,40 @@ async function submitCreateOrg() {
   const res = await api('POST', '/hr/organizations', data);
   if (res?.org_id) { showToast('조직 등록 완료', 'success'); closeModal(); renderContent(); }
   else showToast(res?.error || '등록 실패', 'error');
+}
+
+// ─── 조직 수정 모달 ───
+function showEditOrgModal(o) {
+  const content = `<div class="space-y-4">
+    <div><label class="block text-xs text-gray-500 mb-1">조직명</label>
+      <input id="eo-name" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.name}"></div>
+    <div><label class="block text-xs text-gray-500 mb-1">코드</label>
+      <input id="eo-code" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.code || ''}"></div>
+    <div class="text-xs text-gray-400">유형: ${o.org_type} · ID: #${o.org_id}</div>
+  </div>`;
+  showModal(`조직 수정 — ${o.name}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitEditOrg(${o.org_id})" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm">저장</button>`);
+}
+async function submitEditOrg(orgId) {
+  const data = { name: document.getElementById('eo-name')?.value, code: document.getElementById('eo-code')?.value || null };
+  const res = await api('PUT', `/hr/organizations/${orgId}`, data);
+  if (res?.ok) { showToast('조직 수정 완료', 'success'); closeModal(); renderContent(); }
+  else showToast(res?.error || '수정 실패', 'error');
+}
+
+// ─── 조직 비활성화/활성화 ───
+async function deactivateOrg(orgId, orgName) {
+  showConfirmModal('조직 비활성화', `"${orgName}" 조직을 비활성화하시겠습니까?\n(활성 멤버가 있으면 비활성화할 수 없습니다)`, async () => {
+    const res = await api('DELETE', `/hr/organizations/${orgId}`);
+    if (res?.ok) { showToast('비활성화 완료', 'success'); renderContent(); }
+    else showToast(res?.error || '실패', 'error');
+  });
+}
+async function reactivateOrg(orgId) {
+  const res = await api('PUT', `/hr/organizations/${orgId}`, { status: 'ACTIVE' });
+  if (res?.ok) { showToast('활성화 완료', 'success'); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
 }
 
 // ─── 수수료(정률/요율) 설정 ───
@@ -576,6 +627,8 @@ function showHRUserContextMenu(event, user) {
 
   const items = [
     { icon: 'fa-edit', label: '사용자 수정', action: () => showEditUserModal(u.user_id) },
+    { icon: 'fa-user-tag', label: '역할 변경', action: () => showRolesModal(u.user_id, u.name, u.roles || []) },
+    { icon: 'fa-exchange-alt', label: '조직 이동', action: () => showTransferModal(u.user_id, u.name) },
     { icon: 'fa-key', label: 'ID/PW 설정', action: () => showCredentialModal(u.user_id, u.name) },
     { icon: 'fa-undo', label: '비밀번호 초기화', action: () => resetUserPw(u.user_id, u.name) },
     { divider: true },
@@ -583,12 +636,72 @@ function showHRUserContextMenu(event, user) {
       label: u.status === 'ACTIVE' ? '비활성화' : '활성화',
       danger: u.status === 'ACTIVE',
       action: () => toggleUserStatus(u.user_id, u.status, u.name) },
+    { icon: 'fa-trash', label: '삭제', danger: true, action: () => deleteUser(u.user_id, u.name) },
     { divider: true },
     { icon: 'fa-list', label: '이 사용자의 주문 보기', action: () => { window._orderFilters = { search: u.name }; navigateTo('orders'); } },
     { icon: 'fa-chart-bar', label: '통계에서 확인', action: () => navigateTo('statistics') },
   ];
 
   showContextMenu(event.clientX, event.clientY, items, { title: `${u.name} (${u.login_id})` });
+}
+
+// ─── HR 사용자 삭제 ───
+async function deleteUser(userId, name) {
+  showConfirmModal('사용자 삭제', `"${name}" 사용자를 삭제하시겠습니까?\n(진행중인 주문이 있으면 삭제할 수 없습니다)`, async () => {
+    const res = await api('DELETE', `/hr/users/${userId}`);
+    if (res?.ok) { showToast(res.message, 'success'); renderContent(); }
+    else showToast(res?.error || '삭제 실패', 'error');
+  });
+}
+
+// ─── 다중 역할 변경 모달 ───
+async function showRolesModal(userId, name, currentRoles) {
+  const rolesRes = await api('GET', '/hr/roles');
+  const allRoles = rolesRes?.roles || [];
+  const content = `<div class="space-y-3">
+    <p class="text-sm text-gray-600">"${name}" 사용자에게 부여할 역할을 선택하세요. (복수 선택 가능)</p>
+    ${allRoles.map(r => `
+      <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+        <input type="checkbox" class="role-cb w-4 h-4 rounded text-blue-600" value="${r.code}" ${currentRoles.includes(r.code) ? 'checked' : ''}>
+        <div>
+          <div class="text-sm font-medium">${r.name}</div>
+          <div class="text-xs text-gray-400">${r.code}</div>
+        </div>
+      </label>
+    `).join('')}
+  </div>`;
+  showModal(`역할 변경 — ${name}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitRoles(${userId})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`);
+}
+async function submitRoles(userId) {
+  const checked = [...document.querySelectorAll('.role-cb:checked')].map(cb => cb.value);
+  if (checked.length === 0) { showToast('하나 이상의 역할을 선택하세요.', 'warning'); return; }
+  const res = await api('POST', `/hr/users/${userId}/roles`, { roles: checked });
+  if (res?.ok) { showToast(res.message, 'success'); closeModal(); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
+}
+
+// ─── 사용자 조직 이동 모달 ───
+async function showTransferModal(userId, name) {
+  const orgsRes = await api('GET', '/hr/organizations');
+  const orgs = (orgsRes?.organizations || []).filter(o => o.status === 'ACTIVE');
+  const content = `<div class="space-y-4">
+    <p class="text-sm text-gray-600">"${name}" 사용자를 이동할 조직을 선택하세요.</p>
+    <select id="transfer-org" class="w-full border rounded-lg px-3 py-2 text-sm">
+      ${orgs.map(o => `<option value="${o.org_id}">${o.org_type === 'HQ' ? '★ ' : o.org_type === 'REGION' ? '◆ ' : '  ↳ '}${o.name} (${o.org_type})</option>`).join('')}
+    </select>
+  </div>`;
+  showModal(`조직 이동 — ${name}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="submitTransfer(${userId})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">이동</button>`);
+}
+async function submitTransfer(userId) {
+  const orgId = document.getElementById('transfer-org')?.value;
+  if (!orgId) { showToast('조직을 선택하세요.', 'warning'); return; }
+  const res = await api('POST', `/hr/users/${userId}/transfer`, { org_id: +orgId });
+  if (res?.ok) { showToast(res.message, 'success'); closeModal(); renderContent(); }
+  else showToast(res?.error || '실패', 'error');
 }
 
 // ─── 대리점(AGENCY) 관리 탭 ───

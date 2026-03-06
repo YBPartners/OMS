@@ -22,7 +22,7 @@ export function mountUsers(router: Hono<Env>) {
     const { org_id, role, status: filterStatus, search, page, limit } = c.req.query();
     const pg = normalizePagination(page, limit, 100);
 
-    const conditions: string[] = [];
+    const conditions: string[] = ["u.login_id NOT LIKE '__deleted_%'"];
     const params: any[] = [];
 
     // ★ Scope: REGION은 자기 총판+하위 TEAM, HQ는 전체
@@ -431,5 +431,116 @@ export function mountUsers(router: Hono<Env>) {
 
     const result = await c.env.DB.prepare('SELECT * FROM roles ORDER BY role_id').all();
     return c.json({ roles: result.results });
+  });
+
+  // ─── 사용자 삭제 (소프트 삭제 — 비활성화 + 논리적 삭제 마킹) ───
+  router.delete('/users/:user_id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN']);
+    if (authErr) return authErr;
+
+    const currentUser = c.get('user')!;
+    const db = c.env.DB;
+    const userId = Number(c.req.param('user_id'));
+    if (isNaN(userId)) return c.json({ error: '유효하지 않은 사용자 ID입니다.' }, 400);
+
+    if (userId === currentUser.user_id) return c.json({ error: '자기 자신은 삭제할 수 없습니다.' }, 400);
+
+    const target = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(userId).first() as any;
+    if (!target) return c.json({ error: '사용자를 찾을 수 없습니다.' }, 404);
+
+    // 활성 주문 배정이 있는지 확인
+    const activeAssignments = await db.prepare(
+      "SELECT COUNT(*) as cnt FROM order_assignments WHERE team_leader_id = ? AND status NOT IN ('REASSIGNED','SETTLEMENT_CONFIRMED','PAID')"
+    ).bind(userId).first() as any;
+    if (activeAssignments?.cnt > 0) {
+      return c.json({ error: `진행중인 주문 배정이 ${activeAssignments.cnt}건 있어 삭제할 수 없습니다. 먼저 주문을 재배정하세요.` }, 400);
+    }
+
+    // 소프트 삭제: INACTIVE + login_id 변경(유니크 해제) + 역할 제거 + 세션 무효화
+    const deletedLoginId = `__deleted_${userId}_${Date.now().toString(36)}`;
+    await db.prepare("UPDATE users SET status = 'INACTIVE', login_id = ?, memo = COALESCE(memo,'') || ' [DELETED:' || ? || ']', updated_at = datetime('now') WHERE user_id = ?")
+      .bind(deletedLoginId, target.login_id, userId).run();
+    await db.prepare('DELETE FROM user_roles WHERE user_id = ?').bind(userId).run();
+    await invalidateUserSessions(db, userId, c.env.SESSION_CACHE);
+
+    await writeAuditLog(db, {
+      entity_type: 'USER', entity_id: userId, action: 'DELETE',
+      actor_id: currentUser.user_id,
+      detail_json: JSON.stringify({ name: target.name, login_id: target.login_id, org_id: target.org_id })
+    });
+
+    return c.json({ ok: true, message: `사용자 "${target.name}"이(가) 삭제되었습니다.` });
+  });
+
+  // ─── 다중 역할 할당 (기존 역할 교체 대신 추가/제거) ───
+  router.post('/users/:user_id/roles', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+
+    const currentUser = c.get('user')!;
+    const db = c.env.DB;
+    const userId = Number(c.req.param('user_id'));
+    if (isNaN(userId)) return c.json({ error: '유효하지 않은 사용자 ID입니다.' }, 400);
+
+    const target = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(userId).first();
+    if (!target) return c.json({ error: '사용자를 찾을 수 없습니다.' }, 404);
+
+    const { roles } = await c.req.json();
+    if (!roles || !Array.isArray(roles) || roles.length === 0) {
+      return c.json({ error: '하나 이상의 역할을 지정하세요.' }, 400);
+    }
+
+    // 유효성 검증
+    for (const role of roles) {
+      if (!isValidRole(role)) return c.json({ error: `유효하지 않은 역할: ${role}` }, 400);
+    }
+
+    // 기존 역할 삭제 후 새 역할 삽입
+    await db.prepare('DELETE FROM user_roles WHERE user_id = ?').bind(userId).run();
+    for (const roleCode of roles) {
+      const roleRow = await db.prepare('SELECT role_id FROM roles WHERE code = ?').bind(roleCode).first();
+      if (roleRow) {
+        await db.prepare('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)').bind(userId, roleRow.role_id).run();
+      }
+    }
+
+    await writeAuditLog(db, {
+      entity_type: 'USER', entity_id: userId, action: 'ROLES_CHANGED',
+      actor_id: currentUser.user_id,
+      detail_json: JSON.stringify({ roles })
+    });
+
+    return c.json({ ok: true, roles, message: `역할이 [${roles.join(', ')}]로 변경되었습니다.` });
+  });
+
+  // ─── 사용자 조직 이동 ───
+  router.post('/users/:user_id/transfer', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN']);
+    if (authErr) return authErr;
+
+    const currentUser = c.get('user')!;
+    const db = c.env.DB;
+    const userId = Number(c.req.param('user_id'));
+    if (isNaN(userId)) return c.json({ error: '유효하지 않은 사용자 ID입니다.' }, 400);
+
+    const { org_id } = await c.req.json();
+    if (!org_id) return c.json({ error: '이동할 조직 ID를 입력하세요.' }, 400);
+
+    const target = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(userId).first() as any;
+    if (!target) return c.json({ error: '사용자를 찾을 수 없습니다.' }, 404);
+
+    const targetOrg = await db.prepare('SELECT * FROM organizations WHERE org_id = ?').bind(Number(org_id)).first();
+    if (!targetOrg) return c.json({ error: '이동할 조직을 찾을 수 없습니다.' }, 404);
+
+    const prevOrgId = target.org_id;
+    await db.prepare("UPDATE users SET org_id = ?, updated_at = datetime('now') WHERE user_id = ?").bind(Number(org_id), userId).run();
+
+    await writeAuditLog(db, {
+      entity_type: 'USER', entity_id: userId, action: 'TRANSFER',
+      actor_id: currentUser.user_id,
+      detail_json: JSON.stringify({ from_org_id: prevOrgId, to_org_id: Number(org_id), name: target.name })
+    });
+
+    return c.json({ ok: true, message: `"${target.name}"이(가) "${(targetOrg as any).name}"으로 이동되었습니다.` });
   });
 }

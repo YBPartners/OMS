@@ -59,6 +59,7 @@ function canEdit(entity) {
     case 'organization': return roles.includes('SUPER_ADMIN');
     case 'policy': return roles.some(r => ['HQ_OPERATOR', 'SUPER_ADMIN'].includes(r));
     case 'agency': return roles.some(r => ['HQ_OPERATOR', 'REGION_ADMIN', 'SUPER_ADMIN'].includes(r));
+    case 'admin': return roles.includes('SUPER_ADMIN');
     default: return false;
   }
 }

@@ -141,4 +141,49 @@ export function mountOrganizations(router: Hono<Env>) {
 
     return c.json({ ok: true });
   });
+
+  // 조직 비활성화/삭제 (멤버 없는 경우만)
+  router.delete('/organizations/:org_id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const orgId = Number(c.req.param('org_id'));
+    if (isNaN(orgId)) return c.json({ error: '유효하지 않은 조직 ID입니다.' }, 400);
+
+    const existing = await db.prepare('SELECT * FROM organizations WHERE org_id = ?').bind(orgId).first() as any;
+    if (!existing) return c.json({ error: '조직을 찾을 수 없습니다.' }, 404);
+
+    // HQ는 삭제 불가
+    if (existing.org_type === 'HQ') return c.json({ error: '본사(HQ) 조직은 삭제할 수 없습니다.' }, 400);
+
+    // 활성 멤버 체크
+    const memberCount = await db.prepare(
+      "SELECT COUNT(*) as cnt FROM users WHERE org_id = ? AND status = 'ACTIVE'"
+    ).bind(orgId).first() as any;
+    if (memberCount?.cnt > 0) {
+      return c.json({ error: `활성 멤버가 ${memberCount.cnt}명 있어 삭제할 수 없습니다. 먼저 멤버를 이동하세요.` }, 400);
+    }
+
+    // 하위 조직 체크 (REGION인 경우)
+    if (existing.org_type === 'REGION') {
+      const childCount = await db.prepare(
+        "SELECT COUNT(*) as cnt FROM organizations WHERE parent_org_id = ? AND status = 'ACTIVE'"
+      ).bind(orgId).first() as any;
+      if (childCount?.cnt > 0) {
+        return c.json({ error: `활성 하위 조직이 ${childCount.cnt}개 있어 삭제할 수 없습니다.` }, 400);
+      }
+    }
+
+    // 소프트 삭제
+    await db.prepare("UPDATE organizations SET status = 'INACTIVE', updated_at = datetime('now') WHERE org_id = ?").bind(orgId).run();
+
+    await writeAuditLog(db, {
+      entity_type: 'ORGANIZATION', entity_id: orgId, action: 'DELETE',
+      actor_id: user.user_id, detail_json: JSON.stringify({ name: existing.name, org_type: existing.org_type }),
+    });
+
+    return c.json({ ok: true, message: `조직 "${existing.name}"이(가) 비활성화되었습니다.` });
+  });
 }
