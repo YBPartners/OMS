@@ -17,7 +17,15 @@ function render() {
       else { app.innerHTML = ''; openSignupWizard(); }
       return; 
     }
-    app.innerHTML = renderLoginPage(); return;
+    app.innerHTML = renderLoginPage();
+    // 로그인 페이지 배너 삽입
+    if (typeof renderLoginBanner === 'function') {
+      renderLoginBanner().then(html => {
+        const slot = document.getElementById('login-banner-slot');
+        if (slot && html) { slot.innerHTML = html; startBannerAutoplay('login_page'); }
+      }).catch(() => {});
+    }
+    return;
   }
   
   const hash = window.location.hash.replace('#', '');
@@ -32,6 +40,7 @@ function render() {
   app.innerHTML = renderLayout();
   renderContent();
   if (typeof startNotificationPolling === 'function') startNotificationPolling();
+  if (typeof loadAdSenseScript === 'function') loadAdSenseScript();
   if (isMobile()) initPullToRefresh();
 }
 
@@ -76,6 +85,8 @@ function renderLoginPage() {
           <p><span class="font-medium text-teal-600">대리점장:</span> leader_seoul_1 / admin123</p>
         </div>
       </div>
+      <!-- 로그인 페이지 배너 슬롯 -->
+      <div id="login-banner-slot" class="mt-4"></div>
     </div>
   </div>`;
 }

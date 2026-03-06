@@ -13,6 +13,7 @@ import signupRoutes from './routes/signup/index';
 import notificationRoutes from './routes/notifications';
 import auditRoutes from './routes/audit';
 import systemRoutes from './routes/system';
+import bannerRoutes from './routes/banners';
 
 const app = new Hono<Env>();
 
@@ -78,12 +79,12 @@ app.use('*', async (c, next) => {
   if (!c.req.path.startsWith('/api/')) {
     c.res.headers.set('Content-Security-Policy', [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://t1.daumcdn.net",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://t1.daumcdn.net https://pagead2.googlesyndication.com https://adservice.google.com https://www.googletagservices.com",
       "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
       "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com",
-      "img-src 'self' data: blob:",
-      "connect-src 'self'",
-      "frame-src 'none'",
+      "img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com https://pagead2.googlesyndication.com",
+      "connect-src 'self' https://pagead2.googlesyndication.com https://adservice.google.com",
+      "frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com https://www.google.com",
       "object-src 'none'",
       "base-uri 'self'",
     ].join('; '));
@@ -97,6 +98,8 @@ app.use('*', cors({
     const allowed = [
       'https://dahada-oms.pages.dev',
       /^https:\/\/[a-z0-9-]+\.dahada-oms\.pages\.dev$/,  // 프리뷰 배포 (branch.project.pages.dev)
+      'https://www.airflow.co.kr',
+      'https://airflow.co.kr',
       'http://localhost:3000',
       'http://localhost:8788',
     ];
@@ -173,9 +176,10 @@ app.route('/api/signup', signupRoutes);
 app.route('/api/notifications', notificationRoutes);
 app.route('/api/audit', auditRoutes);
 app.route('/api/system', systemRoutes);
+app.route('/api/banners', bannerRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '21.1.0', system: '와이비 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '22.0.0', system: '와이비 OMS' }));
 
 // ─── API 404 표준화 — 존재하지 않는 API 경로에 대해 명확한 JSON 응답 ───
 app.all('/api/*', (c) => {
@@ -265,6 +269,7 @@ function getIndexHtml(): string {
   <!-- Shared components -->
   <script src="/static/js/shared/table.js"></script>
   <script src="/static/js/shared/form-helpers.js"></script>
+  <script src="/static/js/shared/banner-slider.js"></script>
   
   <!-- Page modules: 지연 로딩 — 필요한 페이지만 동적으로 로드 -->
   <script>
@@ -292,6 +297,7 @@ function getIndexHtml(): string {
       'agency-statement': ['/static/js/pages/agency.js'],
       'channels': ['/static/js/pages/channels.js'],
       'system-admin': ['/static/js/pages/system.js'],
+      'banner-manage': ['/static/js/pages/banner-manage.js'],
       'signup': ['/static/js/pages/signup-wizard.js', '/static/js/pages/signup-admin.js'],
     };
     const _loadedScripts = new Set();

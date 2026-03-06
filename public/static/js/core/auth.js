@@ -91,6 +91,8 @@ async function renderContent() {
   try {
     // 대시보드 폴링 관리
     if (typeof stopDashboardPolling === 'function') stopDashboardPolling();
+    // 배너 자동재생 정리
+    if (typeof stopAllBannerAutoplay === 'function') stopAllBannerAutoplay();
     
     // ★ 지연 로딩: 해당 페이지 스크립트를 동적으로 로드
     if (typeof loadPageScripts === 'function') {
@@ -127,6 +129,8 @@ async function renderContent() {
       case 'agency-statement': await renderAgencyStatement(); break;
       // v13.0: 시스템 관리
       case 'system-admin': await renderSystemAdmin(el); break;
+      // v22.0: 배너/광고 관리
+      case 'banner-manage': await renderBannerManage(el); break;
       default: el.innerHTML = '<div class="text-center py-16 text-gray-400"><i class="fas fa-compass text-5xl mb-4"></i><p class="text-lg">페이지를 찾을 수 없습니다.</p></div>';
     }
   } catch (err) {

@@ -243,6 +243,11 @@ async function renderDashboard(el) {
   console.error('[renderDashboard]', e);
   el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
   }
+
+  // ★ v22.0: 배너 광고 자동 삽입
+  if (typeof injectDashboardBanners === 'function') {
+    injectDashboardBanners().catch(e => console.error('[Banner] inject error:', e));
+  }
 }
 
 // ─── Chart.js 차트 생성 ───
