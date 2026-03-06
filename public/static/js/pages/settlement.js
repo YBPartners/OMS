@@ -6,6 +6,7 @@
 
 // ════════ 정산관리 ════════
 async function renderSettlement(el) {
+  try {
   showSkeletonLoading(el, 'table');
   const res = await api('GET', '/settlements/runs');
   const runs = res?.runs || [];
@@ -124,6 +125,7 @@ function showCreateRunModal() {
   showModal('정산 Run 생성', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="createRun()" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm">생성</button>`);
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function createRun() {
@@ -156,6 +158,7 @@ async function confirmRun(runId) {
 }
 
 async function viewRunDetail(runId) {
+  try {
   const res = await api('GET', `/settlements/runs/${runId}/details`);
   if (!res?.run) return;
   const run = res.run;
@@ -295,9 +298,11 @@ function toggleSettlementExpand(el) {
 // ─── 대사 이슈 선택 상태 ───
 const reconcileState = {
   selectedIssues: new Set(),
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 };
 
 async function renderReconciliation(el) {
+  try {
   showSkeletonLoading(el, 'cards');
   const [runsRes, issuesRes] = await Promise.all([
     api('GET', '/reconciliation/runs'),
@@ -434,10 +439,12 @@ function showIssueContextMenu(event, issue) {
 // ─── 이슈 유형별 필터링 ───
 function filterIssuesByType(type) {
   showToast(`${OMS.ISSUE_TYPES[type]?.label || type} 유형 이슈 필터링`, 'info');
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 배치 이슈 해결 ───
 async function batchResolveIssues() {
+  try {
   const ids = [...reconcileState.selectedIssues];
   if (ids.length === 0) return;
 
@@ -532,9 +539,11 @@ function showReconcileModal() {
   showModal('대사 실행', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="executeReconciliation()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">실행</button>`);
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function executeReconciliation() {
+  try {
   const start = document.getElementById('recon-start').value;
   const end = document.getElementById('recon-end').value;
   closeModal();
@@ -544,19 +553,23 @@ async function executeReconciliation() {
     showToast(`대사 완료 — ${res.total_issues}건 이슈 발견`, res.total_issues > 0 ? 'warning' : 'success');
     renderContent();
   } else showToast(res?.error || '대사 실패', 'error');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function resolveIssue(issueId) {
+  try {
   showConfirmModal('이슈 해결 처리', `이슈 #${issueId}를 해결 처리하시겠습니까?`,
     async () => {
       const res = await api('PATCH', `/reconciliation/issues/${issueId}/resolve`);
       if (res?.ok) { showToast('해결 처리 완료', 'success'); renderContent(); }
       else showToast(res?.error || '처리 실패', 'error');
     }, '해결 처리', 'bg-green-600');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 정산 보고서 인쇄 ════════
 async function printSettlementReport(runId) {
+  try {
   showToast('보고서 생성 중...', 'info');
   const res = await api('GET', `/settlements/runs/${runId}/report`);
   if (!res?.report) return showToast('보고서 생성 실패', 'error');
@@ -620,10 +633,12 @@ ${grouped.map(g => `
   const w = window.open('', '_blank', 'width=900,height=700');
   if (w) { w.document.write(html); w.document.close(); }
   else showToast('팝업이 차단되었습니다. 팝업을 허용해주세요.', 'warning');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 정산서 이메일 발송 ════════
 async function sendSettlementEmail(runId) {
+  try {
   showConfirmModal(
     '정산서 이메일 발송',
     `정산 Run #${runId}의 정산서를 각 팀장의 등록 이메일로 발송하시겠습니까?<br><br>
@@ -644,10 +659,12 @@ async function sendSettlementEmail(runId) {
     },
     '발송', 'bg-blue-600'
   );
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 정산 CSV 내보내기 ════════
 async function exportSettlementCSV(runId) {
+  try {
   showToast('CSV 생성 중...', 'info');
   const res = await api('GET', `/settlements/runs/${runId}/export`);
   if (!res?.rows) return showToast('내보내기 실패', 'error');
@@ -661,10 +678,12 @@ async function exportSettlementCSV(runId) {
 
   exportToCSV(`settlement_run_${runId}.csv`, headers, rows);
   showToast('CSV 다운로드 완료', 'success');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 대리점 정산 내역서 ════════
 async function renderAgencyStatement() {
+  try {
   const el = document.getElementById('content');
   if (!el) return;
   showSkeletonLoading(el, 'table');
@@ -716,10 +735,12 @@ async function renderAgencyStatement() {
         </div>
       </div>`).join('')}
     </div>`;
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ─── 대리점 내역서 인쇄 ───
 async function printAgencyStatement() {
+  try {
   showToast('내역서 생성 중...', 'info');
   const today = new Date().toISOString().split('T')[0];
   const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
@@ -766,12 +787,14 @@ ${st.leaders.map(l => `<div class="section">${l.name} — ${l.count}건</div>
 
   const w = window.open('', '_blank', 'width=900,height=700');
   if (w) { w.document.write(html); w.document.close(); }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 딜러(팀장)별 계산서(Invoice) ════════
 
 // 개별 팀장 계산서 모달
 async function showTeamInvoice(runId, teamLeaderId) {
+  try {
   showToast('계산서 조회 중...', 'info');
   const res = await api('GET', `/settlements/runs/${runId}/invoice/${teamLeaderId}`);
   if (!res?.invoice) return showToast(res?.error || '계산서 조회 실패', 'error');
@@ -944,10 +967,12 @@ async function showTeamInvoice(runId, teamLeaderId) {
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>
     <button onclick="closeModal();printTeamInvoice(${runId}, ${teamLeaderId})" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700"><i class="fas fa-print mr-1"></i>인쇄 / PDF 저장</button>
   `, { xlarge: true });
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // 인쇄용 계산서 HTML (산출 절차대로)
 async function printTeamInvoice(runId, teamLeaderId) {
+  try {
   showToast('계산서 생성 중...', 'info');
   const res = await api('GET', `/settlements/runs/${runId}/invoice/${teamLeaderId}`);
   if (!res?.invoice) return showToast(res?.error || '계산서 생성 실패', 'error');
@@ -961,10 +986,12 @@ async function printTeamInvoice(runId, teamLeaderId) {
   const w = window.open('', '_blank', 'width=900,height=900');
   if (w) { w.document.write(html); w.document.close(); }
   else showToast('팝업이 차단되었습니다. 팝업을 허용해주세요.', 'warning');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // Run 내 전체 팀장 계산서 일괄 인쇄
 async function printAllInvoices(runId) {
+  try {
   showToast('전체 계산서 생성 중...', 'info');
   const detailRes = await api('GET', `/settlements/runs/${runId}/details`);
   if (!detailRes?.settlements) return showToast('데이터 조회 실패', 'error');
@@ -1166,10 +1193,12 @@ function buildInvoicePageHTML(inv, fmt, c, hasPageBreak) {
 
   <div class="inv-footer">와이비 OMS | 본 계산서는 자동 생성되었습니다 | 발행일: ${inv.issueDate}</div>
 </div>`;
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 정산 엑셀 내보내기 ════════
 async function exportSettlementExcel(runId) {
+  try {
   showToast('엑셀 생성 중...', 'info');
   const res = await api('GET', `/settlements/runs/${runId}/export`);
   if (!res?.rows) return showToast('내보내기 실패', 'error');
@@ -1193,4 +1222,5 @@ async function exportSettlementExcel(runId) {
   ];
 
   exportToExcel(res.rows, columns, `settlement_run_${runId}`, '정산내역');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }

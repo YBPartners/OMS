@@ -58,6 +58,7 @@ function onGlobalSearchInput(q) {
 }
 
 async function executeGlobalSearch(q) {
+  try {
   const res = await api('GET', `/system/search?q=${encodeURIComponent(q)}`);
   const results = res?.results || [];
   const el = document.getElementById('global-search-results');
@@ -105,11 +106,13 @@ function handleSearchResult(r) {
     if (r.filter?.tab) window._hrTab = r.filter.tab;
     navigateTo(r.action);
   }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 주문 타임라인 ════════
 
 async function showOrderTimelineModal(orderId) {
+  try {
   showToast('타임라인 로딩 중...', 'info');
 
   const [timelineRes, orderRes] = await Promise.all([
@@ -195,11 +198,13 @@ async function showOrderTimelineModal(orderId) {
      <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm">닫기</button>`,
     { large: true }
   );
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 시스템 관리 페이지 ════════
 
 async function renderSystemAdmin(el) {
+  try {
   const res = await api('GET', '/system/info');
   if (!res?.stats) { el.innerHTML = '<div class="text-center text-gray-400 py-16">시스템 정보를 불러올 수 없습니다.</div>'; return; }
 
@@ -373,9 +378,11 @@ async function renderSystemAdmin(el) {
   // 세션 목록 로드
   loadSessionList();
   loadBackupInfo();
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function loadSessionList() {
+  try {
   const res = await api('GET', '/system/sessions');
   const sessions = res?.sessions || [];
   const el = document.getElementById('session-list');
@@ -389,9 +396,11 @@ async function loadSessionList() {
       { key: 'expires_at', label: '만료 시간', render: s => `<span class="text-xs text-gray-500">${formatDate(s.expires_at)}</span>` },
       { key: '_actions', label: '액션', align: 'center', render: s => `<button onclick="revokeSession('${s.session_id}')" class="px-2 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100"><i class="fas fa-ban mr-1"></i>강제종료</button>` }
     ], rows: sessions, compact: true, caption: '활성 세션 목록' });
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function loadBackupInfo() {
+  try {
   const res = await api('GET', '/system/backup-info');
   const info = res?.backup_info;
   const el = document.getElementById('db-table-info');
@@ -406,17 +415,21 @@ async function loadBackupInfo() {
           <span class="text-xs font-bold ${t.row_count > 0 ? 'text-blue-600' : 'text-gray-400'}">${formatNumber(t.row_count)}</span>
         </div>`).join('')}
     </div>`;
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function revokeSession(sid) {
+  try {
   showConfirmModal('세션 강제종료', '이 세션을 강제 종료하시겠습니까? 해당 사용자는 즉시 로그아웃됩니다.', async () => {
     const res = await api('DELETE', `/system/sessions/${sid}`);
     if (res?.ok) { showToast('세션 강제종료 완료', 'success'); loadSessionList(); }
     else showToast(res?.error || '처리 실패', 'error');
   }, '강제종료', 'bg-red-600');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function purgeAllSessions() {
+  try {
   showConfirmModal('전체 세션 초기화', '본인을 제외한 모든 활성 세션을 종료합니다. 다른 모든 사용자가 로그아웃됩니다. 계속하시겠습니까?', async () => {
     const res = await api('DELETE', '/system/sessions');
     if (res?.ok) { showToast(`${res.purged}개 세션 종료 완료`, 'success'); loadSessionList(); }
@@ -491,9 +504,11 @@ function parseCSV(text) {
     });
     return obj;
   }).filter(obj => Object.keys(obj).length > 0);
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function executeImport() {
+  try {
   const table = document.getElementById('import-table')?.value;
   const mode = document.getElementById('import-mode')?.value;
   const dataText = document.getElementById('import-data')?.value?.trim();
@@ -529,10 +544,12 @@ async function executeImport() {
     },
     '임포트 실행', 'bg-green-600'
   );
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 스냅샷 백업/복원 ════════
 async function createSnapshot() {
+  try {
   const checks = document.querySelectorAll('#backup-table-checks input[type="checkbox"]:checked');
   const tables = Array.from(checks).map(c => c.value);
   if (tables.length === 0) { showToast('백업할 테이블을 선택하세요.', 'warning'); return; }
@@ -550,9 +567,11 @@ async function createSnapshot() {
   a.click();
   URL.revokeObjectURL(url);
   showToast(`${res.meta.total_rows}행 스냅샷 다운로드 완료`, 'success');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function restoreSnapshot() {
+  try {
   const file = document.getElementById('restore-file')?.files[0];
   if (!file) { showToast('스냅샷 파일을 선택하세요.', 'warning'); return; }
 
@@ -598,6 +617,7 @@ async function restoreSnapshot() {
     },
     clearBefore ? '삭제 후 복원' : '복원', clearBefore ? 'bg-red-600' : 'bg-amber-600'
   );
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 웹 푸시 알림 ════════

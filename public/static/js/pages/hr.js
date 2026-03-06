@@ -5,6 +5,7 @@
 // ============================================================
 
 async function renderHRManagement(el) {
+  try {
   const activeTab = window._hrTab || 'users';
   const isAdmin = currentUser.roles.includes('SUPER_ADMIN') || currentUser.roles.includes('HQ_OPERATOR');
   const isRegion = currentUser.org_type === 'REGION' && currentUser.roles.includes('REGION_ADMIN');
@@ -37,10 +38,12 @@ async function renderHRManagement(el) {
     case 'phone': renderHRPhone(hrEl); break;
     case 'agency': await renderHRAgency(hrEl); break;
   }
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 사용자 목록 ───
 async function renderHRUsers(el) {
+  try {
   const params = new URLSearchParams(window._hrUserFilters || {});
   if (!params.has('limit')) params.set('limit', '30');
   const res = await api('GET', `/hr/users?${params.toString()}`);
@@ -86,10 +89,12 @@ function applyHRUserFilter() {
   window._hrUserFilters = { search: document.getElementById('hr-search')?.value, status: document.getElementById('hr-status')?.value };
   Object.keys(window._hrUserFilters).forEach(k => { if (!window._hrUserFilters[k]) delete window._hrUserFilters[k]; });
   renderContent();
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 사용자 신규등록 모달 ───
 async function showCreateUserModal() {
+  try {
   const orgsRes = await api('GET', '/auth/organizations');
   const rolesRes = await api('GET', '/hr/roles');
   const orgs = (orgsRes?.organizations || []).filter(o => o.status === 'ACTIVE');
@@ -117,9 +122,11 @@ async function showCreateUserModal() {
   showModal('사용자 신규 등록', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitCreateUser()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm">등록</button>`);
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function submitCreateUser() {
+  try {
   const data = Object.fromEntries(new FormData(document.getElementById('create-user-form')));
   data.org_id = Number(data.org_id);
   if (!data.login_id) delete data.login_id;
@@ -140,10 +147,12 @@ async function submitCreateUser() {
       </div>
     `, `<button onclick="closeModal();renderContent()" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm">확인</button>`);
   } else showToast(res?.error || '등록 실패', 'error');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 사용자 수정 모달 ───
 async function showEditUserModal(userId) {
+  try {
   const res = await api('GET', `/hr/users/${userId}`);
   if (!res?.user) return showToast('사용자 정보를 불러올 수 없습니다.', 'error');
   const u = res.user;
@@ -186,6 +195,7 @@ async function showEditUserModal(userId) {
   showModal(`사용자 수정 — ${u.name}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitEditUser(${userId})" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm">저장</button>`, { large: false });
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function submitEditUser(userId) {
@@ -211,6 +221,7 @@ function showCredentialModal(userId, name) {
 }
 
 async function submitCredentials(userId) {
+  try {
   const loginId = document.getElementById('cred-login').value;
   const password = document.getElementById('cred-pw').value;
   if (!loginId && !password) return showToast('변경할 항목을 입력하세요.', 'warning');
@@ -220,18 +231,22 @@ async function submitCredentials(userId) {
   const res = await api('POST', `/hr/users/${userId}/set-credentials`, body);
   if (res?.ok) { showToast('자격 증명 설정 완료', 'success'); closeModal(); }
   else showToast(res?.error || '설정 실패', 'error');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function resetUserPw(userId, name) {
+  try {
   showConfirmModal('비밀번호 초기화', `<strong>${name}</strong>의 비밀번호를 핸드폰 뒷4자리+!로 초기화하시겠습니까?`,
     async () => {
       const res = await api('POST', `/hr/users/${userId}/reset-password`);
       if (res?.ok) showToast(`초기화 완료: ${res.new_password}`, 'success');
       else showToast(res?.error || '초기화 실패', 'error');
     }, '초기화', 'bg-amber-600');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function toggleUserStatus(userId, currentStatus, name) {
+  try {
   const newStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
   const action = newStatus === 'ACTIVE' ? '활성화' : '비활성화';
   showConfirmModal(`사용자 ${action}`, `<strong>${name}</strong>을(를) ${action}하시겠습니까?${newStatus === 'INACTIVE' ? '<br><span class="text-red-500 text-xs">비활성화 시 로그인이 불가능합니다.</span>' : ''}`,
@@ -240,10 +255,12 @@ async function toggleUserStatus(userId, currentStatus, name) {
       if (res?.ok) { showToast(res.message, 'success'); renderContent(); }
       else showToast(res?.error || '실패', 'error');
     }, action, newStatus === 'ACTIVE' ? 'bg-green-600' : 'bg-red-600');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 조직 관리 ───
 async function renderHROrgs(el) {
+  try {
   const res = await api('GET', '/hr/organizations');
   const orgs = res?.organizations || [];
 
@@ -280,9 +297,11 @@ async function renderHROrgs(el) {
         </div>
       `).join('')}
     </div>`;
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function showCreateOrgModal() {
+  try {
   const orgsRes = await api('GET', '/hr/organizations');
   const regionOrgs = (orgsRes?.organizations || []).filter(o => o.org_type === 'REGION' && o.status === 'ACTIVE');
   const content = `
@@ -303,6 +322,7 @@ async function showCreateOrgModal() {
   showModal('조직 등록', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitCreateOrg()" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm">등록</button>`);
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function submitCreateOrg() {
@@ -348,6 +368,7 @@ async function reactivateOrg(orgId) {
 
 // ─── 수수료(정률/요율) 설정 ───
 async function renderHRCommission(el) {
+  try {
   const [commRes, orgsRes, leadersRes, chRes] = await Promise.all([
     api('GET', '/hr/commission-policies'),
     api('GET', '/auth/organizations'),
@@ -439,9 +460,11 @@ function updateCommLeaderOptions() {
   Array.from(select.options).forEach(opt => {
     if (opt.value) { opt.style.display = (!orgId || opt.dataset.org === orgId) ? '' : 'none'; }
   });
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function submitCreateCommission() {
+  try {
   const data = Object.fromEntries(new FormData(document.getElementById('create-comm-form')));
   data.org_id = Number(data.org_id);
   data.value = Number(data.value);
@@ -477,6 +500,7 @@ function showEditCommissionModal(policyId, policyData) {
   showModal(`수수료 정책 수정 — #${policyId}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitEditCommission(${policyId})" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm">저장</button>`);
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function submitEditCommission(policyId) {
@@ -537,6 +561,7 @@ function renderHRPhone(el) {
 let verifyTimerInterval;
 
 async function sendOTP() {
+  try {
   const phone = document.getElementById('otp-phone').value;
   const purpose = document.getElementById('otp-purpose').value;
   if (!phone) return showToast('핸드폰 번호를 입력하세요.', 'warning');
@@ -560,9 +585,11 @@ async function sendOTP() {
       if (sec <= 0) { clearInterval(verifyTimerInterval); document.getElementById('verify-timer').textContent = '시간 만료'; }
     }, 1000);
   } else showToast(res?.error || '발송 실패', 'error');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function verifyOTP() {
+  try {
   const phone = document.getElementById('otp-phone').value;
   const otp_code = document.getElementById('otp-code').value;
   const purpose = document.getElementById('otp-purpose').value;
@@ -575,9 +602,11 @@ function resetVerify() {
   clearInterval(verifyTimerInterval);
   document.getElementById('phone-step1').style.display = 'block';
   document.getElementById('phone-step2').style.display = 'none';
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function checkPhoneStatus() {
+  try {
   const phone = document.getElementById('check-phone').value;
   if (!phone) return;
   const res = await api('GET', `/hr/phone/status?phone=${encodeURIComponent(phone)}`);
@@ -616,6 +645,7 @@ function showHRUserContextMenu(event, user) {
   ];
 
   showContextMenu(event.clientX, event.clientY, items, { title: `${u.name} (${u.login_id})` });
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── HR 사용자 삭제 ───
@@ -628,6 +658,7 @@ async function deleteUser(userId, name) {
 
 // ─── 다중 역할 변경 모달 ───
 async function showRolesModal(userId, name, currentRoles) {
+  try {
   const rolesRes = await api('GET', '/hr/roles');
   const allRoles = rolesRes?.roles || [];
   const content = `<div class="space-y-3">
@@ -645,6 +676,7 @@ async function showRolesModal(userId, name, currentRoles) {
   showModal(`역할 변경 — ${name}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitRoles(${userId})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`);
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 async function submitRoles(userId) {
   const checked = [...document.querySelectorAll('.role-cb:checked')].map(cb => cb.value);
@@ -656,6 +688,7 @@ async function submitRoles(userId) {
 
 // ─── 사용자 조직 이동 모달 ───
 async function showTransferModal(userId, name) {
+  try {
   const orgsRes = await api('GET', '/hr/organizations');
   const orgs = (orgsRes?.organizations || []).filter(o => o.status === 'ACTIVE');
   const content = `<div class="space-y-4">
@@ -667,6 +700,7 @@ async function showTransferModal(userId, name) {
   showModal(`조직 이동 — ${name}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitTransfer(${userId})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">이동</button>`);
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 async function submitTransfer(userId) {
   const orgId = document.getElementById('transfer-org')?.value;
@@ -678,6 +712,7 @@ async function submitTransfer(userId) {
 
 // ─── 대리점(AGENCY) 관리 탭 ───
 async function renderHRAgency(el) {
+  try {
   const res = await api('GET', '/hr/agencies');
   const agencies = res?.agencies || [];
 
@@ -736,10 +771,12 @@ async function renderHRAgency(el) {
       <p class="text-sm mt-2">팀장에게 대리점 권한을 부여하세요.</p>
     </div>
     `}`;
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 대리점 지정 (팀장 → AGENCY_LEADER) ───
 async function showPromoteAgencyModal() {
+  try {
   const leadersRes = await api('GET', '/auth/team-leaders');
   const leaders = leadersRes?.team_leaders || [];
 
@@ -764,9 +801,11 @@ async function showPromoteAgencyModal() {
       </div>
     </div>`;
   showModal('대리점 지정', content);
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function promoteToAgency(userId, name) {
+  try {
   closeModal();
   showConfirmModal('대리점 지정', `<strong>${name}</strong>님을 대리점장으로 지정하시겠습니까?<br><span class="text-xs text-gray-400">대리점장은 하위 팀장의 주문 관리/검수 권한을 가집니다.</span>`,
     async () => {
@@ -783,10 +822,12 @@ function demoteAgency(userId, name) {
       if (res?.ok) { showToast('대리점 해제 완료', 'success'); renderContent(); }
       else showToast(res?.error || '해제 실패', 'error');
     }, '해제', 'bg-red-600');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 대리점 상세 모달 (하위 팀장 관리) ───
 async function showAgencyDetailModal(agencyUserId, agencyName) {
+  try {
   const [detailRes, candidatesRes] = await Promise.all([
     api('GET', `/hr/agencies/${agencyUserId}`),
     api('GET', `/hr/agencies/${agencyUserId}/candidates`),
@@ -863,18 +904,22 @@ async function showAgencyDetailModal(agencyUserId, agencyName) {
 
   showModal(`대리점 상세 — ${agencyName}`, content, `
     <button onclick="closeModal();renderContent()" class="px-5 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm">닫기</button>`, { large: true });
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function addTeamToAgency(agencyUserId, teamUserId, teamName, agencyName) {
+  try {
   const res = await api('POST', `/hr/agencies/${agencyUserId}/add-team`, { team_user_id: teamUserId });
   if (res?.ok) {
     showToast(`${teamName}님이 ${agencyName} 대리점에 추가되었습니다.`, 'success');
     closeModal();
     showAgencyDetailModal(agencyUserId, agencyName);
   } else showToast(res?.error || '추가 실패', 'error');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function removeTeamFromAgency(agencyUserId, teamUserId, teamName, agencyName) {
+  try {
   showConfirmModal('팀장 제거', `<strong>${teamName}</strong>님을 <strong>${agencyName}</strong> 대리점에서 제거하시겠습니까?`,
     async () => {
       const res = await api('POST', `/hr/agencies/${agencyUserId}/remove-team`, { team_user_id: teamUserId });
@@ -884,4 +929,5 @@ async function removeTeamFromAgency(agencyUserId, teamUserId, teamName, agencyNa
         showAgencyDetailModal(agencyUserId, agencyName);
       } else showToast(res?.error || '제거 실패', 'error');
     }, '제거', 'bg-red-600');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }

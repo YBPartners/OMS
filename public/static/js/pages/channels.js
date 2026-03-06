@@ -34,6 +34,7 @@ const INTERNAL_FIELDS = [
 ];
 
 async function renderChannels(el) {
+  try {
   showSkeletonLoading(el, 'table');
   const res = await api('GET', '/hr/channels');
   const channels = res?.channels || [];
@@ -193,6 +194,7 @@ function showCreateChannelModal() {
   showModal('주문 채널 등록', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitCreateChannel()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">등록</button>`);
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function submitCreateChannel() {
@@ -254,6 +256,7 @@ function toggleChannelStatus(channelId, isCurrentlyActive, name) {
 // 채널 상세 & API 연동 설정 (전체 화면 모달)
 // ════════════════════════════════════════════════════════
 async function openChannelDetail(channelId) {
+  try {
   const res = await api('GET', `/hr/channels/${channelId}`);
   const ch = res?.channel;
   if (!ch) return showToast('채널 정보를 불러올 수 없습니다.', 'error');
@@ -536,10 +539,12 @@ function addRequestHeader() {
     <input placeholder="Header-Value" class="flex-1 border rounded-lg px-3 py-1.5 text-sm font-mono header-value">
     <button onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600"><i class="fas fa-times"></i></button>`;
   container.appendChild(div);
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ─── API 설정 저장 ───
 async function saveChannelApiConfig(channelId) {
+  try {
   const authType = document.getElementById('ch-auth-type')?.value || 'NONE';
   let authCredentials = null;
 
@@ -581,10 +586,12 @@ async function saveChannelApiConfig(channelId) {
   const res = await api('PUT', `/hr/channels/${channelId}`, data);
   if (res?.ok) showToast('API 설정이 저장되었습니다.', 'success');
   else showToast(res?.error || 'API 설정 저장 실패', 'error');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── API 연결 테스트 ───
 async function testChannelApi(channelId) {
+  try {
   const resultEl = document.getElementById('api-test-result');
   if (!resultEl) return;
   
@@ -625,10 +632,12 @@ async function testChannelApi(channelId) {
         ${r.error_type ? `<div class="text-xs text-gray-400 mt-1">에러 유형: ${r.error_type}</div>` : ''}
       </div>`;
   }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 필드 매핑 저장 ───
 async function saveFieldMapping(channelId) {
+  try {
   const mapping = {};
   document.querySelectorAll('.field-mapping-input').forEach(input => {
     const externalKey = input.value?.trim();
@@ -641,10 +650,12 @@ async function saveFieldMapping(channelId) {
   const res = await api('PUT', `/hr/channels/${channelId}`, { field_mapping: mapping });
   if (res?.ok) showToast('필드 매핑이 저장되었습니다.', 'success');
   else showToast(res?.error || '매핑 저장 실패', 'error');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 매핑 미리보기 (API 테스트 → 매핑 적용) ───
 async function previewFieldMapping(channelId) {
+  try {
   const resultEl = document.getElementById('mapping-preview-result');
   if (!resultEl) return;
 
@@ -702,10 +713,12 @@ async function previewFieldMapping(channelId) {
 function getNestedPreview(obj, path) {
   if (!path) return obj;
   return path.split('.').reduce((acc, key) => acc?.[key], obj);
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 동기화 실행 ───
 async function syncChannel(channelId) {
+  try {
   showConfirmModal('주문 동기화', '외부 API에서 주문을 가져오시겠습니까?<br><small class="text-gray-500">중복 주문은 자동으로 건너뜁니다.</small>',
     async () => {
       showToast('동기화 실행 중...', 'info');
@@ -741,10 +754,12 @@ async function syncChannel(channelId) {
         showToast(res?.error || '동기화 실패', 'error');
       }
     }, '동기화 실행', 'bg-blue-600');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 단일 필드 업데이트 ───
 async function updateChannelField(channelId, field, value) {
+  try {
   const data = {};
   data[field] = value;
   const res = await api('PUT', `/hr/channels/${channelId}`, data);
@@ -757,4 +772,5 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }

@@ -6,6 +6,7 @@
 
 // ════════ 대리점 대시보드 ════════
 async function renderAgencyDashboard(el) {
+  try {
   showSkeletonLoading(el, 'cards');
 
   const [funnelRes, agencyRes] = await Promise.all([
@@ -129,10 +130,12 @@ async function renderAgencyDashboard(el) {
         </div>
       </div>
     </div>`;
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ════════ 대리점 주문관리 ════════
 async function renderAgencyOrders(el) {
+  try {
   showSkeletonLoading(el, 'table');
   const params = new URLSearchParams(window._agencyOrderFilters || {});
   if (!params.has('limit')) params.set('limit', '20');
@@ -255,10 +258,12 @@ function applyAgencyOrderFilter() {
   };
   Object.keys(window._agencyOrderFilters).forEach(k => { if (!window._agencyOrderFilters[k]) delete window._agencyOrderFilters[k]; });
   renderContent();
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ════════ 대리점 소속 팀장 관리 ════════
 async function renderAgencyTeam(el) {
+  try {
   showSkeletonLoading(el, 'cards');
 
   const res = await api('GET', `/hr/agencies/${currentUser.user_id}`);
@@ -355,10 +360,12 @@ async function renderAgencyTeam(el) {
         `}
       </div>
     </div>`;
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 특정 팀장의 주문 보기 드로어 ───
 async function showAgencyTeamOrdersDrawer(teamUserId, teamName) {
+  try {
   const res = await api('GET', `/orders?team_leader_id=${teamUserId}&limit=50`);
   const orders = res?.orders || [];
 
@@ -397,11 +404,13 @@ async function showAgencyTeamOrdersDrawer(teamUserId, teamName) {
     width: '480px',
     footer: `<button onclick="closeDrawer()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm">닫기</button>`,
   });
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 대리점 온보딩 관리 (HQ/REGION 전용) ════════
 
 async function showAgencyOnboardingModal() {
+  try {
   const res = await api('GET', '/hr/agency-onboarding');
   if (!res) return;
   const requests = res.onboarding_requests || [];
@@ -433,9 +442,11 @@ async function showAgencyOnboardingModal() {
 
   showModal('<i class="fas fa-store text-blue-500 mr-2"></i>대리점 온보딩 관리', content,
     `<button onclick="closeModal()" class="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm">닫기</button>`, { large: true });
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function showAgencyOnboardRequestModal() {
+  try {
   closeModal();
   const usersRes = await api('GET', '/hr/users');
   const users = (usersRes?.users || []).filter(u => u.status === 'ACTIVE');
@@ -465,17 +476,21 @@ async function showAgencyOnboardRequestModal() {
     if (res?.ok) { showToast('온보딩 신청 완료', 'success'); closeModal(); showAgencyOnboardingModal(); }
     else showToast(res?.error || '신청 실패', 'error');
   });
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function approveOnboarding(id) {
+  try {
   showConfirmModal('온보딩 승인', '이 신청을 승인하면 자동으로 대리점 권한이 부여됩니다. 승인하시겠습니까?', async () => {
     const res = await api('PUT', `/hr/agency-onboarding/${id}`, { status: 'APPROVED' });
     if (res?.ok) { showToast('온보딩 승인 완료', 'success'); showAgencyOnboardingModal(); }
     else showToast(res?.error || '처리 실패', 'error');
   }, '승인', 'bg-green-600');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function rejectOnboarding(id) {
+  try {
   const content = `<div class="space-y-3"><p class="text-gray-600">반려 사유를 입력해주세요.</p>
     <textarea id="reject-note" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="반려 사유"></textarea></div>`;
   const sid = '_reject_' + Date.now();
@@ -488,4 +503,5 @@ async function rejectOnboarding(id) {
     if (res?.ok) { showToast('반려 완료', 'success'); closeModal(); showAgencyOnboardingModal(); }
     else showToast(res?.error || '처리 실패', 'error');
   });
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }

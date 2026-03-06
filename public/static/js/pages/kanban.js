@@ -15,6 +15,7 @@ const kanbanState = {
 };
 
 async function renderKanban(el) {
+  try {
   const user = currentUser;
   const orgId = user.org_id;
 
@@ -453,10 +454,12 @@ function kanbanDragOver(event) {
 
 function kanbanDragLeave(event) {
   event.currentTarget.classList.remove('drag-over');
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // 팀장 컬럼에 드롭 → 배정
 async function handleKanbanDrop(event, leaderId) {
+  try {
   event.preventDefault();
   event.currentTarget.classList.remove('drag-over');
   
@@ -525,10 +528,12 @@ async function handleKanbanDrop(event, leaderId) {
       showToast(res?.error || '배치 배정 실패', 'error');
     }
   }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // 미배정 컬럼에 드롭 → 배정 해제
 async function handleKanbanDropUnassign(event) {
+  try {
   event.preventDefault();
   event.currentTarget.classList.remove('drag-over');
   
@@ -542,10 +547,12 @@ async function handleKanbanDropUnassign(event) {
   }
 
   await kanbanUnassign(Number(orderId));
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 배정 해제 ───
 async function kanbanUnassign(orderId) {
+  try {
   showConfirmModal(
     '배정 해제',
     `주문 #${orderId}의 팀장 배정을 해제하시겠습니까?<br><span class="text-xs text-gray-400">미배정 풀로 되돌아갑니다.</span>`,
@@ -561,10 +568,12 @@ async function kanbanUnassign(orderId) {
     },
     '해제', 'bg-red-500'
   );
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 배치 배정 모달 ───
 async function showBatchAssignModal() {
+  try {
   if (kanbanState.selected.size === 0) return;
 
   const orgId = currentUser.org_id;
@@ -613,9 +622,11 @@ async function showBatchAssignModal() {
       </div>
     </div>`;
   showModal(`배치 배정 — ${unassignedIds.length}건`, content);
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function executeBatchAssign(orderIds, leaderId) {
+  try {
   closeModal();
   showToast('배치 배정 처리 중...', 'info');
   
@@ -627,10 +638,12 @@ async function executeBatchAssign(orderIds, leaderId) {
   } else {
     showToast(res?.error || '배치 배정 실패', 'error');
   }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 개별 배정 모달 (기존 호환) ───
 async function showAssignModal(orderId) {
+  try {
   const orgId = currentUser.org_id;
   const leadersRes = await api('GET', `/auth/team-leaders?org_id=${orgId}`);
   const leaders = leadersRes?.team_leaders || [];
@@ -655,9 +668,11 @@ async function showAssignModal(orderId) {
       </div>
     </div>`;
   showModal(`팀장 배정 — 주문 #${orderId}`, content);
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function assignToLeader(orderId, leaderId) {
+  try {
   const res = await api('POST', `/orders/${orderId}/assign`, { team_leader_id: leaderId });
   if (res?.ok) {
     showToast('팀장 배정 완료', 'success');
@@ -667,4 +682,5 @@ async function assignToLeader(orderId, leaderId) {
   } else {
     showToast(res?.error || '배정 실패', 'error');
   }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }

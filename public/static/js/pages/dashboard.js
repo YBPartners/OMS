@@ -13,6 +13,7 @@ function _destroyCharts() {
 }
 
 async function renderDashboard(el) {
+  try {
   _destroyCharts();
   showSkeletonLoading(el, 'cards');
 
@@ -479,10 +480,12 @@ function showRegionContextMenu(e, orgId, regionName) {
     { icon: 'fa-users', label: '소속 팀장 관리', action: () => { window._hrTab = 'users'; navigateTo('hr-management'); } },
     { icon: 'fa-chart-bar', label: '통계 보기', action: () => navigateTo('statistics') },
   ], { title: regionName });
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 지역총판 상세 모달 (Chart.js 포함) ───
 async function showRegionDetailModal(orgId, regionName) {
+  try {
   const [statsRes, leadersRes] = await Promise.all([
     api('GET', `/stats/regions/daily?region_org_id=${orgId}`),
     api('GET', `/stats/team-leaders/daily?region_org_id=${orgId}`),
@@ -576,10 +579,12 @@ async function showRegionDetailModal(orgId, regionName) {
       }
     }, 200);
   }
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 매출 추이 차트 ════════
 async function renderRevenueTrendSection() {
+  try {
   const trendRes = await api('GET', '/stats/revenue-trend?days=30');
   if (!trendRes?.daily) return '';
 
@@ -715,10 +720,12 @@ function _toggleTrendView(mode) {
   document.getElementById('btn-trend-cum')?.classList.toggle('bg-green-100', mode === 'cumulative');
   document.getElementById('btn-trend-cum')?.classList.toggle('text-green-700', mode === 'cumulative');
   document.getElementById('btn-trend-cum')?.classList.toggle('bg-gray-100', mode !== 'cumulative');
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 정산 현황 차트 ════════
 async function renderSettlementSummarySection() {
+  try {
   const settleRes = await api('GET', '/stats/settlement-summary');
   if (!settleRes?.status_summary) return '';
 
@@ -1053,4 +1060,5 @@ function _renderRegionHeatmap(regionSummary) {
   summaryHtml += '</div>';
 
   el.innerHTML = svgContent + summaryHtml;
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }

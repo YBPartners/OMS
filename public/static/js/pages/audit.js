@@ -19,6 +19,7 @@ const auditState = {
 };
 
 async function renderAuditLog(el) {
+  try {
   const tab = auditState.tab;
   
   el.innerHTML = `
@@ -44,10 +45,12 @@ async function renderAuditLog(el) {
   const contentEl = document.getElementById('audit-content');
   if (tab === 'list') await renderAuditList(contentEl);
   else await renderAuditStats(contentEl);
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 로그 목록 ───
 async function renderAuditList(el) {
+  try {
   const f = auditState.filters;
   const params = new URLSearchParams();
   if (f.entity_type) params.set('entity_type', f.entity_type);
@@ -145,10 +148,12 @@ async function renderAuditList(el) {
       
       ${renderPagination(total, f.page, f.limit, '_auditPageChange')}
     </div>`;
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 통계 뷰 ───
 async function renderAuditStats(el) {
+  try {
   const res = await api('GET', '/audit/stats');
   if (!res) return;
 
@@ -262,10 +267,12 @@ async function renderAuditStats(el) {
         </div>
       </div>
     </div>`;
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 상세 모달 ───
 async function showAuditDetail(logId) {
+  try {
   const res = await api('GET', `/audit/${logId}`);
   if (!res?.log) return;
   const log = res.log;
@@ -372,4 +379,5 @@ function auditActionColor(action) {
   if (lower.includes('update') || lower.includes('changed')) return 'text-amber-600';
   if (lower.includes('login') || lower.includes('auth')) return 'text-blue-600';
   return 'text-gray-600';
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }

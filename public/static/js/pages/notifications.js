@@ -18,6 +18,7 @@ function stopNotificationPolling() {
 }
 
 async function fetchUnreadCount() {
+  try {
   if (!currentUser) return;
   const res = await api('GET', '/notifications/unread-count');
   if (res?.unread_count !== undefined) {
@@ -57,9 +58,11 @@ function getNotifBellHtml() {
     <div id="notif-dropdown" class="hidden absolute right-0 top-full mt-1 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden" style="max-height:480px">
       <div id="notif-dropdown-content"></div>
     </div>`;
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function toggleNotifDropdown() {
+  try {
   const dd = document.getElementById('notif-dropdown');
   if (!dd) return;
   
@@ -82,9 +85,11 @@ function closeNotifOnOutsideClick(e) {
     dd.classList.add('hidden');
     document.removeEventListener('click', closeNotifOnOutsideClick);
   }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function loadNotifDropdown() {
+  try {
   const el = document.getElementById('notif-dropdown-content');
   if (!el) return;
   
@@ -143,9 +148,11 @@ function renderNotifItem(n) {
       </div>
       ${!n.is_read ? '<div class="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2"></div>' : ''}
     </div>`;
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function handleNotifClick(id, linkUrl, markRead) {
+  try {
   if (markRead) {
     await api('PATCH', `/notifications/${id}/read`);
     _notifUnreadCount = Math.max(0, _notifUnreadCount - 1);
@@ -157,9 +164,11 @@ async function handleNotifClick(id, linkUrl, markRead) {
   }
   const dd = document.getElementById('notif-dropdown');
   if (dd) dd.classList.add('hidden');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function markAllNotifRead() {
+  try {
   const res = await api('POST', '/notifications/read-all');
   if (res?.ok) {
     _notifUnreadCount = 0;
@@ -180,10 +189,12 @@ function getTimeAgo(dateStr) {
   if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
   if (diff < 604800) return `${Math.floor(diff / 86400)}일 전`;
   return dateStr.split('T')[0];
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 알림 전체 페이지 ───
 async function renderNotifications(el) {
+  try {
   const params = new URLSearchParams(window._notifFilters || {});
   if (!params.has('limit')) params.set('limit', '30');
   const res = await api('GET', `/notifications?${params.toString()}`);
@@ -248,18 +259,22 @@ function renderNotifPageItem(n) {
         </div>
       </div>
     </div>`;
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function markSingleNotifRead(id) {
+  try {
   const res = await api('PATCH', `/notifications/${id}/read`);
   if (res?.ok) {
     _notifUnreadCount = Math.max(0, _notifUnreadCount - 1);
     updateNotifBadge();
     renderContent();
   }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function notifMarkAllRead() {
+  try {
   const res = await api('POST', '/notifications/read-all');
   if (res?.ok) {
     _notifUnreadCount = 0;
@@ -267,17 +282,21 @@ async function notifMarkAllRead() {
     showToast(`${res.updated}건 읽음 처리`, 'success');
     renderContent();
   }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function deleteSingleNotif(id) {
+  try {
   const res = await api('DELETE', `/notifications/${id}`);
   if (res?.ok) {
     showToast('삭제 완료', 'success');
     renderContent();
   }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function notifDeleteRead() {
+  try {
   showConfirmModal('읽은 알림 삭제', '읽은 알림을 모두 삭제하시겠습니까?', async () => {
     const res = await api('DELETE', '/notifications');
     if (res?.ok) {
@@ -290,4 +309,5 @@ async function notifDeleteRead() {
 function goNotifPage(page) {
   window._notifFilters = { ...(window._notifFilters || {}), page };
   renderContent();
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }

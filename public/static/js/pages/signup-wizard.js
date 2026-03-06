@@ -138,6 +138,7 @@ function renderStep0_PhoneCheck() {
 }
 
 async function signupCheckPhone() {
+  try {
   const phone = document.getElementById('sw-phone')?.value?.trim();
   if (!phone) return showToast('핸드폰 번호를 입력하세요.', 'warning');
   
@@ -203,9 +204,11 @@ function renderStep1_OTP() {
         <i class="fas fa-arrow-left mr-1"></i>이전 단계
       </button>
     </div>`;
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function signupSendOTP() {
+  try {
   const res = await fetch('/api/signup/send-otp', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -247,9 +250,11 @@ async function signupSendOTP() {
   } else {
     showToast(res.error || '발송 실패', 'error');
   }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function signupVerifyOTP() {
+  try {
   const otp_code = document.getElementById('sw-otp')?.value?.trim();
   if (!otp_code || otp_code.length !== 6) return showToast('6자리 인증번호를 입력하세요.', 'warning');
   
@@ -271,9 +276,11 @@ async function signupVerifyOTP() {
   } else {
     showToast(res.error || '인증 실패', 'error');
   }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function loadDistributors() {
+  try {
   const res = await fetch('/api/signup/distributors').then(r => r.json());
   signupState.distributors = res.distributors || [];
 }
@@ -358,9 +365,11 @@ function renderStep2_Info() {
         다음: 지역 선택 <i class="fas fa-arrow-right ml-1"></i>
       </button>
     </div>`;
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function signupSelectDistributor(orgId) {
+  try {
   if (!orgId) { signupState.selectedDistributor = null; return; }
   const dist = signupState.distributors.find(d => d.org_id === Number(orgId));
   signupState.selectedDistributor = dist;
@@ -502,9 +511,11 @@ function signupToggleGroup(groupKey, select) {
     }
   });
   renderSignupWizard();
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function signupSearchRegion() {
+  try {
   const q = document.getElementById('sw-region-search')?.value?.trim();
   if (!q || q.length < 2) return showToast('검색어를 2자 이상 입력하세요.', 'warning');
   
@@ -535,10 +546,12 @@ async function signupSearchRegion() {
           </label>`;
       }).join('')}
     </div>`;
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── Step 4: 제출 ───
 async function signupSubmit() {
+  try {
   const s = signupState;
   if (s.selectedRegionIds.size === 0) {
     showToast('담당 구역을 하나 이상 선택하세요.', 'warning');
@@ -632,9 +645,11 @@ function renderStep4_Result() {
       </div>
       <div id="sw-status-result" class="mt-4"></div>
     </div>`;
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function signupCheckStatus() {
+  try {
   const res = await fetch(`/api/signup/status?phone=${encodeURIComponent(signupState.phone)}`).then(r => r.json());
   const requests = res.requests || [];
   const el = document.getElementById('sw-status-result');
@@ -662,4 +677,5 @@ async function signupCheckStatus() {
         </div>
       `).join('')}
     </div>`;
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }

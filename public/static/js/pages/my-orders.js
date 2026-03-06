@@ -6,6 +6,7 @@
 
 // ════════ 내 주문 ════════
 async function renderMyOrders(el) {
+  try {
   showSkeletonLoading(el, 'cards');
   const params = new URLSearchParams(window._myOrderFilters || {});
   if (!params.has('limit')) params.set('limit', '20');
@@ -128,9 +129,11 @@ function showMyOrderContextMenu(event, order) {
   );
 
   showContextMenu(event.clientX, event.clientY, items, { title: `주문 #${o.order_id} — ${o.customer_name || ''}` });
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function startWork(orderId) {
+  try {
   showConfirmModal('작업 시작', `주문 #${orderId}의 작업을 시작하시겠습니까?`,
     async () => {
       const res = await api('POST', `/orders/${orderId}/start`);
@@ -156,9 +159,11 @@ function readyDone(orderId) {
   showModal(`준비완료 — 주문 #${orderId}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitReadyDone(${orderId})" class="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm">확정</button>`);
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function submitReadyDone(orderId) {
+  try {
   const scheduledDate = document.getElementById('ready-done-date')?.value || '';
   const note = document.getElementById('ready-done-note')?.value || '';
   if (!scheduledDate) {
@@ -209,9 +214,11 @@ function completeOrder(orderId) {
   showModal(`최종완료 — 주문 #${orderId}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitComplete(${orderId})" class="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm">최종완료</button>`);
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function submitComplete(orderId) {
+  try {
   const note = document.getElementById('complete-note')?.value || '';
   const receiptFile = window._attachedFiles?.['RECEIPT'];
   
@@ -356,9 +363,11 @@ function removeAttachedFile(category, previewElId) {
   if (window._attachedFiles) delete window._attachedFiles[category];
   const previewEl = document.getElementById(previewElId);
   if (previewEl) previewEl.innerHTML = '';
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function submitReport(orderId) {
+  try {
   const checks = Array.from(document.querySelectorAll('input[name="checklist"]:checked')).map(el => el.value);
   const note = document.getElementById('report-note')?.value || '';
 
@@ -394,10 +403,12 @@ async function submitReport(orderId) {
     closeModal();
     renderContent();
   } else showToast(res?.error || '제출 실패', 'error');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 내 프로필 (계정정보 + 비밀번호 + 알림설정) ════════
 async function renderMyProfile(el) {
+  try {
   // 알림 설정 동시 로드
   const prefsRes = await api('GET', '/notifications/preferences');
   const prefs = prefsRes?.preferences || {};
@@ -547,10 +558,12 @@ function switchProfileTab(tab) {
     tabBtn.classList.add('bg-white', 'text-blue-600', 'shadow-sm');
     tabBtn.classList.remove('text-gray-500');
   }
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 알림 설정 개별 업데이트 ───
 async function updateNotifPref(key, enabled) {
+  try {
   const body = {};
   body[key] = enabled;
 
@@ -582,10 +595,12 @@ async function updateNotifPref(key, enabled) {
     }
     if (knob) knob.classList.toggle('translate-x-5', !enabled);
   }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 전체 알림 켜기/끄기 ───
 async function toggleAllNotifPrefs(enabled) {
+  try {
   const body = {
     notify_order_status: enabled, notify_assignment: enabled,
     notify_review: enabled, notify_settlement: enabled,
@@ -596,9 +611,11 @@ async function toggleAllNotifPrefs(enabled) {
     showToast(enabled ? '모든 알림이 활성화되었습니다.' : '모든 알림이 비활성화되었습니다.', 'success');
     renderContent(); // 리렌더
   } else showToast('설정 저장 실패', 'error');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function submitPasswordChange() {
+  try {
   const current = document.getElementById('pw-current').value;
   const newPw = document.getElementById('pw-new').value;
   const confirm = document.getElementById('pw-confirm').value;
@@ -613,10 +630,12 @@ async function submitPasswordChange() {
     document.getElementById('pw-new').value = '';
     document.getElementById('pw-confirm').value = '';
   } else showToast(res?.error || '변경 실패', 'error');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ════════ 내 현황 ════════
 async function renderMyStats(el) {
+  try {
   showSkeletonLoading(el, 'cards');
   const today = new Date().toISOString().split('T')[0];
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
@@ -720,4 +739,5 @@ async function renderMyStats(el) {
         })}
       </div>` : ''}
     </div>`;
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }

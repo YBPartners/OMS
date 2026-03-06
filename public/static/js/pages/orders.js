@@ -12,6 +12,7 @@ const orderListState = {
 
 // ════════ 주문 관리 ════════
 async function renderOrders(el) {
+  try {
   showSkeletonLoading(el, 'table');
   const params = new URLSearchParams(window._orderFilters || {});
   if (!params.has('limit')) params.set('limit', '15');
@@ -119,10 +120,12 @@ async function renderOrders(el) {
 function handleOrderRowClick(event, orderId) {
   if (event.target.closest('button') || event.target.closest('input[type="checkbox"]')) return;
   showOrderDetailDrawer(orderId);
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 주문 상세 드로어 (사이드패널) ───
 async function showOrderDetailDrawer(orderId) {
+  try {
   const res = await api('GET', `/orders/${orderId}`);
   if (!res?.order) return;
   const o = res.order;
@@ -375,10 +378,12 @@ function applyOrderFilter() {
 function _orderPageChange(page) {
   window._orderFilters = { ...window._orderFilters || {}, page };
   renderContent();
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ─── 주문 상세 모달 (기존 호환 — 드로어 외 사용시) ───
 async function showOrderDetail(orderId) {
+  try {
   const res = await api('GET', `/orders/${orderId}`);
   if (!res?.order) return;
   const o = res.order;
@@ -455,10 +460,12 @@ function getServiceTypeBadge(code) {
   const st = SERVICE_TYPES.find(s => s.code === code);
   if (!st) return `<span class="text-xs text-gray-400">미분류</span>`;
   return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-violet-50 text-violet-700 border border-violet-200"><i class="fas ${st.icon}"></i>${st.label}</span>`;
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ─── 수동 등록 모달 ───
 async function showNewOrderModal() {
+  try {
   // 활성 채널 목록을 API에서 가져옴
   const channelRes = await api('GET', '/hr/channels?active_only=1');
   const channels = channelRes?.channels || [];
@@ -557,10 +564,12 @@ function openAddressSearch() {
   }).open({
     popupTitle: '와이비 OMS - 주소 검색',
   });
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ─── 행정동코드 자동 매핑 ───
 async function matchAdminDongCode(sido, sigungu, dong) {
+  try {
   const resultEl = document.getElementById('address-match-result');
   const textEl = document.getElementById('address-match-text');
   const codeInput = document.getElementById('new-order-dong-code');
@@ -593,9 +602,11 @@ async function matchAdminDongCode(sido, sigungu, dong) {
     console.error('행정동 매핑 실패:', e);
     codeInput.value = '';
   }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function submitNewOrder() {
+  try {
   const form = document.getElementById('new-order-form');
   const data = Object.fromEntries(new FormData(form));
 
@@ -615,10 +626,12 @@ async function submitNewOrder() {
   const res = await api('POST', '/orders', data);
   if (res?.order_id) { showToast(`주문 #${res.order_id}이(가) 등록되었습니다.`, 'success'); closeModal(); renderContent(); }
   else showToast(res?.error || res?.warning || '등록 실패', 'error');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 주문 수정 모달 ───
 async function showEditOrderModal(orderId) {
+  try {
   const res = await api('GET', `/orders/${orderId}`);
   if (!res?.order) { showToast('주문 정보를 불러올 수 없습니다.', 'error'); return; }
   const o = res.order;
@@ -679,9 +692,11 @@ async function showEditOrderModal(orderId) {
   showModal(`주문 수정 #${o.order_id}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitEditOrder(${o.order_id})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`);
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function submitEditOrder(orderId) {
+  try {
   const form = document.getElementById('edit-order-form');
   const data = Object.fromEntries(new FormData(form));
   delete data.order_id;
@@ -726,9 +741,11 @@ function openEditAddressSearch() {
     width: '100%',
     height: '100%',
   }).open({ popupTitle: '와이비 OMS - 주소 변경' });
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function matchEditAdminDongCode(sido, sigungu, dong) {
+  try {
   const resultEl = document.getElementById('edit-address-match-result');
   const textEl = document.getElementById('edit-address-match-text');
   const codeInput = document.getElementById('edit-order-dong-code');
@@ -749,6 +766,7 @@ async function matchEditAdminDongCode(sido, sigungu, dong) {
       resultEl.style.display = '';
     }
   } catch (e) { codeInput.value = ''; }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 주문 삭제 ───
@@ -786,6 +804,7 @@ const distributeState = {
 
 // ════════ 자동배분 관리 ════════
 async function renderDistribute(el) {
+  try {
   showSkeletonLoading(el, 'cards');
   const [receivedRes, pendingRes, dpRes, distributedRes] = await Promise.all([
     api('GET', '/orders?status=RECEIVED&limit=100'),
@@ -966,10 +985,12 @@ function toggleDistSelectGroup(checked, group) {
     else distributeState.selected.delete(o.order_id);
   });
   renderContent();
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 자동배분 실행 + 결과 모달 ───
 async function executeDistributeWithModal() {
+  try {
   showModal('자동 배분 실행 중...', `
     <div class="text-center py-8">
       <div class="animate-spin w-16 h-16 mx-auto mb-4"><i class="fas fa-cogs text-4xl text-blue-500"></i></div>
@@ -999,10 +1020,12 @@ async function executeDistributeWithModal() {
     </div>`;
   showModal(`<i class="fas fa-check-circle text-green-500 mr-2"></i>자동 배분 완료`, content,
     `<button onclick="closeModal();renderContent()" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium">확인</button>`, { large: true });
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 수동 배분 모달 (개별) ───
 async function showManualDistributeModal(orderId, customerName, addressText) {
+  try {
   const orgsRes = await api('GET', '/auth/organizations');
   const regions = (orgsRes?.organizations || []).filter(o => o.org_type === 'REGION');
   const content = `
@@ -1026,6 +1049,7 @@ async function showManualDistributeModal(orderId, customerName, addressText) {
   showModal(`<i class="fas fa-share-nodes mr-2 text-indigo-500"></i>수동 배분 — 주문 #${orderId}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 transition">취소</button>
     <button onclick="submitManualDistribute(${orderId})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition"><i class="fas fa-check mr-1"></i>배분 확정</button>`);
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 async function submitManualDistribute(orderId) {
   const regionOrgId = Number(document.getElementById('manual-region').value);
@@ -1036,6 +1060,7 @@ async function submitManualDistribute(orderId) {
 
 // ─── 선택 일괄 배분 모달 (배분관리 페이지 — 여러 주문 → 지역총판) ───
 async function showBatchDistributeModal() {
+  try {
   const ids = [...distributeState.selected];
   if (ids.length === 0) { showToast('배분할 주문을 선택하세요.', 'warning'); return; }
   
@@ -1073,8 +1098,10 @@ async function showBatchDistributeModal() {
   showModal(`<i class="fas fa-hand-pointer mr-2 text-amber-500"></i>선택 일괄 배분 (${ids.length}건)`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 transition">취소</button>
     <button onclick="submitBatchDistribute()" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg text-sm hover:from-amber-600 hover:to-orange-600 transition"><i class="fas fa-check mr-1"></i>일괄 배분 실행</button>`, { large: true });
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 async function submitBatchDistribute() {
+  try {
   const ids = [...distributeState.selected];
   const regionOrgId = Number(document.getElementById('batch-dist-region').value);
   closeModal();
@@ -1097,10 +1124,12 @@ async function submitBatchDistribute() {
       <div class="text-sm text-gray-600"><i class="fas fa-building mr-1 text-indigo-500"></i>배분 총판: <span class="font-semibold">${res.region_name || ''}</span></div>
     </div>`,
     `<button onclick="closeModal();renderContent()" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">확인</button>`, { large: true });
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 주문관리 페이지에서 일괄 배분 (체크박스 선택 → 배분) ───
 async function showOrderBatchDistributeModal() {
+  try {
   const ids = [...orderListState.selected];
   if (ids.length === 0) { showToast('배분할 주문을 선택하세요.', 'warning'); return; }
 
@@ -1129,8 +1158,10 @@ async function showOrderBatchDistributeModal() {
   showModal(`<i class="fas fa-share-nodes mr-2 text-indigo-500"></i>일괄 배분 (${ids.length}건)`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 transition">취소</button>
     <button onclick="submitOrderBatchDistribute()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition"><i class="fas fa-check mr-1"></i>배분 실행</button>`, { large: true });
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 async function submitOrderBatchDistribute() {
+  try {
   const ids = [...orderListState.selected];
   const regionOrgId = Number(document.getElementById('order-batch-dist-region').value);
   closeModal();
@@ -1153,10 +1184,12 @@ async function submitOrderBatchDistribute() {
       <div class="text-sm text-gray-600"><i class="fas fa-building mr-1 text-indigo-500"></i>배분 총판: <span class="font-semibold">${res.region_name || ''}</span></div>
     </div>`,
     `<button onclick="closeModal();renderContent()" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">확인</button>`, { large: true });
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 주문 CSV 내보내기 ───
 async function exportOrdersCSV() {
+  try {
   showToast('주문 데이터를 가져오는 중...', 'info');
   const params = new URLSearchParams(window._orderFilters || {});
   params.set('limit', '1000');
@@ -1183,10 +1216,12 @@ async function exportOrdersCSV() {
     { label: '요청일', key: 'requested_date' },
     { label: '등록일', key: 'created_at' },
   ], '주문목록');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 주문 엑셀 내보내기 ───
 async function exportOrdersExcel() {
+  try {
   showToast('주문 데이터를 가져오는 중...', 'info');
   const params = new URLSearchParams(window._orderFilters || {});
   params.set('limit', '1000');
@@ -1213,4 +1248,5 @@ async function exportOrdersExcel() {
     { label: '요청일', key: 'requested_date' },
     { label: '등록일', key: 'created_at' },
   ], '주문목록', '주문데이터');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }

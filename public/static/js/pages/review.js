@@ -12,6 +12,7 @@ const reviewState = {
 
 // ════════ 지역 1차 검수 ════════
 async function renderReviewRegion(el) {
+  try {
   showSkeletonLoading(el, 'cards');
   const res = await api('GET', '/orders?status=DONE&limit=100');
   const orders = res?.orders || [];
@@ -94,10 +95,12 @@ async function renderReviewRegion(el) {
         ${orders.length === 0 ? '<div class="bg-white rounded-xl p-8 text-center text-gray-400 border"><i class="fas fa-clipboard-check text-4xl mb-3"></i><p>검수 대기 건이 없습니다.</p></div>' : ''}
       </div>
     </div>`;
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ════════ HQ 2차 검수 ════════
 async function renderReviewHQ(el) {
+  try {
   showSkeletonLoading(el, 'cards');
   const res = await api('GET', '/orders?status=REGION_APPROVED&limit=100');
   const orders = res?.orders || [];
@@ -212,10 +215,12 @@ function showReviewCardContextMenu(event, order, stage) {
     { divider: true },
     { icon: 'fa-chart-bar', label: '통계에서 확인', action: () => navigateTo('statistics') },
   ], { title: `주문 #${o.order_id} — ${o.customer_name || ''}` });
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 빠른 승인 (코멘트 없이 바로 승인) ───
 async function quickApprove(orderId, stage) {
+  try {
   showConfirmModal(
     `${stage === 'hq' ? 'HQ 최종' : '지역'} 빠른 승인`,
     `주문 #${orderId}을 코멘트 없이 바로 승인하시겠습니까?`,
@@ -230,10 +235,12 @@ async function quickApprove(orderId, stage) {
     },
     '승인', 'bg-green-600'
   );
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ─── 일괄 검수 (배치) ───
 async function batchReview(stage, result) {
+  try {
   const set = stage === 'hq' ? reviewState.selectedHQ : reviewState.selectedRegion;
   const ids = [...set];
   if (ids.length === 0) return;
@@ -283,9 +290,11 @@ async function batchReview(stage, result) {
     () => executeBatchReview(stage, result),
     `일괄 ${actionLabel}`, isApprove ? 'bg-green-600' : 'bg-red-600'
   );
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function executeBatchReview(stage, result) {
+  try {
   const set = stage === 'hq' ? reviewState.selectedHQ : reviewState.selectedRegion;
   const ids = [...set];
   const comment = document.getElementById('batch-review-comment')?.value || '';
@@ -350,6 +359,7 @@ function showReviewModal(orderId, stage, result) {
   } else {
     console.error('[DEBUG] submitBtn not found:', submitBtnId);
   }
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function submitReview(orderId, stage, result) {
@@ -378,6 +388,7 @@ async function submitReview(orderId, stage, result) {
 
 // ─── 보고서 미리보기 (검수 시 보고서 확인) ───
 async function showReportPreview(orderId, stage) {
+  try {
   const res = await api('GET', `/orders/${orderId}`);
   if (!res?.order) { showToast('주문 정보를 불러올 수 없습니다.', 'error'); return; }
   const o = res.order;
@@ -442,4 +453,5 @@ async function showReportPreview(orderId, stage) {
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>
     <button onclick="closeModal();quickApprove(${orderId},'${stage}')" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm">승인</button>
     <button onclick="closeModal();showReviewModal(${orderId},'${stage}','REJECT')" class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm">반려</button>`, { large: true });
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }

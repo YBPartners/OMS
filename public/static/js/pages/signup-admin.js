@@ -5,6 +5,7 @@
 
 // ─── 가입신청 목록 (HR 탭) ───
 async function renderHRSignupRequests(el) {
+  try {
   const params = new URLSearchParams(window._signupFilters || {});
   if (!params.has('limit')) params.set('limit', '20');
   const res = await api('GET', `/signup/requests?${params.toString()}`);
@@ -60,10 +61,12 @@ function applySignupFilter() {
 function goSignupPage(page) {
   window._signupFilters = { ...(window._signupFilters || {}), page };
   renderContent();
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 // ─── 가입신청 상세 모달 ───
 async function showSignupDetail(requestId) {
+  try {
   const res = await api('GET', `/signup/requests/${requestId}`);
   if (!res?.request) return showToast('상세 정보를 불러올 수 없습니다.', 'error');
   
@@ -182,9 +185,11 @@ function rejectSignup(requestId, name) {
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitRejectSignup(${requestId})" class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm"><i class="fas fa-times mr-1"></i>반려</button>
   `);
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 async function submitRejectSignup(requestId) {
+  try {
   const reason = document.getElementById('reject-reason')?.value?.trim();
   if (!reason) return showToast('반려 사유를 입력하세요.', 'warning');
   const res = await api('POST', `/signup/requests/${requestId}/reject`, { reason });
@@ -193,6 +198,7 @@ async function submitRejectSignup(requestId) {
     closeModal();
     renderContent();
   } else showToast(res?.error || '반려 실패', 'error');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -200,6 +206,7 @@ async function submitRejectSignup(requestId) {
 // ═══════════════════════════════════════════════════════════════
 
 async function renderHRRegionAddRequests(el) {
+  try {
   const params = new URLSearchParams(window._regionAddFilters || {});
   if (!params.has('limit')) params.set('limit', '20');
   const res = await api('GET', `/signup/region-add-requests?${params.toString()}`);
@@ -288,17 +295,21 @@ function rejectRegionAdd(requestId) {
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitRejectRegionAdd(${requestId})" class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm">반려</button>
   `);
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function submitRejectRegionAdd(requestId) {
+  try {
   const reason = document.getElementById('ra-reject-reason')?.value?.trim();
   if (!reason) return showToast('반려 사유를 입력하세요.', 'warning');
   const res = await api('POST', `/signup/region-add-requests/${requestId}/reject`, { reason });
   if (res?.ok) { showToast('반려 완료', 'success'); closeModal(); renderContent(); }
   else showToast(res?.error || '반려 실패', 'error');
+  } catch (e) { showToast('처리 실패: ' + e.message, 'error'); }
 }
 
 async function showRegionAddDetail(requestId) {
+  try {
   const res = await api('GET', `/signup/region-add-requests/${requestId}`);
   if (!res?.request) return showToast('상세 정보를 불러올 수 없습니다.', 'error');
   const r = res.request;
@@ -322,6 +333,7 @@ async function showRegionAddDetail(requestId) {
       ` : ''}
     </div>`;
   showModal(`추가 지역 요청 상세 — #${requestId}`, content, `<button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>`);
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -329,6 +341,7 @@ async function showRegionAddDetail(requestId) {
 // ═══════════════════════════════════════════════════════════════
 
 async function renderHROrgTree(el) {
+  try {
   const res = await api('GET', '/hr/distributors/tree');
   const tree = res?.tree || [];
   
@@ -372,9 +385,11 @@ function renderTreeNode(org, depth) {
       </div>
       ${children.map(ch => renderTreeNode(ch, depth + 1)).join('')}
     </div>`;
+  } catch (e) { el.innerHTML = `<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1">${escapeHtml(e.message)}</p></div>`; }
 }
 
 async function loadOrgTreeFallback(el) {
+  try {
   // org 목록에서 직접 트리 구성
   const res = await api('GET', '/hr/organizations');
   const orgs = res?.organizations || [];
@@ -401,4 +416,5 @@ async function loadOrgTreeFallback(el) {
   });
   
   treeEl.innerHTML = html || '<p class="text-gray-400 text-sm text-center py-4">조직이 없습니다.</p>';
+  } catch (e) { showToast('로드 실패: ' + e.message, 'error'); }
 }
