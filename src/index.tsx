@@ -186,19 +186,61 @@ app.all('/api/*', (c) => {
   return c.json({ error: '요청한 API 경로를 찾을 수 없습니다.', code: 'NOT_FOUND', path: c.req.path }, 404);
 });
 
-// ─── Service Worker (루트 경로 서빙 필수) ───
+// ─── Service Worker (인라인 서빙 — CDN 캐시 우회) ───
 app.get('/sw.js', async (c) => {
-  // Cloudflare Pages에서 정적 파일은 자동 서빙되지만,
-  // _worker.js가 모든 요청을 가로채므로 SW는 명시적으로 처리
-  try {
-    const asset = await c.env.ASSETS?.fetch(new URL('/sw.js', c.req.url));
-    if (asset && asset.status === 200) {
-      return new Response(asset.body, {
-        headers: { 'Content-Type': 'application/javascript', 'Service-Worker-Allowed': '/', 'Cache-Control': 'no-cache, no-store, must-revalidate' }
-      });
-    }
-  } catch(e) { /* fallback below */ }
-  return c.notFound();
+  const swCode = `// Airflow OMS — Service Worker v16.0
+const CACHE_NAME = 'airflow-oms-v16';
+const STATIC_ASSETS = [
+  '/',
+  '/static/css/mobile.css',
+  '/static/js/core/constants.js',
+  '/static/js/core/api.js',
+  '/static/js/core/ui.js',
+  '/static/js/core/interactions.js',
+  '/static/js/core/auth.js',
+  '/static/js/core/app.js',
+  '/static/js/shared/table.js',
+  '/static/js/shared/form-helpers.js',
+];
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS).catch(() => {})));
+  self.skipWaiting();
+});
+self.addEventListener('activate', (event) => {
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))));
+  self.clients.claim();
+});
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  if (request.url.includes('/api/')) return;
+  event.respondWith(
+    fetch(request).then((response) => {
+      if (response.status === 200) { const clone = response.clone(); caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)); }
+      return response;
+    }).catch(() => caches.match(request).then((cached) => cached || new Response('오프라인 상태입니다.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } })))
+  );
+});
+self.addEventListener('push', (event) => {
+  let data = { title: 'Airflow OMS', body: '새로운 알림이 있습니다.', icon: '', tag: 'default' };
+  try { if (event.data) { const payload = event.data.json(); data = { ...data, ...payload }; } } catch (e) { if (event.data) data.body = event.data.text(); }
+  const options = { body: data.body, icon: data.icon || '/static/icon-192.png', badge: '/static/icon-72.png', tag: data.tag || 'airflow-oms', vibrate: [200, 100, 200], data: { url: data.url || '/', timestamp: Date.now() }, actions: [{ action: 'open', title: '열기' }, { action: 'dismiss', title: '닫기' }] };
+  event.waitUntil(self.registration.showNotification(data.title, options));
+});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  if (event.action === 'dismiss') return;
+  const url = event.notification.data?.url || '/';
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => { for (const client of clients) { if (client.url.includes(self.location.origin) && 'focus' in client) { client.focus(); client.postMessage({ type: 'NOTIFICATION_CLICK', url }); return; } } return self.clients.openWindow(url); }));
+});
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SHOW_NOTIFICATION') {
+    const { title, body, tag, url } = event.data;
+    self.registration.showNotification(title || 'Airflow OMS', { body: body || '새로운 알림이 있습니다.', icon: '/static/icon-192.png', badge: '/static/icon-72.png', tag: tag || 'airflow-local', vibrate: [200, 100, 200], data: { url: url || '/' } });
+  }
+});`;
+  return new Response(swCode, {
+    headers: { 'Content-Type': 'application/javascript', 'Service-Worker-Allowed': '/', 'Cache-Control': 'no-cache, no-store, must-revalidate' }
+  });
 });
 
 // ─── Google AdSense 소유권 확인용 ads.txt ───
