@@ -194,7 +194,7 @@ app.get('/sw.js', async (c) => {
     const asset = await c.env.ASSETS?.fetch(new URL('/sw.js', c.req.url));
     if (asset && asset.status === 200) {
       return new Response(asset.body, {
-        headers: { 'Content-Type': 'application/javascript', 'Service-Worker-Allowed': '/' }
+        headers: { 'Content-Type': 'application/javascript', 'Service-Worker-Allowed': '/', 'Cache-Control': 'no-cache, no-store, must-revalidate' }
       });
     }
   } catch(e) { /* fallback below */ }
