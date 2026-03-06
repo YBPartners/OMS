@@ -53,6 +53,8 @@ async function renderDashboard(el) {
   window._dashRegionSummary = dashRes.region_summary || [];
   cards.forEach((c, i) => { window._dashCardHandlers[i] = c.click; });
 
+  const _isMobile = typeof isMobile === 'function' && isMobile();
+
   el.innerHTML = `
     <div class="fade-in">
       <h2 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-chart-pie mr-2 text-blue-600"></i>${isTeam ? '내 대시보드' : '대시보드'}</h2>
@@ -60,23 +62,23 @@ async function renderDashboard(el) {
       <!-- 요약 카드 -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         ${cards.map((c, i) => `
-          <div class="ix-card bg-white rounded-xl p-5 border border-gray-100 relative group" 
+          <div class="ix-card bg-white rounded-xl ${_isMobile ? 'p-4' : 'p-5'} border border-gray-100 relative group" 
                onclick="window._dashCardHandlers[${i}]()" 
                data-tooltip="${c.desc}"
                oncontextmenu="event.preventDefault();showDashCardContextMenu(event,${i},'${c.label}')">
-            <div class="flex items-center justify-between mb-3">
-              <span class="text-xs font-medium text-gray-500 uppercase">${c.label}</span>
+            <div class="flex items-center justify-between ${_isMobile ? 'mb-2' : 'mb-3'}">
+              <span class="text-xs font-medium text-gray-500 uppercase ${_isMobile ? 'text-[11px]' : ''}">${c.label}</span>
               <div class="w-8 h-8 bg-${c.color}-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                 <i class="fas ${c.icon} text-${c.color}-600 text-sm"></i>
               </div>
             </div>
-            <div class="text-${c.isText ? 'lg' : '2xl'} font-bold text-gray-800 ix-count-animate">${c.value}</div>
-            <div class="flex items-center justify-between mt-2">
+            <div class="text-${c.isText ? 'lg' : '2xl'} font-bold text-gray-800 ix-count-animate ${_isMobile && !c.isText ? 'text-xl' : ''}">${c.value}</div>
+            ${_isMobile ? '' : `<div class="flex items-center justify-between mt-2">
               <div class="text-[10px] text-gray-400"><i class="fas fa-arrow-right mr-1"></i>클릭하여 이동</div>
               <div class="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-blue-500">
                 <i class="fas fa-external-link mr-1"></i>열기
               </div>
-            </div>
+            </div>`}
           </div>
         `).join('')}
       </div>
@@ -86,7 +88,7 @@ async function renderDashboard(el) {
         <!-- 주문 상태 도넛 차트 -->
         <div class="bg-white rounded-xl p-6 border border-gray-100">
           <h3 class="text-sm font-semibold mb-4"><i class="fas fa-chart-pie mr-2 text-pink-500"></i>${isTeam ? '내 주문 ' : ''}상태별 분포</h3>
-          <div class="relative" style="height:220px;">
+          <div class="relative" style="height:${_isMobile ? '180' : '220'}px;">
             <canvas id="chart-status-donut"></canvas>
           </div>
         </div>
@@ -94,7 +96,7 @@ async function renderDashboard(el) {
         <!-- 지역총판별 바 차트 (TEAM은 퍼널로 대체) -->
         <div class="bg-white rounded-xl p-6 border border-gray-100">
           <h3 class="text-sm font-semibold mb-4"><i class="fas fa-chart-bar mr-2 text-indigo-500"></i>${isTeam ? '내 주문 진행 현황' : '지역총판별 주문 현황'}</h3>
-          <div class="relative" style="height:220px;">
+          <div class="relative" style="height:${_isMobile ? '180' : '220'}px;">
             <canvas id="chart-region-bar"></canvas>
           </div>
         </div>
@@ -102,7 +104,7 @@ async function renderDashboard(el) {
         <!-- 금액 도넛 차트 -->
         <div class="bg-white rounded-xl p-6 border border-gray-100">
           <h3 class="text-sm font-semibold mb-4"><i class="fas fa-won-sign mr-2 text-emerald-500"></i>${isTeam ? '내 ' : ''}상태별 금액 비중</h3>
-          <div class="relative" style="height:220px;">
+          <div class="relative" style="height:${_isMobile ? '180' : '220'}px;">
             <canvas id="chart-amount-donut"></canvas>
           </div>
         </div>

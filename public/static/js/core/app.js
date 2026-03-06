@@ -1,11 +1,12 @@
 // ============================================================
-// 와이비 OMS — App Bootstrap v9.0
-// 메인 렌더링, 레이아웃, 초기화
-// v9.0: 모바일 반응형 (바텀네비, 햄버거, 풀투리프레시, 스와이프)
+// 와이비 OMS — App Bootstrap v10.0
+// 프리미엄 모바일 UX + 글래스모피즘 + 마이크로인터랙션
+// v10.0: AGI-level Mobile Innovation
 // ============================================================
 
 // ─── 모바일 감지 ───
 function isMobile() { return window.innerWidth <= 768; }
+function isSmallMobile() { return window.innerWidth <= 375; }
 
 // ─── 메인 렌더 ───
 function render() {
@@ -41,30 +42,34 @@ function render() {
   renderContent();
   if (typeof startNotificationPolling === 'function') startNotificationPolling();
   if (typeof loadAdSenseScript === 'function') loadAdSenseScript();
-  if (isMobile()) initPullToRefresh();
+  if (isMobile()) {
+    initPullToRefresh();
+    initMobileHeaderScroll();
+    initMobileHaptics();
+  }
 }
 
 function renderLoginPage() {
   return `
-  <div class="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl p-8 sm:p-10 w-full max-w-md fade-in">
+  <div class="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 flex items-center justify-center p-4 login-page-wrapper">
+    <div class="bg-white rounded-2xl shadow-2xl p-8 sm:p-10 w-full max-w-md fade-in login-card">
       <div class="text-center mb-8">
-        <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+        <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg" style="box-shadow: 0 8px 24px rgba(37,99,235,0.35)">
           <i class="fas fa-cubes text-white text-2xl"></i>
         </div>
         <h1 class="text-2xl font-bold text-gray-800">와이비 OMS</h1>
-        <p class="text-gray-500 mt-1">주문관리시스템 v9.0</p>
+        <p class="text-gray-500 mt-1 text-sm">주문관리시스템</p>
       </div>
       <form onsubmit="event.preventDefault();login(document.getElementById('lid').value,document.getElementById('lpw').value)">
         <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-user mr-1 text-gray-400"></i>아이디</label>
-          <input id="lid" type="text" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="admin" value="admin" required>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5"><i class="fas fa-user mr-1 text-gray-400"></i>아이디</label>
+          <input id="lid" type="text" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 transition" placeholder="admin" value="admin" required>
         </div>
         <div class="mb-6">
-          <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-lock mr-1 text-gray-400"></i>비밀번호</label>
-          <input id="lpw" type="password" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="admin123" value="admin123" required>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5"><i class="fas fa-lock mr-1 text-gray-400"></i>비밀번호</label>
+          <input id="lpw" type="password" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 transition" placeholder="admin123" value="admin123" required>
         </div>
-        <button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition shadow-md hover:shadow-lg">
+        <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3.5 rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 transition shadow-lg active:scale-[0.98]" style="box-shadow: 0 4px 16px rgba(37,99,235,0.35)">
           <i class="fas fa-sign-in-alt mr-2"></i>로그인
         </button>
       </form>
@@ -73,9 +78,9 @@ function renderLoginPage() {
           <i class="fas fa-user-plus mr-1"></i>팀장 가입 신청
         </button>
       </div>
-      <div class="mt-4 p-4 bg-gray-50 rounded-lg text-xs text-gray-500 space-y-1">
+      <div class="mt-4 p-4 bg-gray-50 rounded-xl text-xs text-gray-500 space-y-1">
         <p class="font-semibold mb-2 text-gray-700"><i class="fas fa-info-circle mr-1"></i>테스트 계정:</p>
-        <div class="grid grid-cols-2 gap-x-4">
+        <div class="grid grid-cols-2 gap-x-4 gap-y-0.5">
           <p><span class="font-medium text-blue-600">HQ관리자:</span> admin / admin123</p>
           <p><span class="font-medium text-purple-600">서울파트장:</span> seoul_admin / admin123</p>
           <p><span class="font-medium text-purple-600">경기파트장:</span> gyeonggi_admin / admin123</p>
@@ -162,8 +167,9 @@ function renderLayout() {
   }).join('');
 
   // 더보기 버튼
-  const moreBtn = `<button class="bottom-nav-item ${!bottomItems.some(b => b.id === currentPage) && currentPage !== 'my-profile' ? 'active' : ''}" onclick="openMobileMoreMenu()">
-    <i class="fas fa-bars"></i><span>더보기</span>
+  const isMoreActive = !bottomItems.some(b => b.id === currentPage) && currentPage !== 'my-profile';
+  const moreBtn = `<button class="bottom-nav-item ${isMoreActive ? 'active' : ''}" onclick="openMobileMoreMenu()">
+    <i class="fas fa-grid-2"></i><span>더보기</span>
   </button>`;
 
   // 페이지 타이틀 찾기
@@ -215,17 +221,19 @@ function renderLayout() {
       </div>
     </aside>
 
-    <!-- 모바일 헤더 -->
+    <!-- 모바일 헤더 — 글래스모피즘 -->
     <div class="mobile-header" style="display:none">
-      <div class="logo"><i class="fas fa-cubes"></i></div>
+      <div class="logo" onclick="navigateTo('${isAgency ? 'agency-dashboard' : 'dashboard'}');updateBottomNav()">
+        <i class="fas fa-cubes"></i>
+      </div>
       <div class="title">${pageTitle}</div>
       <div class="header-actions">
         <button class="header-btn" onclick="showGlobalSearchModal()" aria-label="검색">
           <i class="fas fa-search"></i>
         </button>
-        <button class="header-btn" onclick="openNotifCenter()" aria-label="알림">
+        <button class="header-btn" onclick="openNotifCenter()" aria-label="알림" id="m-notif-btn">
           <i class="fas fa-bell"></i>
-          <span id="notif-mobile-dot" style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:#ef4444;border-radius:50%;border:2px solid white;${_notifUnreadCount > 0 ? '' : 'display:none;'}"></span>
+          ${_notifUnreadCount > 0 ? '<span class="notif-dot" id="notif-mobile-dot"></span>' : '<span class="notif-dot" id="notif-mobile-dot" style="display:none"></span>'}
         </button>
       </div>
     </div>
@@ -263,7 +271,7 @@ function renderLayout() {
     </div>
 
 
-    <!-- 바텀 네비게이션 (모바일) -->
+    <!-- 바텀 네비게이션 — 플로팅 Pill 스타일 -->
     <nav class="bottom-nav" id="bottom-nav" style="display:none">
       <div class="bottom-nav-inner">
         ${bottomNavHtml}
@@ -308,6 +316,7 @@ function openMobileMoreMenu() {
   const menuItems = OMS.MENU_ITEMS[menuKey] || [];
   const roleLabel = OMS.ROLE_LABELS || {};
   const orgBadge = isAgency ? 'bg-teal-100 text-teal-700' : currentUser.org_type === 'HQ' ? 'bg-blue-100 text-blue-700' : isRegion ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700';
+  const initial = (currentUser.name || 'U').charAt(0).toUpperCase();
 
   let lastGroup = '';
   const menuHtml = menuItems.map(m => {
@@ -328,28 +337,69 @@ function openMobileMoreMenu() {
   overlay.innerHTML = `
     <div class="mobile-more-panel" onclick="event.stopPropagation()">
       <div class="drag-handle"></div>
-      ${menuHtml}
       <div class="user-section">
-        <div class="avatar"><i class="fas fa-user"></i></div>
+        <div class="avatar"><span style="color:white;font-size:18px;font-weight:700">${initial}</span></div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:14px;font-weight:600;color:#1f2937">${currentUser.name}</div>
-          <div style="display:flex;align-items:center;gap:4px;margin-top:2px">
-            <span class="text-[10px] px-1.5 py-0.5 rounded ${orgBadge}">${currentUser.org_name || currentUser.org_type}</span>
-            <span style="font-size:10px;color:#9ca3af">${roleLabel[currentUser.roles[0]] || currentUser.roles[0]}</span>
+          <div style="font-size:16px;font-weight:700;color:#0f172a">${currentUser.name}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+            <span class="text-[11px] px-2 py-0.5 rounded-lg font-semibold ${orgBadge}">${currentUser.org_name || currentUser.org_type}</span>
+            <span style="font-size:11px;color:#94a3b8;font-weight:500">${roleLabel[currentUser.roles[0]] || currentUser.roles[0]}</span>
           </div>
         </div>
       </div>
+      ${menuHtml}
       <div class="user-actions">
-        <button onclick="closeMobileMoreMenu();navigateTo('my-profile')"><i class="fas fa-key"></i> 프로필</button>
+        <button onclick="closeMobileMoreMenu();navigateTo('my-profile')"><i class="fas fa-user-gear"></i> 프로필</button>
+        <button onclick="closeMobileMoreMenu();navigateTo('notifications');updateBottomNav()"><i class="fas fa-bell"></i> 알림</button>
         <button class="logout-btn" onclick="closeMobileMoreMenu();logout()"><i class="fas fa-sign-out-alt"></i> 로그아웃</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
+
+  // 터치 드래그로 닫기
+  const panel = overlay.querySelector('.mobile-more-panel');
+  let touchStartY = 0, panelStartY = 0;
+  panel.addEventListener('touchstart', (e) => {
+    const handle = panel.querySelector('.drag-handle');
+    const rect = handle.getBoundingClientRect();
+    if (e.touches[0].clientY < rect.bottom + 30) {
+      touchStartY = e.touches[0].clientY;
+      panelStartY = 0;
+      panel.style.transition = 'none';
+    }
+  }, { passive: true });
+  panel.addEventListener('touchmove', (e) => {
+    if (!touchStartY) return;
+    const dy = e.touches[0].clientY - touchStartY;
+    if (dy > 0) {
+      panelStartY = dy;
+      panel.style.transform = `translateY(${dy}px)`;
+    }
+  }, { passive: true });
+  panel.addEventListener('touchend', () => {
+    panel.style.transition = '';
+    if (panelStartY > 80) {
+      closeMobileMoreMenu();
+    } else {
+      panel.style.transform = '';
+    }
+    touchStartY = 0;
+  }, { passive: true });
 }
 
 function closeMobileMoreMenu() {
   const overlay = document.getElementById('mobile-more-overlay');
-  if (overlay) overlay.remove();
+  if (!overlay) return;
+  const panel = overlay.querySelector('.mobile-more-panel');
+  if (panel) {
+    panel.style.transition = 'transform 0.25s cubic-bezier(0.4, 0, 1, 1)';
+    panel.style.transform = 'translateY(100%)';
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity 0.2s';
+    setTimeout(() => overlay.remove(), 260);
+  } else {
+    overlay.remove();
+  }
 }
 
 // ─── 풀투리프레시 ───
@@ -414,6 +464,32 @@ window.addEventListener('resize', () => {
   if (_prevMobile !== null && _prevMobile !== m) render();
   _prevMobile = m;
 });
+
+// ─── 모바일 헤더 스크롤 반응 ───
+function initMobileHeaderScroll() {
+  const main = document.querySelector('.main-content');
+  const header = document.querySelector('.mobile-header');
+  if (!main || !header) return;
+  let lastScroll = 0;
+  main.addEventListener('scroll', () => {
+    const st = main.scrollTop;
+    if (st > 10) {
+      header.classList.add('scrolled');
+    } else {
+      header.classList.remove('scrolled');
+    }
+    lastScroll = st;
+  }, { passive: true });
+}
+
+// ─── 모바일 햅틱 피드백 (진동) ───
+function initMobileHaptics() {
+  document.querySelectorAll('.bottom-nav-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (navigator.vibrate) navigator.vibrate(10);
+    });
+  });
+}
 
 // ─── 초기화 ───
 (async () => {
