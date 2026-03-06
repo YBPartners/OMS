@@ -79,11 +79,11 @@ app.use('*', async (c, next) => {
   if (!c.req.path.startsWith('/api/')) {
     c.res.headers.set('Content-Security-Policy', [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://t1.daumcdn.net https://pagead2.googlesyndication.com https://adservice.google.com https://www.googletagservices.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://t1.daumcdn.net https://pagead2.googlesyndication.com https://adservice.google.com https://www.googletagservices.com https://static.cloudflareinsights.com https://www.googletagmanager.com",
       "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
       "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com",
-      "img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com https://pagead2.googlesyndication.com",
-      "connect-src 'self' https://pagead2.googlesyndication.com https://adservice.google.com",
+      "img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com https://pagead2.googlesyndication.com https://*.google.com https://*.googleusercontent.com",
+      "connect-src 'self' https://pagead2.googlesyndication.com https://adservice.google.com https://cloudflareinsights.com https://static.cloudflareinsights.com https://www.google-analytics.com",
       "frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com https://www.google.com",
       "object-src 'none'",
       "base-uri 'self'",
@@ -179,7 +179,7 @@ app.route('/api/system', systemRoutes);
 app.route('/api/banners', bannerRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '23.0.0', system: '와이비 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '25.0.0', system: 'Airflow OMS' }));
 
 // ─── API 404 표준화 — 존재하지 않는 API 경로에 대해 명확한 JSON 응답 ───
 app.all('/api/*', (c) => {
@@ -201,16 +201,53 @@ app.get('/sw.js', async (c) => {
   return c.notFound();
 });
 
+// ─── Google AdSense 소유권 확인용 ads.txt ───
+app.get('/ads.txt', async (c) => {
+  // DB에서 ads.txt 내용을 가져오거나, 시스템 설정에서 관리
+  try {
+    const result = await c.env.DB.prepare(
+      "SELECT value FROM ad_settings WHERE key = 'ads_txt_content'"
+    ).first<{ value: string }>();
+    if (result?.value) {
+      return new Response(result.value, {
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }
+  } catch (e) { /* DB 없으면 기본값 */ }
+  // 기본 빈 ads.txt (Google AdSense에서 발급받은 코드를 시스템관리에서 설정)
+  return new Response('# ads.txt - Configure in Airflow System Admin > Ad Settings\n', {
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+  });
+});
+
+// ─── robots.txt ───
+app.get('/robots.txt', (c) => {
+  return new Response(`User-agent: *\nAllow: /\nSitemap: https://www.airflow.co.kr/sitemap.xml\n`, {
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+  });
+});
+
 // ─── SPA 라우팅: 모든 페이지 요청에 index.html 반환 ───
 app.get('*', async (c) => {
   const path = c.req.path;
   if (path.startsWith('/api/') || path.startsWith('/static/') || path === '/sw.js') {
     return c.notFound();
   }
-  return c.html(getIndexHtml());
+  
+  // DB에서 AdSense 계정 ID 조회
+  let adsenseAccount = '';
+  try {
+    const result = await c.env.DB.prepare(
+      "SELECT value FROM ad_settings WHERE key = 'adsense_client_id'"
+    ).first<{ value: string }>();
+    if (result?.value) adsenseAccount = result.value;
+  } catch (e) { /* DB 없으면 빈값 */ }
+  
+  return c.html(getIndexHtml(adsenseAccount));
 });
 
-function getIndexHtml(): string {
+function getIndexHtml(adsenseAccount: string = ''): string {
+  const V = '25';
   return `<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -218,11 +255,15 @@ function getIndexHtml(): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#2563eb">
-  <title>와이비 OMS - 주문관리시스템</title>
-  <link href="/static/css/tailwind.css" rel="stylesheet">
+  <meta name="theme-color" content="#0d9488">
+  <meta name="description" content="Airflow - 스마트 주문관리시스템">
+  <meta name="google-adsense-account" content="${adsenseAccount}">
+  <link rel="icon" type="image/png" href="/static/img/airflow-logo.png">
+  <link rel="apple-touch-icon" href="/static/img/airflow-logo.png">
+  <title>Airflow - 주문관리시스템</title>
+  <link href="/static/css/tailwind.css?v=${V}" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.0/css/all.min.css" rel="stylesheet">
-  <link href="/static/css/mobile.css" rel="stylesheet">
+  <link href="/static/css/mobile.css?v=${V}" rel="stylesheet">
   <link href="/static/css/print.css" rel="stylesheet" media="print">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -260,16 +301,16 @@ function getIndexHtml(): string {
   <div id="app"></div>
   
   <!-- Core modules (load order matters) -->
-  <script src="/static/js/core/constants.js"></script>
-  <script src="/static/js/core/api.js"></script>
-  <script src="/static/js/core/ui.js"></script>
-  <script src="/static/js/core/interactions.js"></script>
-  <script src="/static/js/core/auth.js"></script>
+  <script src="/static/js/core/constants.js?v=${V}"></script>
+  <script src="/static/js/core/api.js?v=${V}"></script>
+  <script src="/static/js/core/ui.js?v=${V}"></script>
+  <script src="/static/js/core/interactions.js?v=${V}"></script>
+  <script src="/static/js/core/auth.js?v=${V}"></script>
   
   <!-- Shared components -->
-  <script src="/static/js/shared/table.js"></script>
-  <script src="/static/js/shared/form-helpers.js"></script>
-  <script src="/static/js/shared/banner-slider.js"></script>
+  <script src="/static/js/shared/table.js?v=${V}"></script>
+  <script src="/static/js/shared/form-helpers.js?v=${V}"></script>
+  <script src="/static/js/shared/banner-slider.js?v=${V}"></script>
   
   <!-- Page modules: 지연 로딩 — 필요한 페이지만 동적으로 로드 -->
   <script>
@@ -308,7 +349,7 @@ function getIndexHtml(): string {
       await Promise.all(pending.map(src => new Promise((resolve, reject) => {
         if (_loadedScripts.has(src)) { resolve(); return; }
         const s = document.createElement('script');
-        s.src = src;
+        s.src = src + '?v=${V}';
         s.onload = () => { _loadedScripts.add(src); resolve(); };
         s.onerror = () => reject(new Error('Script load failed: ' + src));
         document.body.appendChild(s);
@@ -333,7 +374,7 @@ function getIndexHtml(): string {
   </script>
   
   <!-- App bootstrap (must be last) -->
-  <script src="/static/js/core/app.js"></script>
+  <script src="/static/js/core/app.js?v=${V}"></script>
 </body>
 </html>`;
 }

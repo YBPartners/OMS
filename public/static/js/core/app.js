@@ -1,7 +1,7 @@
 // ============================================================
-// 와이비 OMS — App Bootstrap v10.0
+// Airflow OMS — App Bootstrap v11.0
 // 프리미엄 모바일 UX + 글래스모피즘 + 마이크로인터랙션
-// v10.0: AGI-level Mobile Innovation
+// v11.0: Airflow Rebranding + Mobile Innovation
 // ============================================================
 
 // ─── 모바일 감지 ───
@@ -54,10 +54,10 @@ function renderLoginPage() {
   <div class="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 flex items-center justify-center p-4 login-page-wrapper">
     <div class="bg-white rounded-2xl shadow-2xl p-8 sm:p-10 w-full max-w-md fade-in login-card">
       <div class="text-center mb-8">
-        <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg" style="box-shadow: 0 8px 24px rgba(37,99,235,0.35)">
-          <i class="fas fa-cubes text-white text-2xl"></i>
+        <div class="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg overflow-hidden" style="box-shadow: 0 8px 24px rgba(13,148,136,0.3)">
+          <img src="/static/img/airflow-logo.png" alt="Airflow" class="w-full h-full object-cover">
         </div>
-        <h1 class="text-2xl font-bold text-gray-800">와이비 OMS</h1>
+        <h1 class="text-2xl font-bold text-gray-800">Airflow</h1>
         <p class="text-gray-500 mt-1 text-sm">주문관리시스템</p>
       </div>
       <form onsubmit="event.preventDefault();login(document.getElementById('lid').value,document.getElementById('lpw').value)">
@@ -169,12 +169,12 @@ function renderLayout() {
   // 더보기 버튼
   const isMoreActive = !bottomItems.some(b => b.id === currentPage) && currentPage !== 'my-profile';
   const moreBtn = `<button class="bottom-nav-item ${isMoreActive ? 'active' : ''}" onclick="openMobileMoreMenu()">
-    <i class="fas fa-grid-2"></i><span>더보기</span>
+    <i class="fas fa-ellipsis"></i><span>더보기</span>
   </button>`;
 
   // 페이지 타이틀 찾기
   const curMenu = menuItems.find(m => m.id === currentPage);
-  const pageTitle = curMenu ? curMenu.label : '와이비 OMS';
+  const pageTitle = curMenu ? curMenu.label : 'Airflow';
 
   return `
   <div class="layout-root flex h-screen">
@@ -182,12 +182,12 @@ function renderLayout() {
     <aside class="desktop-sidebar w-64 bg-white border-r border-gray-200 flex flex-col shadow-sm">
       <div class="p-5 border-b">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-md">
-            <i class="fas fa-cubes text-white"></i>
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center shadow-md overflow-hidden">
+            <img src="/static/img/airflow-logo.png" alt="Airflow" class="w-full h-full object-cover">
           </div>
           <div>
-            <div class="font-bold text-gray-800">와이비 OMS</div>
-            <div class="text-xs text-gray-400">v23.0 · ${menuKey}</div>
+            <div class="font-bold text-gray-800">Airflow</div>
+            <div class="text-xs text-gray-400">v25.0 · ${menuKey}</div>
           </div>
         </div>
       </div>
@@ -223,8 +223,8 @@ function renderLayout() {
 
     <!-- 모바일 헤더 — 글래스모피즘 -->
     <div class="mobile-header" style="display:none">
-      <div class="logo" onclick="navigateTo('${isAgency ? 'agency-dashboard' : 'dashboard'}');updateBottomNav()">
-        <i class="fas fa-cubes"></i>
+      <div class="logo" onclick="navigateTo('${isAgency ? 'agency-dashboard' : 'dashboard'}');updateBottomNav()" style="background:none;box-shadow:none;overflow:hidden;padding:0">
+        <img src="/static/img/airflow-logo.png" alt="Airflow" style="width:100%;height:100%;object-fit:cover;border-radius:12px">
       </div>
       <div class="title">${pageTitle}</div>
       <div class="header-actions">
@@ -299,7 +299,7 @@ function updateBottomNav() {
     const menuKey = isAgency ? 'AGENCY' : (currentUser.org_type === 'TEAM' || isLeader) ? 'TEAM_LEADER' : isRegion ? 'REGION' : 'HQ';
     const menuItems = OMS.MENU_ITEMS[menuKey] || [];
     const cur = menuItems.find(m => m.id === currentPage);
-    const label = cur ? cur.label : '와이비 OMS';
+    const label = cur ? cur.label : 'Airflow';
     titleEl.textContent = label;
     // 데스크탑 타이틀도 갱신
     const dtTitle = document.getElementById('content-page-title');

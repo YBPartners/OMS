@@ -1,5 +1,5 @@
 // ============================================================
-// 와이비 OMS - 주문관리 + 자동배분 페이지 v7.1
+// Airflow - 주문관리 + 자동배분 페이지 v7.1
 // Interaction Design: 행 우클릭 컨텍스트메뉴, 호버 프리뷰,
 // 상태 플로우 시각화, 드로어 상세, 배치 액션바
 // 배분: 자동배분, 개별 수동배분, 선택 일괄배분, 드로어 배분
@@ -579,7 +579,7 @@ function openAddressSearch() {
     width: '100%',
     height: '100%',
   }).open({
-    popupTitle: '와이비 OMS - 주소 검색',
+    popupTitle: 'Airflow - 주소 검색',
   });
 }
 
@@ -773,7 +773,7 @@ function openEditAddressSearch() {
     },
     width: '100%',
     height: '100%',
-  }).open({ popupTitle: '와이비 OMS - 주소 변경' });
+  }).open({ popupTitle: 'Airflow - 주소 변경' });
 }
 
 async function matchEditAdminDongCode(sido, sigungu, dong) {

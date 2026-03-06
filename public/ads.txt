@@ -1,0 +1,3 @@
+# ads.txt for www.airflow.co.kr
+# Configure Google AdSense publisher ID in System Admin > Ad Settings
+

@@ -1,5 +1,5 @@
 // ============================================================
-// 와이비 OMS — 알림 시스템 v6.0 (UX 혁신)
+// Airflow — 알림 시스템 v6.0 (UX 혁신)
 // ★ 슬라이드-인 알림센터 패널 + 헤더 통합 + 실시간 뱃지
 // ★ 타입별 아이콘/색상 + 시간 그룹화 + 일괄 관리
 // ============================================================
@@ -49,7 +49,7 @@ async function fetchUnreadCount() {
       updateAllNotifBadges();
       
       if (_notifUnreadCount > prevCount && prevCount >= 0 && typeof showLocalNotification === 'function') {
-        showLocalNotification('와이비 OMS', `새로운 알림 ${_notifUnreadCount - prevCount}건이 있습니다.`, '#notifications');
+        showLocalNotification('Airflow', `새로운 알림 ${_notifUnreadCount - prevCount}건이 있습니다.`, '#notifications');
       }
     }
   } catch (e) {
