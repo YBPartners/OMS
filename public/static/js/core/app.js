@@ -11,8 +11,12 @@ function isMobile() { return window.innerWidth <= 768; }
 function render() {
   const app = document.getElementById('app');
   if (!currentUser) {
-    stopNotificationPolling();
-    if (window.location.hash === '#signup') { app.innerHTML = ''; openSignupWizard(); return; }
+    if (typeof stopNotificationPolling === 'function') stopNotificationPolling();
+    if (window.location.hash === '#signup') { 
+      if (typeof loadPageScripts === 'function') loadPageScripts('signup').then(() => { openSignupWizard(); });
+      else { app.innerHTML = ''; openSignupWizard(); }
+      return; 
+    }
     app.innerHTML = renderLoginPage(); return;
   }
   
@@ -27,7 +31,7 @@ function render() {
   
   app.innerHTML = renderLayout();
   renderContent();
-  startNotificationPolling();
+  if (typeof startNotificationPolling === 'function') startNotificationPolling();
   if (isMobile()) initPullToRefresh();
 }
 

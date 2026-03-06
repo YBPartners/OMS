@@ -257,7 +257,33 @@ function filterItemList(query) {
 
 // ─── 로딩 표시 ───
 function showLoading(el) {
-  el.innerHTML = '<div class="flex items-center justify-center h-64"><div class="pulse text-gray-400"><i class="fas fa-spinner fa-spin text-3xl"></i><p class="mt-3">로딩 중...</p></div></div>';
+  // 페이지별 스켈레톤 UI — 실제 레이아웃과 유사하게 표시
+  const skeletons = {
+    dashboard: `
+      <div class="fade-in space-y-4 animate-pulse">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          ${[1,2,3,4].map(() => '<div class="bg-white rounded-xl p-4 h-24"><div class="h-4 bg-gray-200 rounded w-1/2 mb-3"></div><div class="h-6 bg-gray-200 rounded w-3/4"></div></div>').join('')}
+        </div>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="bg-white rounded-xl p-4 h-64"><div class="h-4 bg-gray-200 rounded w-1/3 mb-4"></div><div class="h-48 bg-gray-100 rounded"></div></div>
+          <div class="bg-white rounded-xl p-4 h-64"><div class="h-4 bg-gray-200 rounded w-1/3 mb-4"></div><div class="h-48 bg-gray-100 rounded"></div></div>
+        </div>
+      </div>`,
+    table: `
+      <div class="fade-in animate-pulse">
+        <div class="flex justify-between items-center mb-4">
+          <div class="h-6 bg-gray-200 rounded w-40"></div>
+          <div class="flex gap-2"><div class="h-8 bg-gray-200 rounded w-24"></div><div class="h-8 bg-gray-200 rounded w-20"></div></div>
+        </div>
+        <div class="bg-white rounded-xl overflow-hidden">
+          <div class="border-b p-3 flex gap-4">${[1,2,3,4,5].map(() => '<div class="h-4 bg-gray-200 rounded flex-1"></div>').join('')}</div>
+          ${[1,2,3,4,5,6].map(() => '<div class="border-b p-3 flex gap-4">' + [1,2,3,4,5].map(() => '<div class="h-3 bg-gray-100 rounded flex-1"></div>').join('') + '</div>').join('')}
+        </div>
+      </div>`,
+  };
+  const page = typeof currentPage !== 'undefined' ? currentPage : '';
+  const isDashboard = page === 'dashboard' || page === 'agency-dashboard';
+  el.innerHTML = isDashboard ? skeletons.dashboard : skeletons.table;
 }
 
 // ─── CSV 내보내기 유틸리티 ───

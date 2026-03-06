@@ -48,8 +48,8 @@ auditRoutes.get('/', async (c) => {
     binds.push(from);
   }
   if (to) {
-    where += " AND al.created_at <= ? || ' 23:59:59'";
-    binds.push(to);
+    where += ' AND al.created_at <= ?';
+    binds.push(to + ' 23:59:59');
   }
   if (search) {
     where += ' AND (al.detail_json LIKE ? OR al.action LIKE ? OR u.name LIKE ?)';
@@ -100,7 +100,7 @@ auditRoutes.get('/stats', async (c) => {
   let dateWhere = '1=1';
   const binds: any[] = [];
   if (from) { dateWhere += ' AND created_at >= ?'; binds.push(from); }
-  if (to) { dateWhere += " AND created_at <= ? || ' 23:59:59'"; binds.push(to); }
+  if (to) { dateWhere += ' AND created_at <= ?'; binds.push(to + ' 23:59:59'); }
 
   // entity_type별 집계
   const byEntity = await db.prepare(`

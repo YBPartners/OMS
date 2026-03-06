@@ -16,6 +16,7 @@ async function login(loginId, password) {
     currentUser = res.user;
     setSessionId(res.session_id);
     if (typeof startGlobalNotifPolling === 'function') startGlobalNotifPolling();
+    if (typeof preloadCriticalPages === 'function') preloadCriticalPages();
     render();
   } else {
     showToast(res?.error || '로그인 실패', 'error');
@@ -77,7 +78,7 @@ function navigateTo(page) {
   history.pushState(null, '', `#${page}`);
 }
 
-// ─── 페이지 렌더링 (모듈별 분기) ───
+// ─── 페이지 렌더링 (모듈별 분기, 지연 로딩 지원) ───
 async function renderContent() {
   const el = document.getElementById('content');
   if (!el) return;
@@ -90,6 +91,13 @@ async function renderContent() {
   try {
     // 대시보드 폴링 관리
     if (typeof stopDashboardPolling === 'function') stopDashboardPolling();
+    
+    // ★ 지연 로딩: 해당 페이지 스크립트를 동적으로 로드
+    if (typeof loadPageScripts === 'function') {
+      // 알림 모듈은 항상 필요 (뱃지 폴링)
+      await loadPageScripts('notifications');
+      await loadPageScripts(currentPage);
+    }
     
     switch (currentPage) {
       case 'dashboard': 
@@ -123,6 +131,6 @@ async function renderContent() {
     }
   } catch (err) {
     console.error('[Render Error]', currentPage, err);
-    el.innerHTML = `<div class="text-center py-16 text-red-400"><i class="fas fa-exclamation-triangle text-5xl mb-4"></i><p class="text-lg">페이지 로드 중 오류 발생</p><p class="text-sm mt-2">${err.message}</p></div>`;
+    el.innerHTML = `<div class="text-center py-16 text-red-400"><i class="fas fa-exclamation-triangle text-5xl mb-4"></i><p class="text-lg">페이지 로드 중 오류 발생</p><p class="text-sm mt-2">${err.message}</p><button onclick="renderContent()" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"><i class="fas fa-redo mr-1"></i>다시 시도</button></div>`;
   }
 }

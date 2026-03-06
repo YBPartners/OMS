@@ -65,6 +65,32 @@ app.onError((err, c) => {
 
 // ─── 미들웨어 ───
 app.use('*', cors());
+
+// ─── 정적 자산 캐시 헤더 (JS/CSS 파일 장기 캐싱) ───
+app.use('/static/*', async (c, next) => {
+  await next();
+  if (c.res.status === 200) {
+    const path = c.req.path;
+    const isImmutable = /\.(js|css|woff2?|ttf|eot)$/i.test(path);
+    if (isImmutable) {
+      c.res.headers.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+    }
+  }
+});
+
+// ─── API 응답 캐싱 (읽기 전용 엔드포인트) ───
+app.use('/api/*', async (c, next) => {
+  await next();
+  if (c.req.method === 'GET' && c.res.status === 200) {
+    const path = c.req.path;
+    // 자주 변경되지 않는 정적 데이터: 30초 캐시
+    if (path.includes('/hr/roles') || path.includes('/hr/channels') || 
+        path.includes('/auth/organizations') || path.includes('/hr/admin-regions')) {
+      c.res.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
+    }
+  }
+});
+
 app.use('/api/*', authMiddleware);
 
 app.use('*', async (c, next) => {
@@ -85,7 +111,7 @@ app.route('/api/audit', auditRoutes);
 app.route('/api/system', systemRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '20.9.0', system: '와이비 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '21.0.0', system: '와이비 OMS' }));
 
 // ─── API 404 표준화 — 존재하지 않는 API 경로에 대해 명확한 JSON 응답 ───
 app.all('/api/*', (c) => {
@@ -175,28 +201,65 @@ function getIndexHtml(): string {
   <script src="/static/js/shared/table.js"></script>
   <script src="/static/js/shared/form-helpers.js"></script>
   
-  <!-- Page modules -->
-  <script src="/static/js/pages/dashboard.js"></script>
-  <script src="/static/js/pages/orders.js"></script>
-  <script src="/static/js/pages/kanban.js"></script>
-  <script src="/static/js/pages/review.js"></script>
-  <script src="/static/js/pages/settlement.js"></script>
-  <script src="/static/js/pages/statistics.js"></script>
-  <script src="/static/js/pages/policies.js"></script>
-  <script src="/static/js/pages/policies-dist.js"></script>
-  <script src="/static/js/pages/policies-report.js"></script>
-  <script src="/static/js/pages/policies-comm.js"></script>
-  <script src="/static/js/pages/policies-territory.js"></script>
-  <script src="/static/js/pages/policies-metrics.js"></script>
-  <script src="/static/js/pages/hr.js"></script>
-  <script src="/static/js/pages/signup-wizard.js"></script>
-  <script src="/static/js/pages/signup-admin.js"></script>
-  <script src="/static/js/pages/notifications.js"></script>
-  <script src="/static/js/pages/audit.js"></script>
-  <script src="/static/js/pages/my-orders.js"></script>
-  <script src="/static/js/pages/agency.js"></script>
-  <script src="/static/js/pages/channels.js"></script>
-  <script src="/static/js/pages/system.js"></script>
+  <!-- Page modules: 지연 로딩 — 필요한 페이지만 동적으로 로드 -->
+  <script>
+    // ─── Page Lazy Loader v1.0 ───
+    const _pageScripts = {
+      'dashboard': ['/static/js/pages/dashboard.js'],
+      'orders': ['/static/js/pages/orders.js'],
+      'distribute': ['/static/js/pages/orders.js'],
+      'kanban': ['/static/js/pages/kanban.js'],
+      'review-hq': ['/static/js/pages/review.js'],
+      'review-region': ['/static/js/pages/review.js'],
+      'settlement': ['/static/js/pages/settlement.js'],
+      'reconciliation': ['/static/js/pages/settlement.js'],
+      'statistics': ['/static/js/pages/statistics.js'],
+      'policies': ['/static/js/pages/policies.js', '/static/js/pages/policies-dist.js', '/static/js/pages/policies-report.js', '/static/js/pages/policies-comm.js', '/static/js/pages/policies-territory.js', '/static/js/pages/policies-metrics.js'],
+      'hr-management': ['/static/js/pages/hr.js'],
+      'audit-log': ['/static/js/pages/audit.js'],
+      'notifications': ['/static/js/pages/notifications.js'],
+      'my-orders': ['/static/js/pages/my-orders.js'],
+      'my-stats': ['/static/js/pages/my-orders.js'],
+      'my-profile': ['/static/js/pages/my-orders.js'],
+      'agency-dashboard': ['/static/js/pages/agency.js'],
+      'agency-orders': ['/static/js/pages/agency.js'],
+      'agency-team': ['/static/js/pages/agency.js'],
+      'agency-statement': ['/static/js/pages/agency.js'],
+      'channels': ['/static/js/pages/channels.js'],
+      'system-admin': ['/static/js/pages/system.js'],
+      'signup': ['/static/js/pages/signup-wizard.js', '/static/js/pages/signup-admin.js'],
+    };
+    const _loadedScripts = new Set();
+    async function loadPageScripts(page) {
+      const scripts = _pageScripts[page] || [];
+      const pending = scripts.filter(s => !_loadedScripts.has(s));
+      if (!pending.length) return;
+      await Promise.all(pending.map(src => new Promise((resolve, reject) => {
+        if (_loadedScripts.has(src)) { resolve(); return; }
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = () => { _loadedScripts.add(src); resolve(); };
+        s.onerror = () => reject(new Error('Script load failed: ' + src));
+        document.body.appendChild(s);
+      })));
+    }
+    // 로그인 후 사전 로드할 필수 페이지
+    function preloadCriticalPages() {
+      const critical = ['dashboard', 'orders', 'notifications'];
+      critical.forEach(p => {
+        const scripts = _pageScripts[p] || [];
+        scripts.forEach(src => {
+          if (!_loadedScripts.has(src)) {
+            const link = document.createElement('link');
+            link.rel = 'prefetch';
+            link.href = src;
+            link.as = 'script';
+            document.head.appendChild(link);
+          }
+        });
+      });
+    }
+  </script>
   
   <!-- App bootstrap (must be last) -->
   <script src="/static/js/core/app.js"></script>

@@ -119,10 +119,10 @@ export function mountDashboard(router: Hono<Env>) {
         SUM(rds.payable_amount_sum) as payable,
         SUM(rds.settlement_confirmed_count) as settled
       FROM region_daily_stats rds
-      WHERE rds.date >= date('now', '-${days} days')${regionFilter}
+      WHERE rds.date >= date('now', ? || ' days')${regionFilter}
       GROUP BY rds.date
       ORDER BY rds.date ASC
-    `).bind(...params).all();
+    `).bind(`-${days}`, ...params).all();
 
     // 월별 매출 추이
     const monthlyRevenue = await db.prepare(`
@@ -135,7 +135,7 @@ export function mountDashboard(router: Hono<Env>) {
       WHERE rds.date >= date('now', '-12 months')${regionFilter}
       GROUP BY substr(rds.date, 1, 7)
       ORDER BY month ASC
-    `).bind(...params).all();
+    `).bind(...params).all();  // -12 months is a constant, safe
 
     // 지역별 매출 (누적)
     const regionRevenue = await db.prepare(`
@@ -146,10 +146,10 @@ export function mountDashboard(router: Hono<Env>) {
         SUM(rds.settlement_confirmed_count) as settled
       FROM region_daily_stats rds
       JOIN organizations o ON rds.region_org_id = o.org_id
-      WHERE rds.date >= date('now', '-${days} days')${regionFilter}
+      WHERE rds.date >= date('now', ? || ' days')${regionFilter}
       GROUP BY rds.region_org_id
       ORDER BY revenue DESC
-    `).bind(...params).all();
+    `).bind(`-${days}`, ...params).all();
 
     return c.json({
       daily: dailyRevenue.results,

@@ -194,9 +194,10 @@
 - **Cloudflare 프로젝트명**: dahada-oms
 - **D1 ID**: 0b7aedd5-7510-44d3-8b81-d421b03fffa6
 - **KV ID**: 5024085768aa47ba943e4e65a454795e (SESSION_CACHE)
-- **빌드 크기**: ~294 KB (dist/_worker.js)
-- **코드량**: Backend 48 TS (~10,400줄) + Frontend 27 JS (~13,500줄) + 15 SQL migrations + CSS/SW
+- **빌드 크기**: ~296 KB (dist/_worker.js)
+- **코드량**: Backend 49 TS (~11,100줄) + Frontend 27 JS (~15,000줄) + 18 SQL migrations + CSS/SW
 - **E2E 테스트**: 28/28 PASS (100%) — 정상플로우, 반려재보고, 권한체크, 목록필터, 상세조회
+- **프론트엔드 최적화**: 지연 로딩 (코어 ~120KB 즉시 + 페이지별 동적 로드)
 - **최종 업데이트**: 2026-03-06
 
 ## 로컬 개발

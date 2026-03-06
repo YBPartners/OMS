@@ -124,8 +124,8 @@ export function mountReview(router: Hono<Env>) {
           if (dist) await upsertRegionDailyStats(db, dist.region_org_id as number, 'hq_approved_count');
 
           const assign = await db.prepare(
-            `SELECT team_leader_id FROM order_assignments WHERE order_id = ? AND status = '${targetStatus}'`
-          ).bind(orderId).first();
+            `SELECT team_leader_id FROM order_assignments WHERE order_id = ? AND status = ?`
+          ).bind(orderId, targetStatus).first();
           if (assign) await upsertTeamLeaderDailyStats(db, assign.team_leader_id as number, 'hq_approved_count');
         }
 
