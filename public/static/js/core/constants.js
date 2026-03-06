@@ -31,8 +31,8 @@ OMS.PERMISSIONS = {
   SUPER_ADMIN: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'audit-log', 'notifications', 'my-profile', 'channels', 'system-admin'],
   HQ_OPERATOR: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'audit-log', 'notifications', 'my-profile', 'channels'],
   REGION_ADMIN: ['dashboard', 'kanban', 'review-region', 'hr-management', 'statistics', 'notifications', 'my-profile'],
-  AGENCY_LEADER: ['agency-dashboard', 'agency-orders', 'agency-team', 'agency-statement', 'review-region', 'kanban', 'my-orders', 'my-stats', 'notifications', 'my-profile'],
-  TEAM_LEADER: ['my-orders', 'my-stats', 'notifications', 'my-profile'],
+  AGENCY_LEADER: ['dashboard', 'agency-dashboard', 'agency-orders', 'agency-team', 'agency-statement', 'review-region', 'kanban', 'my-orders', 'my-stats', 'notifications', 'my-profile'],
+  TEAM_LEADER: ['dashboard', 'my-orders', 'my-stats', 'notifications', 'my-profile'],
   AUDITOR: ['dashboard', 'statistics', 'reconciliation', 'audit-log', 'notifications', 'my-profile'],
 };
 
@@ -73,6 +73,7 @@ OMS.MENU_ITEMS = {
     { id: 'notifications', icon: 'fa-bell', label: '알림', group: '알림' },
   ],
   TEAM_LEADER: [
+    { id: 'dashboard', icon: 'fa-chart-pie', label: '대시보드', group: '현황' },
     { id: 'my-orders', icon: 'fa-list', label: '내 주문', group: '주문' },
     { id: 'my-stats', icon: 'fa-chart-line', label: '내 현황', group: '현황' },
     { id: 'notifications', icon: 'fa-bell', label: '알림', group: '알림' },

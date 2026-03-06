@@ -22,7 +22,7 @@ function render() {
   else if (!hasPermission(currentPage)) {
     const isAgency = currentUser.is_agency === true;
     const isLeader = currentUser.roles.includes('TEAM_LEADER');
-    currentPage = isAgency ? 'agency-dashboard' : isLeader ? 'my-orders' : 'dashboard';
+    currentPage = isAgency ? 'agency-dashboard' : 'dashboard';
   }
   
   app.innerHTML = renderLayout();
@@ -98,6 +98,7 @@ function getBottomNavItems(menuKey) {
       { id: 'my-orders', icon: 'fa-list', label: '내주문' },
     ],
     TEAM_LEADER: [
+      { id: 'dashboard', icon: 'fa-chart-pie', label: '대시보드' },
       { id: 'my-orders', icon: 'fa-list', label: '내주문' },
       { id: 'my-stats', icon: 'fa-chart-line', label: '현황' },
       { id: 'notifications', icon: 'fa-bell', label: '알림' },

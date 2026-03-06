@@ -73,13 +73,15 @@ export function mountDashboard(router: Hono<Env>) {
       JOIN organizations org ON od.region_org_id = org.org_id
     `;
     const regionParams: any[] = [];
-    if (user.org_type === 'REGION') {
+    if (user.org_type === 'REGION' && !user.roles.includes('TEAM_LEADER')) {
       regionQuery += ' WHERE od.region_org_id = ?';
       regionParams.push(user.org_id);
     }
     regionQuery += ' GROUP BY org.org_id';
 
-    const regionSummary = user.org_type !== 'TEAM'
+    // TEAM_LEADER / AGENCY_LEADER는 지역법인 요약 불필요 (자기 주문만 보이므로)
+    const isTeamRole = user.roles.includes('TEAM_LEADER') && !user.roles.some(r => ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'AUDITOR'].includes(r));
+    const regionSummary = !isTeamRole
       ? await db.prepare(regionQuery).bind(...regionParams).all()
       : { results: [] };
 

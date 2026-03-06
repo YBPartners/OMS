@@ -16,6 +16,9 @@ async function renderDashboard(el) {
   _destroyCharts();
   showSkeletonLoading(el, 'cards');
 
+  const isTeam = currentUser && (currentUser.org_type === 'TEAM' || currentUser.roles.includes('TEAM_LEADER'));
+  const isAgency = currentUser && currentUser.is_agency === true;
+
   const [dashRes, funnelRes] = await Promise.all([
     api('GET', '/stats/dashboard'),
     api('GET', '/orders/stats/funnel'),
@@ -23,8 +26,19 @@ async function renderDashboard(el) {
   if (!dashRes || !funnelRes) return;
 
   const d = dashRes.today || {};
-  const cards = [
-    { label: '총 주문', value: d.total || 0, icon: 'fa-boxes-stacked', color: 'blue', click: () => navigateTo('orders'), desc: '전체 주문 목록으로 이동' },
+
+  // ★ TEAM/AGENCY 유저: 카드 라벨을 '내 주문' 관점으로 변경
+  const myPrefix = (isTeam || isAgency) ? '내 ' : '';
+  const cards = isTeam ? [
+    { label: '내 전체 주문', value: d.total || 0, icon: 'fa-boxes-stacked', color: 'blue', click: () => navigateTo('my-orders'), desc: '내 주문 목록으로 이동' },
+    { label: '배정됨(준비)', value: (d.distributed || 0) + (d.assigned || 0), icon: 'fa-inbox', color: 'indigo', click: () => navigateTo('my-orders'), desc: '배정된 주문 보기' },
+    { label: '수행중', value: d.in_progress || 0, icon: 'fa-wrench', color: 'amber', click: () => navigateTo('my-orders'), desc: '수행 중인 주문 보기' },
+    { label: '제출/완료', value: (d.submitted || 0) + (d.hq_approved || 0), icon: 'fa-clipboard-check', color: 'green', click: () => navigateTo('my-orders'), desc: '제출/승인 주문 보기' },
+    { label: '반려', value: d.rejected || 0, icon: 'fa-ban', color: 'red', click: () => navigateTo('my-orders'), desc: '반려된 주문 보기' },
+    { label: '정산확정', value: d.settlement_confirmed || 0, icon: 'fa-coins', color: 'emerald', click: () => navigateTo('my-stats'), desc: '내 현황 보기' },
+    { label: '총 금액', value: formatAmount(d.total_amount), icon: 'fa-won-sign', color: 'purple', isText: true, click: () => navigateTo('my-stats'), desc: '내 현황 보기' },
+  ] : [
+    { label: `${myPrefix}총 주문`, value: d.total || 0, icon: 'fa-boxes-stacked', color: 'blue', click: () => navigateTo(isAgency ? 'agency-orders' : 'orders'), desc: '전체 주문 목록으로 이동' },
     { label: '오늘 수신', value: dashRes.today_received || 0, icon: 'fa-inbox', color: 'indigo', click: () => { window._orderFilters = { status: 'RECEIVED' }; navigateTo('orders'); }, desc: '수신 상태 주문 보기' },
     { label: '검수 대기', value: dashRes.pending_review || 0, icon: 'fa-clipboard-list', color: 'amber', click: () => navigateTo(currentUser.org_type === 'HQ' ? 'review-hq' : 'review-region'), desc: '검수 대기 목록으로 이동' },
     { label: 'HQ검수 대기', value: dashRes.pending_hq_review || 0, icon: 'fa-shield-halved', color: 'orange', click: () => navigateTo('review-hq'), desc: 'HQ 2차 검수 목록' },
@@ -39,7 +53,7 @@ async function renderDashboard(el) {
 
   el.innerHTML = `
     <div class="fade-in">
-      <h2 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-chart-pie mr-2 text-blue-600"></i>대시보드</h2>
+      <h2 class="text-2xl font-bold text-gray-800 mb-6"><i class="fas fa-chart-pie mr-2 text-blue-600"></i>${isTeam ? '내 대시보드' : '대시보드'}</h2>
       
       <!-- 요약 카드 -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -69,15 +83,15 @@ async function renderDashboard(el) {
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <!-- 주문 상태 도넛 차트 -->
         <div class="bg-white rounded-xl p-6 border border-gray-100">
-          <h3 class="text-sm font-semibold mb-4"><i class="fas fa-chart-pie mr-2 text-pink-500"></i>상태별 주문 분포</h3>
+          <h3 class="text-sm font-semibold mb-4"><i class="fas fa-chart-pie mr-2 text-pink-500"></i>${isTeam ? '내 주문 ' : ''}상태별 분포</h3>
           <div class="relative" style="height:220px;">
             <canvas id="chart-status-donut"></canvas>
           </div>
         </div>
 
-        <!-- 지역법인별 바 차트 -->
+        <!-- 지역법인별 바 차트 (TEAM은 퍼널로 대체) -->
         <div class="bg-white rounded-xl p-6 border border-gray-100">
-          <h3 class="text-sm font-semibold mb-4"><i class="fas fa-chart-bar mr-2 text-indigo-500"></i>지역법인별 주문 현황</h3>
+          <h3 class="text-sm font-semibold mb-4"><i class="fas fa-chart-bar mr-2 text-indigo-500"></i>${isTeam ? '내 주문 진행 현황' : '지역법인별 주문 현황'}</h3>
           <div class="relative" style="height:220px;">
             <canvas id="chart-region-bar"></canvas>
           </div>
@@ -85,19 +99,19 @@ async function renderDashboard(el) {
 
         <!-- 금액 도넛 차트 -->
         <div class="bg-white rounded-xl p-6 border border-gray-100">
-          <h3 class="text-sm font-semibold mb-4"><i class="fas fa-won-sign mr-2 text-emerald-500"></i>상태별 금액 비중</h3>
+          <h3 class="text-sm font-semibold mb-4"><i class="fas fa-won-sign mr-2 text-emerald-500"></i>${isTeam ? '내 ' : ''}상태별 금액 비중</h3>
           <div class="relative" style="height:220px;">
             <canvas id="chart-amount-donut"></canvas>
           </div>
         </div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <div class="grid grid-cols-1 ${isTeam ? '' : 'lg:grid-cols-2'} gap-6 mb-8">
         <!-- 주문 퍼널 -->
         <div class="bg-white rounded-xl p-6 border border-gray-100">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold"><i class="fas fa-filter mr-2 text-blue-500"></i>주문 처리 퍼널</h3>
-            <button onclick="navigateTo('orders')" class="text-xs text-blue-500 hover:text-blue-700 transition" data-tooltip="주문관리로 이동">
+            <h3 class="text-lg font-semibold"><i class="fas fa-filter mr-2 text-blue-500"></i>${isTeam ? '내 주문 처리 현황' : '주문 처리 퍼널'}</h3>
+            <button onclick="navigateTo('${isTeam ? 'my-orders' : 'orders'}')" class="text-xs text-blue-500 hover:text-blue-700 transition" data-tooltip="${isTeam ? '내 주문으로 이동' : '주문관리로 이동'}">
               <i class="fas fa-external-link mr-1"></i>전체보기
             </button>
           </div>
@@ -125,6 +139,7 @@ async function renderDashboard(el) {
           </div>
         </div>
         
+        ${!isTeam ? `
         <!-- 지역법인별 현황 테이블 -->
         <div class="bg-white rounded-xl p-6 border border-gray-100">
           <div class="flex items-center justify-between mb-4">
@@ -157,6 +172,7 @@ async function renderDashboard(el) {
             </table>
           </div>
         </div>
+        ` : ''}
       </div>
 
       ${(dashRes.recent_issues && dashRes.recent_issues.length > 0) ? `
@@ -185,8 +201,8 @@ async function renderDashboard(el) {
   // ─── Chart.js 렌더링 ───
   _renderDashCharts(funnelRes.funnel || [], dashRes.region_summary || []);
 
-  // ─── v14.0: HQ/REGION 사용자에게 매출 추이 + 정산 현황 추가 ───
-  if (currentUser && (currentUser.org_type === 'HQ' || currentUser.org_type === 'REGION')) {
+  // ─── v14.0: 매출 추이 + 정산 현황 (HQ/REGION만; TEAM/AGENCY는 자기 퍼널로 충분) ───
+  if (currentUser && !isTeam && (currentUser.org_type === 'HQ' || currentUser.org_type === 'REGION')) {
     const extraContainer = document.createElement('div');
     extraContainer.id = 'dashboard-extra';
     el.querySelector('.fade-in')?.appendChild(extraContainer);
@@ -280,45 +296,84 @@ function _renderDashCharts(funnel, regionSummary) {
     });
   }
 
-  // 2) 지역법인별 바 차트
+  // 2) 지역법인별 바 차트 / TEAM은 진행현황 수평 바 차트
   const barCtx = document.getElementById('chart-region-bar');
-  if (barCtx && regionSummary.length > 0) {
-    const regionColors = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981'];
-    _dashCharts.regionBar = new Chart(barCtx, {
-      type: 'bar',
-      data: {
-        labels: regionSummary.map(r => r.region_name.replace('지역법인', '')),
-        datasets: [
-          { label: '진행중', data: regionSummary.map(r => r.active_orders), backgroundColor: '#60a5fa', borderRadius: 4 },
-          { label: '검수대기', data: regionSummary.map(r => r.pending_review), backgroundColor: '#fbbf24', borderRadius: 4 },
-          { label: '정산대기', data: regionSummary.map(r => r.ready_for_settlement), backgroundColor: '#34d399', borderRadius: 4 },
-          { label: '정산완료', data: regionSummary.map(r => r.settled), backgroundColor: '#10b981', borderRadius: 4 },
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y}건`,
+  if (barCtx) {
+    const isTeamDash = currentUser && (currentUser.org_type === 'TEAM' || currentUser.roles.includes('TEAM_LEADER'));
+    if (isTeamDash && funnel.length > 0) {
+      // TEAM 유저: 퍼널 데이터로 수평 바 차트
+      const funnelLabels = funnel.map(f => STATUS_LABELS[f.status] || f.status);
+      const funnelData = funnel.map(f => f.count);
+      const funnelColors = funnel.map(f => STATUS_COLORS[f.status] || '#cbd5e1');
+      _dashCharts.regionBar = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+          labels: funnelLabels,
+          datasets: [{
+            label: '주문 수',
+            data: funnelData,
+            backgroundColor: funnelColors,
+            borderRadius: 6,
+            borderSkipped: false,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: 'y',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ` ${ctx.parsed.x}건`,
+              }
+            }
+          },
+          scales: {
+            x: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+            y: { grid: { display: false }, ticks: { font: { size: 10 } } },
+          },
+        }
+      });
+    } else if (regionSummary.length > 0) {
+      // HQ/REGION 유저: 지역법인별 바 차트
+      const regionColors = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981'];
+      _dashCharts.regionBar = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+          labels: regionSummary.map(r => r.region_name.replace('지역법인', '')),
+          datasets: [
+            { label: '진행중', data: regionSummary.map(r => r.active_orders), backgroundColor: '#60a5fa', borderRadius: 4 },
+            { label: '검수대기', data: regionSummary.map(r => r.pending_review), backgroundColor: '#fbbf24', borderRadius: 4 },
+            { label: '정산대기', data: regionSummary.map(r => r.ready_for_settlement), backgroundColor: '#34d399', borderRadius: 4 },
+            { label: '정산완료', data: regionSummary.map(r => r.settled), backgroundColor: '#10b981', borderRadius: 4 },
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y}건`,
+              }
+            }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+            y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+          },
+          onClick: (e, elements) => {
+            if (elements.length > 0) {
+              const idx = elements[0].index;
+              const r = regionSummary[idx];
+              showRegionDetailModal(r.org_id, r.region_name);
             }
           }
-        },
-        scales: {
-          x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-          y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } }, grid: { color: '#f1f5f9' } },
-        },
-        onClick: (e, elements) => {
-          if (elements.length > 0) {
-            const idx = elements[0].index;
-            const r = regionSummary[idx];
-            showRegionDetailModal(r.org_id, r.region_name);
-          }
         }
-      }
-    });
+      });
+    }
   }
 
   // 3) 상태별 금액 도넛 차트
@@ -838,7 +893,17 @@ function stopDashboardPolling() {
 
 function _updateDashCards(dashRes) {
   const d = dashRes.today || {};
-  const values = [
+  const isTeam = currentUser && (currentUser.org_type === 'TEAM' || currentUser.roles.includes('TEAM_LEADER'));
+  const isAgency = currentUser && currentUser.is_agency === true;
+  const values = isTeam ? [
+    d.total || 0,
+    (d.distributed || 0) + (d.assigned || 0),
+    d.in_progress || 0,
+    (d.submitted || 0) + (d.hq_approved || 0),
+    d.rejected || 0,
+    d.settlement_confirmed || 0,
+    formatAmount(d.total_amount),
+  ] : [
     d.total || 0, dashRes.today_received || 0, dashRes.pending_review || 0,
     dashRes.pending_hq_review || 0, d.hq_approved || 0, d.settlement_confirmed || 0,
     d.rejected || 0, formatAmount(d.total_amount),
