@@ -1,8 +1,8 @@
 # 와이비 OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-06
-> **현재 버전**: v20.8.0 (R7 완료)
-> **총 코드량**: Backend ~11,000줄 (49 TS) + Frontend ~13,200줄 (24 JS) + SW 143줄 + CSS 420줄 + SQL 1,400줄 + E2E 1,000줄 = **~27,200줄**
+> **현재 버전**: v21.0.0 (R9 완료)
+> **총 코드량**: Backend ~11,000줄 (49 TS) + Frontend ~13,100줄 (24 JS) + SW 143줄 + CSS 420줄 + SQL 1,400줄 + E2E 1,000줄 = **~27,100줄**
 
 ---
 
@@ -46,6 +46,63 @@
 | **R6** | **공통 UI/UX 표준화** | **✅ 완료** | **2026-03-06** | **apiAction() 래퍼, 모달 ESC/포커스/aria, 토스트 스택, formField 접근성, 5개 페이지 리팩토링, E2E 61/62** |
 | **R7** | **대시보드·통계·감사 품질 강화** | **✅ 완료** | **2026-03-06** | **인라인 테이블 5개→renderDataTable, 감사로그 renderPagination, statistics.js 12함수 apiAction 전환, E2E 61/62** |
 | **R8** | **운영 안정성·보안** | **✅ 완료** | **2026-03-06** | **SQL 안전성·쿠키 Secure·XSS 방어·에러 표준화·감사로그 민감정보 마스킹, E2E 61/62** |
+| **R9** | **인라인 테이블 renderDataTable 전면 마이그레이션** | **✅ 완료** | **2026-03-06** | **9개 테이블 변환, 6개 파일, +152/-266 순감 114줄, 접근성·XSS 강화, E2E 61/62** |
+
+---
+
+## Phase R9 — 인라인 테이블 renderDataTable 전면 마이그레이션 ✅ (2026-03-06)
+
+> **목적**: R6에서 도입한 `renderDataTable` 공유 컴포넌트의 사용률을 높여 코드 일관성·접근성·유지보수성 향상
+
+### R9-1: 현황 진단 ✅
+| 파일 | 인라인 `<table>` | renderDataTable | 우선순위 |
+|------|-----------------|-----------------|----------|
+| settlement.js | 34개 | 0 | 🔴 최고 |
+| hr.js | 6개 | 0 | 🟠 높음 |
+| channels.js | 6개 (입력폼 특수 테이블) | 0 | 유지 |
+| my-orders.js | 6개 | 0 | 🟠 높음 |
+| agency.js | 3개 (모달 내부) | 0 | 🟡 중간 |
+| signup-admin.js | 9개 | 0 | 🟡 중간 |
+
+### R9-2: settlement.js 마이그레이션 ✅
+- **정산 Run 목록 테이블** (L41-76): 9컬럼 인라인 테이블 → `renderDataTable` + `render` 함수 + `onRowClick` + `caption`
+- **대사 실행 이력 테이블** (L404-421): 5컬럼 인라인 테이블 → `renderDataTable`
+- 인쇄용 HTML 테이블(보고서/계산서)은 인쇄 전용이므로 구조 유지
+
+### R9-3: hr.js 마이그레이션 ✅
+- **사용자 목록 테이블** (L62-95): 9컬럼 인라인 테이블 → `renderDataTable` + `escapeHtml` XSS 보호
+- **수수료 정책 테이블** (L385-414): 9컬럼 인라인 테이블 → `renderDataTable`
+- 모든 사용자 이름에 `escapeHtml()` 적용으로 XSS 방어 강화
+
+### R9-4: my-orders.js 마이그레이션 ✅
+- **일별 통계 테이블**: 5컬럼 인라인 → `renderDataTable` + `caption`
+- **정산 원장 테이블**: 4컬럼 인라인 → `renderDataTable` + `caption`
+
+### R9-5: agency.js 마이그레이션 ✅
+- **온보딩 신청 내역 테이블**: 6컬럼 인라인(모달 내부) → `renderDataTable` + `escapeHtml`
+
+### R9-6: signup-admin.js 마이그레이션 ✅
+- **가입 신청 목록 테이블**: 10컬럼 인라인 → `renderDataTable` + `renderPagination` 연동
+- **추가 지역 요청 테이블**: 7컬럼 인라인 → `renderDataTable` + `renderPagination` 연동
+- 모든 사용자 입력에 `escapeHtml()` 적용
+
+### R9-7: 변환 제외 사항
+- **channels.js**: 필드 매핑 설정 테이블(입력 `<input>` 포함) 및 매핑 미리보기 → 특수 양식이므로 인라인 유지
+- **settlement.js 인쇄용 HTML**: 보고서/계산서 인쇄 전용 테이블(window.open) → 인쇄 CSS 최적화 필요하므로 유지
+- **모달 내 확장형 테이블**: viewRunDetail 등의 접기/펼치기 테이블 → UI 복잡도로 유지
+
+### 변경 통계
+- **6 files changed**: settlement.js, hr.js, my-orders.js, agency.js, signup-admin.js, tailwind.css
+- **+152 / -266 lines** (순감 114줄)
+- **9개 인라인 테이블 → renderDataTable 전환 완료**
+- `renderDataTable` 사용 현황: R7의 5개 + R9의 9개 = **14개 페이지 테이블 표준화**
+- E2E: HR 35/36 (100%), Policy 26/26 (100%) — 기존과 동일
+- 빌드: dist/_worker.js 278.66 kB
+
+### 다음 단계 (R10 권장)
+- P1: 성능 최적화 — 대용량 테이블 가상화, API 응답 캐싱 정교화 (중간 난이도)
+- P2: orders.js 인라인 테이블 마이그레이션 — 가장 큰 파일(1,241줄), 복잡한 행 렌더링 (높은 난이도)
+- P3: Playwright E2E 브라우저 자동화 테스트 (낮은 난이도)
 
 ---
 
