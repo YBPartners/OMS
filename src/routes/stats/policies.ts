@@ -124,7 +124,7 @@ export function mountPolicies(router: Hono<Env>) {
       db.prepare("SELECT COUNT(DISTINCT t.territory_id) as cnt FROM territories t JOIN org_territories ot ON t.territory_id=ot.territory_id WHERE t.status='ACTIVE' AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now'))").first(),
       db.prepare("SELECT COUNT(*) as cnt FROM territories t LEFT JOIN org_territories ot ON t.territory_id=ot.territory_id AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now')) WHERE t.status='ACTIVE' AND ot.org_id IS NULL").first(),
       db.prepare("SELECT COUNT(DISTINCT sido) as sido_cnt, COUNT(*) as total FROM admin_regions WHERE is_active=1").first(),
-      db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status='DISTRIBUTED' AND distributed_at > datetime('now','-7 days')").first(),
+      db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status='DISTRIBUTED' AND updated_at > datetime('now','-7 days')").first(),
     ]);
 
     // 시도별 매핑 현황
@@ -258,7 +258,7 @@ export function mountPolicies(router: Hono<Env>) {
 
     const [pendingReports, completedReports, rejectedReports] = await Promise.all([
       db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status IN ('SUBMITTED','IN_REVIEW')").first(),
-      db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status IN ('HQ_APPROVED','SETTLEMENT_CONFIRMED','PAID') AND submitted_at > datetime('now','-30 days')").first(),
+      db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status IN ('HQ_APPROVED','SETTLEMENT_CONFIRMED','PAID') AND updated_at > datetime('now','-30 days')").first(),
       db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status='REJECTED' AND updated_at > datetime('now','-30 days')").first(),
     ]);
 
@@ -433,8 +433,10 @@ export function mountPolicies(router: Hono<Env>) {
 
     // 해당 총판의 최근 30일 정산 데이터
     const recentSettlements = await db.prepare(`
-      SELECT COUNT(*) as cnt, SUM(CASE WHEN o.payable_amount IS NOT NULL THEN o.payable_amount ELSE 0 END) as total_amount
-      FROM orders o WHERE o.org_id=? AND o.status IN ('SETTLEMENT_CONFIRMED','PAID')
+      SELECT COUNT(*) as cnt, SUM(CASE WHEN o.base_amount IS NOT NULL THEN o.base_amount ELSE 0 END) as total_amount
+      FROM orders o
+      JOIN order_distributions od ON o.order_id = od.order_id AND od.status = 'ACTIVE'
+      WHERE od.region_org_id=? AND o.status IN ('SETTLEMENT_CONFIRMED','PAID')
       AND o.updated_at > datetime('now','-30 days')
     `).bind(policy.org_id).first() as any;
 
@@ -448,7 +450,11 @@ export function mountPolicies(router: Hono<Env>) {
 
     // 해당 총판 소속 팀장 수
     const teamLeaders = await db.prepare(`
-      SELECT COUNT(*) as cnt FROM users WHERE org_id=? AND role='TEAM_LEADER' AND status='ACTIVE'
+      SELECT COUNT(DISTINCT u.user_id) as cnt
+      FROM users u
+      JOIN user_roles ur ON u.user_id = ur.user_id
+      JOIN roles r ON ur.role_id = r.role_id
+      WHERE u.org_id=? AND r.code='TEAM_LEADER' AND u.status='ACTIVE'
     `).bind(policy.org_id).first() as any;
 
     const totalAmt = (recentSettlements as any)?.total_amount || 0;

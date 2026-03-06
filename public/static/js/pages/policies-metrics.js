@@ -1,29 +1,45 @@
 // ============================================================
-// 와이비 OMS — 지표 정책 탭 v10.0 (R13 고도화)
-// 지표 정책 CRUD, 상세 모달, 복제, 활성/비활성
+// 와이비 OMS — 지표 정책 탭 v10.1 (실 DB 스키마 기반)
+// 완료기준/지역접수기준 설정, CRUD, 상세 모달
 // ============================================================
 
 function renderMetricsPolicyTab(policies) {
   const canEditPolicy = canEdit('policy');
+
+  const basisLabel = {
+    'SUBMITTED_AT': '보고서 제출일',
+    'HQ_APPROVED_AT': 'HQ 승인일',
+    'SETTLEMENT_CONFIRMED_AT': '정산 확정일',
+    'DISTRIBUTED_AT': '배분일',
+    'REGION_ACCEPT_AT': '지역 접수일',
+  };
+
   return `
     <div class="bg-white rounded-xl p-5 border border-gray-100">
       <div class="flex items-center justify-between mb-3">
         <div>
-          <h3 class="font-semibold text-lg"><i class="fas fa-chart-bar mr-2 text-purple-500"></i>지표 정책</h3>
-          <p class="text-xs text-gray-500 mt-1">팀장/조직의 성과를 측정하는 KPI 지표를 정의합니다. <strong class="text-purple-600">활성 정책 1개만 적용</strong>됩니다.</p>
+          <h3 class="font-semibold text-lg"><i class="fas fa-chart-bar mr-2 text-purple-500"></i>지표 산출 기준 정책</h3>
+          <p class="text-xs text-gray-500 mt-1">팀장 완료율, 지역 접수 통계 등 지표 산출 시 사용하는 <strong>기준일 정의</strong>입니다. <strong class="text-purple-600">활성 정책 1개만 적용</strong>됩니다.</p>
         </div>
-        ${canEditPolicy ? `<button onclick="showNewMetricsPolicyModal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition"><i class="fas fa-plus mr-1"></i>새 버전</button>` : ''}
+        ${canEditPolicy ? `<button onclick="showNewMetricsPolicyModal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition"><i class="fas fa-plus mr-1"></i>새 정책</button>` : ''}
       </div>
+
+      <div class="bg-purple-50 rounded-lg p-3 mb-4 text-xs text-purple-700 leading-relaxed">
+        <i class="fas fa-info-circle mr-1"></i><strong>설명:</strong>
+        <strong>완료 기준</strong> — 주문이 "완료"로 간주되는 시점 (보고서 제출? HQ 승인? 정산 확정?).
+        <strong>지역 접수 기준</strong> — 지역 통계에서 "접수"로 카운팅되는 시점 (배분일? 지역 접수일?).
+        이 설정에 따라 대시보드·통계 수치가 달라집니다.
+      </div>
+
       ${renderDataTable({ columns: [
         { key: 'metrics_policy_id', label: 'ID', render: p => `<span class="font-mono text-xs text-gray-500">#${p.metrics_policy_id}</span>` },
-        { key: 'name', label: '정책명', render: p => `<button onclick="showMetricsDetailModal(${p.metrics_policy_id})" class="text-left text-blue-700 hover:underline font-medium">${escapeHtml(p.name)}</button>` },
-        { key: 'version', label: '버전', align: 'center', render: p => `<span class="status-badge bg-purple-100 text-purple-700">v${p.version}</span>` },
-        { key: '_metrics', label: '지표 항목', render: p => _renderMetricsSummary(p) },
+        { key: 'completion_basis', label: '완료 기준', render: p => `<button onclick="showMetricsDetailModal(${p.metrics_policy_id})" class="text-left text-blue-700 hover:underline"><span class="status-badge bg-blue-100 text-blue-700">${basisLabel[p.completion_basis] || p.completion_basis}</span></button>` },
+        { key: 'region_intake_basis', label: '지역 접수 기준', render: p => `<span class="status-badge bg-emerald-100 text-emerald-700">${basisLabel[p.region_intake_basis] || p.region_intake_basis}</span>` },
+        { key: 'effective_from', label: '적용일', render: p => `<span class="text-xs">${p.effective_from || '-'}</span>` },
         { key: 'is_active', label: '상태', align: 'center', render: p => p.is_active ? '<span class="inline-flex items-center gap-1 text-green-600 font-bold"><i class="fas fa-circle text-[6px]"></i>활성</span>' : '<span class="text-gray-400">비활성</span>' },
         { key: '_actions', label: '관리', align: 'center', show: canEditPolicy, render: p => `<div class="flex gap-1 justify-center flex-wrap">
           <button onclick="showMetricsDetailModal(${p.metrics_policy_id})" class="px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-xs hover:bg-indigo-100"><i class="fas fa-eye"></i></button>
           <button onclick='showEditMetricsPolicyModal(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit"></i></button>
-          <button onclick="clonePolicy('metrics',${p.metrics_policy_id})" class="px-2 py-1 bg-purple-50 text-purple-700 rounded text-xs hover:bg-purple-100"><i class="fas fa-copy"></i></button>
           <button onclick="togglePolicyActive('metrics',${p.metrics_policy_id},${p.is_active?0:1})" class="px-2 py-1 ${p.is_active?'bg-red-50 text-red-600':'bg-green-50 text-green-600'} rounded text-xs">${p.is_active?'비활성':'활성'}</button>
           ${!p.is_active ? `<button onclick="deleteMetricsPolicy(${p.metrics_policy_id})" class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs"><i class="fas fa-trash"></i></button>` : ''}
         </div>` }
@@ -31,195 +47,162 @@ function renderMetricsPolicyTab(policies) {
     </div>`;
 }
 
-function _renderMetricsSummary(p) {
-  let metrics = {};
-  try { metrics = typeof p.metrics_json === 'string' ? JSON.parse(p.metrics_json) : (p.metrics_json || {}); } catch {}
-  const entries = Object.entries(metrics);
-  if (!entries.length) return '<span class="text-gray-400 text-xs">미설정</span>';
-  return entries.slice(0, 4).map(([k, v]) => {
-    const val = typeof v === 'object' ? (v.weight || v.target || JSON.stringify(v)) : v;
-    return `<span class="inline-block px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] mr-0.5 mb-0.5">${k}: ${val}</span>`;
-  }).join('') + (entries.length > 4 ? `<span class="text-[10px] text-gray-400 ml-1">+${entries.length - 4}</span>` : '');
-}
-
 // ── 지표 정책 상세 모달 ──
 function showMetricsDetailModal(policyId) {
   const p = (window._cachedMetricsPolicies||[]).find(x => x.metrics_policy_id === policyId);
   if (!p) { showToast('정책을 찾을 수 없습니다.', 'error'); return; }
 
-  let metrics = {};
-  try { metrics = typeof p.metrics_json === 'string' ? JSON.parse(p.metrics_json) : (p.metrics_json || {}); } catch {}
-  const metricsDisplay = JSON.stringify(metrics, null, 2);
-
-  const metricIcons = {
-    completion_rate: { icon: 'fa-check-circle', color: 'green', label: '완료율' },
-    response_time: { icon: 'fa-clock', color: 'blue', label: '응답 시간' },
-    customer_satisfaction: { icon: 'fa-star', color: 'amber', label: '고객 만족도' },
-    revenue: { icon: 'fa-won-sign', color: 'emerald', label: '매출' },
-    order_count: { icon: 'fa-boxes-stacked', color: 'indigo', label: '주문 건수' },
+  const basisInfo = {
+    'SUBMITTED_AT': { label: '보고서 제출일', icon: 'fa-file-lines', color: 'blue', desc: '팀장이 보고서를 제출한 시점을 기준으로 완료 처리합니다. 빠른 통계 반영.' },
+    'HQ_APPROVED_AT': { label: 'HQ 승인일', icon: 'fa-check-double', color: 'green', desc: '본사(HQ)가 최종 승인한 시점을 기준으로 완료 처리합니다. 품질 검증 후 카운팅.' },
+    'SETTLEMENT_CONFIRMED_AT': { label: '정산 확정일', icon: 'fa-calculator', color: 'amber', desc: '정산이 확정된 시점을 기준으로 완료 처리합니다. 재무적으로 가장 보수적.' },
+    'DISTRIBUTED_AT': { label: '배분일', icon: 'fa-share-nodes', color: 'indigo', desc: '주문이 지역총판에 배분된 시점을 지역 접수로 간주합니다.' },
+    'REGION_ACCEPT_AT': { label: '지역 접수일', icon: 'fa-building', color: 'teal', desc: '지역총판이 실제로 접수 확인한 시점을 기준으로 합니다.' },
   };
+
+  const comp = basisInfo[p.completion_basis] || { label: p.completion_basis, icon: 'fa-question', color: 'gray', desc: '' };
+  const region = basisInfo[p.region_intake_basis] || { label: p.region_intake_basis, icon: 'fa-question', color: 'gray', desc: '' };
 
   const content = `<div class="space-y-4">
     <div class="grid grid-cols-3 gap-3">
       <div class="bg-gray-50 rounded-lg p-3"><div class="text-[10px] text-gray-400 mb-1">정책 ID</div><div class="font-mono font-bold text-lg">#${p.metrics_policy_id}</div></div>
-      <div class="bg-gray-50 rounded-lg p-3"><div class="text-[10px] text-gray-400 mb-1">버전</div><div class="font-bold text-purple-700 text-lg">v${p.version}</div></div>
+      <div class="bg-gray-50 rounded-lg p-3"><div class="text-[10px] text-gray-400 mb-1">적용일</div><div class="text-sm font-medium">${p.effective_from || '-'}</div></div>
       <div class="bg-gray-50 rounded-lg p-3"><div class="text-[10px] text-gray-400 mb-1">상태</div><div class="${p.is_active?'text-green-600 font-bold':'text-gray-400'}">${p.is_active?'<i class="fas fa-circle text-[8px] mr-1"></i>활성':'비활성'}</div></div>
     </div>
 
-    <div>
-      <div class="text-xs font-semibold text-gray-600 mb-2"><i class="fas fa-chart-bar mr-1"></i>KPI 지표 항목</div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-        ${Object.entries(metrics).map(([key, val]) => {
-          const info = metricIcons[key] || { icon: 'fa-chart-simple', color: 'gray', label: key };
-          const v = typeof val === 'object' ? val : { value: val };
-          return `<div class="bg-${info.color}-50 rounded-lg p-3 border border-${info.color}-200">
-            <div class="flex items-center gap-2 mb-1">
-              <i class="fas ${info.icon} text-${info.color}-600"></i>
-              <span class="text-xs font-semibold text-${info.color}-800">${info.label}</span>
-            </div>
-            <div class="grid grid-cols-2 gap-2 text-xs">
-              ${v.weight != null ? `<div><span class="text-gray-400">가중치:</span> <strong>${v.weight}%</strong></div>` : ''}
-              ${v.target != null ? `<div><span class="text-gray-400">목표:</span> <strong>${v.target}</strong></div>` : ''}
-              ${v.min != null ? `<div><span class="text-gray-400">최소:</span> ${v.min}</div>` : ''}
-              ${v.max != null ? `<div><span class="text-gray-400">최대:</span> ${v.max}</div>` : ''}
-              ${typeof val !== 'object' ? `<div><span class="text-gray-400">값:</span> <strong>${val}</strong></div>` : ''}
-            </div>
-            ${v.description ? `<div class="text-[10px] text-gray-500 mt-1">${escapeHtml(v.description)}</div>` : ''}
-          </div>`;
-        }).join('')}
+    <div class="bg-${comp.color}-50 rounded-xl p-4 border border-${comp.color}-200">
+      <div class="flex items-center gap-2 mb-2">
+        <div class="w-8 h-8 rounded-lg bg-${comp.color}-100 flex items-center justify-center"><i class="fas ${comp.icon} text-${comp.color}-600"></i></div>
+        <div>
+          <div class="text-xs text-gray-500">완료 기준 (completion_basis)</div>
+          <div class="font-bold text-${comp.color}-800">${comp.label}</div>
+        </div>
       </div>
-      ${!Object.keys(metrics).length ? '<div class="text-center text-gray-400 py-3 text-sm">지표 항목이 설정되지 않았습니다.</div>' : ''}
+      <div class="text-xs text-${comp.color}-700 leading-relaxed">${comp.desc}</div>
+      <div class="mt-2 text-[10px] text-gray-400 font-mono bg-white rounded px-2 py-1">${p.completion_basis}</div>
     </div>
 
-    <details class="bg-gray-50 rounded-lg border">
-      <summary class="px-4 py-2 text-xs text-gray-500 cursor-pointer hover:bg-gray-100"><i class="fas fa-code mr-1"></i>JSON 원문</summary>
-      <pre class="px-4 pb-3 bg-gray-900 text-green-300 rounded-b-lg p-3 text-xs overflow-x-auto max-h-32 font-mono">${escapeHtml(metricsDisplay)}</pre>
-    </details>
+    <div class="bg-${region.color}-50 rounded-xl p-4 border border-${region.color}-200">
+      <div class="flex items-center gap-2 mb-2">
+        <div class="w-8 h-8 rounded-lg bg-${region.color}-100 flex items-center justify-center"><i class="fas ${region.icon} text-${region.color}-600"></i></div>
+        <div>
+          <div class="text-xs text-gray-500">지역 접수 기준 (region_intake_basis)</div>
+          <div class="font-bold text-${region.color}-800">${region.label}</div>
+        </div>
+      </div>
+      <div class="text-xs text-${region.color}-700 leading-relaxed">${region.desc}</div>
+      <div class="mt-2 text-[10px] text-gray-400 font-mono bg-white rounded px-2 py-1">${p.region_intake_basis}</div>
+    </div>
 
-    <div class="bg-purple-50 rounded-lg p-3 text-xs text-purple-700 leading-relaxed">
-      <i class="fas fa-info-circle mr-1"></i><strong>적용 범위:</strong> 활성화된 지표 정책의 KPI 항목이 대시보드와 성과 리포트에 반영됩니다. 각 항목의 가중치 합이 100%가 되도록 설정하세요.
+    <div class="bg-yellow-50 rounded-lg p-3 text-xs text-yellow-700 leading-relaxed">
+      <i class="fas fa-lightbulb mr-1"></i><strong>영향:</strong> 이 설정에 따라 대시보드의 '완료율', '일일 통계', '지역별 접수 건수' 등이 다르게 산출됩니다. 변경 시 과거 데이터의 통계도 소급 변경됩니다.
     </div>
     ${p.created_at ? `<div class="text-[11px] text-gray-400 text-right">생성: ${new Date(p.created_at).toLocaleString('ko-KR')}</div>` : ''}
   </div>`;
 
-  showModal(`<i class="fas fa-chart-bar mr-2 text-purple-600"></i>지표 정책 상세 — ${escapeHtml(p.name)}`, content,
-    `<button onclick="clonePolicy('metrics',${p.metrics_policy_id});closeModal()" class="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm"><i class="fas fa-copy mr-1"></i>복제</button>
-     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>`, { large: true });
+  showModal(`<i class="fas fa-chart-bar mr-2 text-purple-600"></i>지표 산출 기준 상세 — #${p.metrics_policy_id}`, content,
+    `<button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>`, { large: true });
 }
 
-// ── 새 지표 정책 ──
+// ── 새 지표 정책 생성 ──
 function showNewMetricsPolicyModal() {
-  const defaultMetrics = [
-    { key: 'completion_rate', label: '완료율 (%)', defaultWeight: 30, defaultTarget: 95 },
-    { key: 'response_time', label: '응답 시간 (시간)', defaultWeight: 20, defaultTarget: 24 },
-    { key: 'customer_satisfaction', label: '고객 만족도 (점)', defaultWeight: 25, defaultTarget: 4.5 },
-    { key: 'revenue', label: '매출 (원)', defaultWeight: 15, defaultTarget: 10000000 },
-    { key: 'order_count', label: '주문 건수', defaultWeight: 10, defaultTarget: 50 },
-  ];
-
   const content = `<div class="space-y-4">
-    <div class="bg-purple-50 rounded-lg p-3 text-xs text-purple-700"><i class="fas fa-info-circle mr-1"></i>새 버전을 생성하면 기존 활성 지표 정책은 자동 비활성화됩니다.</div>
-    <div><label class="block text-xs text-gray-600 mb-1 font-semibold">정책명 *</label>
-      <input id="mp-name" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="예: 2024 H2 지표 정책"></div>
+    <div class="bg-purple-50 rounded-lg p-3 text-xs text-purple-700"><i class="fas fa-info-circle mr-1"></i>새 정책을 생성하면 기존 활성 정책은 자동으로 비활성화됩니다.</div>
 
     <div class="bg-gray-50 rounded-lg p-4 border">
-      <div class="flex items-center justify-between mb-3">
-        <div class="text-xs font-semibold text-gray-600"><i class="fas fa-chart-bar mr-1"></i>KPI 지표 설정</div>
-        <div class="text-xs text-gray-400">가중치 합계: <strong id="mp-weight-total" class="text-purple-700">100</strong>%</div>
-      </div>
-      <div class="space-y-2" id="mp-metrics-list">
-        ${defaultMetrics.map((m, i) => `
-          <div class="flex items-center gap-2 bg-white rounded-lg p-2 border" id="mp-row-${i}">
-            <input type="checkbox" class="mp-chk w-4 h-4 rounded text-purple-600" data-idx="${i}" checked onchange="_mpUpdateWeight()">
-            <span class="text-xs font-medium w-32 shrink-0">${m.label}</span>
-            <div class="flex-1 grid grid-cols-3 gap-2">
-              <div><label class="text-[9px] text-gray-400">가중치(%)</label><input type="number" id="mp-w-${i}" class="w-full border rounded px-2 py-1 text-xs text-center" value="${m.defaultWeight}" min="0" max="100" oninput="_mpUpdateWeight()"></div>
-              <div><label class="text-[9px] text-gray-400">목표</label><input type="number" id="mp-t-${i}" class="w-full border rounded px-2 py-1 text-xs text-center" value="${m.defaultTarget}" step="any"></div>
-              <div><label class="text-[9px] text-gray-400">설명</label><input type="text" id="mp-d-${i}" class="w-full border rounded px-2 py-1 text-xs" placeholder="선택사항"></div>
-            </div>
-          </div>`).join('')}
+      <div class="text-xs font-semibold text-gray-600 mb-3"><i class="fas fa-flag-checkered mr-1"></i>완료 기준 (completion_basis) *</div>
+      <p class="text-[10px] text-gray-400 mb-2">주문이 "완료"로 카운팅되는 시점을 결정합니다.</p>
+      <div class="space-y-2">
+        <label class="flex items-start gap-2 p-2 rounded-lg bg-white border cursor-pointer hover:bg-blue-50 has-[:checked]:bg-blue-50 has-[:checked]:border-blue-300">
+          <input type="radio" name="mp-completion" value="SUBMITTED_AT" checked class="mt-0.5 text-blue-600">
+          <div><div class="text-sm font-medium">보고서 제출일</div><div class="text-[10px] text-gray-500">팀장이 보고서를 제출한 시점. 가장 빠른 반영.</div></div>
+        </label>
+        <label class="flex items-start gap-2 p-2 rounded-lg bg-white border cursor-pointer hover:bg-blue-50 has-[:checked]:bg-blue-50 has-[:checked]:border-blue-300">
+          <input type="radio" name="mp-completion" value="HQ_APPROVED_AT" class="mt-0.5 text-blue-600">
+          <div><div class="text-sm font-medium">HQ 승인일</div><div class="text-[10px] text-gray-500">본사(HQ)가 최종 승인한 시점. 품질 검증 후 카운팅.</div></div>
+        </label>
+        <label class="flex items-start gap-2 p-2 rounded-lg bg-white border cursor-pointer hover:bg-blue-50 has-[:checked]:bg-blue-50 has-[:checked]:border-blue-300">
+          <input type="radio" name="mp-completion" value="SETTLEMENT_CONFIRMED_AT" class="mt-0.5 text-blue-600">
+          <div><div class="text-sm font-medium">정산 확정일</div><div class="text-[10px] text-gray-500">정산이 확정된 시점. 재무적으로 가장 보수적.</div></div>
+        </label>
       </div>
     </div>
 
-    <details class="bg-gray-50 rounded-lg border">
-      <summary class="px-4 py-2 text-xs text-gray-500 cursor-pointer hover:bg-gray-100"><i class="fas fa-code mr-1"></i>고급: JSON 직접 편집</summary>
-      <textarea id="mp-raw-json" rows="4" class="w-full border-0 rounded-b-lg px-4 py-2 text-xs font-mono" placeholder='{"completion_rate":{"weight":30,"target":95}}'></textarea>
-    </details>
+    <div class="bg-gray-50 rounded-lg p-4 border">
+      <div class="text-xs font-semibold text-gray-600 mb-3"><i class="fas fa-building mr-1"></i>지역 접수 기준 (region_intake_basis) *</div>
+      <p class="text-[10px] text-gray-400 mb-2">지역 통계에서 "접수"로 카운팅되는 시점을 결정합니다.</p>
+      <div class="space-y-2">
+        <label class="flex items-start gap-2 p-2 rounded-lg bg-white border cursor-pointer hover:bg-emerald-50 has-[:checked]:bg-emerald-50 has-[:checked]:border-emerald-300">
+          <input type="radio" name="mp-region" value="DISTRIBUTED_AT" checked class="mt-0.5 text-emerald-600">
+          <div><div class="text-sm font-medium">배분일</div><div class="text-[10px] text-gray-500">주문이 지역총판에 배분된 시점.</div></div>
+        </label>
+        <label class="flex items-start gap-2 p-2 rounded-lg bg-white border cursor-pointer hover:bg-emerald-50 has-[:checked]:bg-emerald-50 has-[:checked]:border-emerald-300">
+          <input type="radio" name="mp-region" value="REGION_ACCEPT_AT" class="mt-0.5 text-emerald-600">
+          <div><div class="text-sm font-medium">지역 접수일</div><div class="text-[10px] text-gray-500">지역총판이 실제로 접수 확인한 시점.</div></div>
+        </label>
+      </div>
+    </div>
+
+    <div><label class="block text-xs text-gray-600 mb-1 font-semibold">적용 시작일</label>
+      <input id="mp-from" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${new Date().toISOString().split('T')[0]}"></div>
   </div>`;
 
-  showModal('<i class="fas fa-plus mr-2 text-purple-600"></i>새 지표 정책 버전', content, `
+  showModal('<i class="fas fa-plus mr-2 text-purple-600"></i>새 지표 산출 기준 정책', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitNewMetricsPolicy()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">생성</button>`, { large: true });
 }
 
-window._mpMetricKeys = ['completion_rate', 'response_time', 'customer_satisfaction', 'revenue', 'order_count'];
-
-function _mpUpdateWeight() {
-  let total = 0;
-  for (let i = 0; i < 5; i++) {
-    const chk = document.querySelector(`.mp-chk[data-idx="${i}"]`);
-    if (chk?.checked) total += +(document.getElementById(`mp-w-${i}`)?.value || 0);
-  }
-  const el = document.getElementById('mp-weight-total');
-  if (el) { el.textContent = total; el.className = total === 100 ? 'text-green-700 font-bold' : 'text-red-600 font-bold'; }
-}
-
 async function submitNewMetricsPolicy() {
-  const name = document.getElementById('mp-name')?.value;
-  if (!name) { showToast('정책명을 입력하세요.', 'warning'); return; }
+  const completion = document.querySelector('input[name="mp-completion"]:checked')?.value;
+  const region = document.querySelector('input[name="mp-region"]:checked')?.value;
+  if (!completion || !region) { showToast('기준을 모두 선택하세요.', 'warning'); return; }
 
-  let metrics_json;
-  const raw = document.getElementById('mp-raw-json')?.value?.trim();
-  if (raw) {
-    try { JSON.parse(raw); metrics_json = raw; } catch { showToast('JSON 형식이 올바르지 않습니다.', 'warning'); return; }
-  } else {
-    const obj = {};
-    for (let i = 0; i < 5; i++) {
-      const chk = document.querySelector(`.mp-chk[data-idx="${i}"]`);
-      if (!chk?.checked) continue;
-      const key = window._mpMetricKeys[i];
-      obj[key] = {
-        weight: +(document.getElementById(`mp-w-${i}`)?.value || 0),
-        target: +(document.getElementById(`mp-t-${i}`)?.value || 0),
-      };
-      const desc = document.getElementById(`mp-d-${i}`)?.value?.trim();
-      if (desc) obj[key].description = desc;
-    }
-    metrics_json = JSON.stringify(obj);
-  }
-
-  await _policyApiAction('POST', '/stats/policies/metrics', { name, metrics_json }, { successMsg: d => `새 버전 v${d.version} 생성 완료` });
+  await _policyApiAction('POST', '/stats/policies/metrics', {
+    completion_basis: completion,
+    region_intake_basis: region,
+    effective_from: document.getElementById('mp-from')?.value,
+  }, { successMsg: '새 지표 정책 생성 완료' });
 }
 
 // ── 수정 모달 ──
 function showEditMetricsPolicyModal(p) {
-  let metrics = {};
-  try { metrics = typeof p.metrics_json === 'string' ? JSON.parse(p.metrics_json) : (p.metrics_json || {}); } catch {}
-
   const content = `<div class="space-y-4">
     <div class="bg-gray-50 rounded-lg p-3 text-sm flex items-center gap-3">
       <span>정책 ID: <strong>#${p.metrics_policy_id}</strong></span>
-      <span class="status-badge bg-purple-100 text-purple-700">v${p.version}</span>
+      <span class="${p.is_active?'text-green-600 font-semibold':'text-gray-400'}">${p.is_active?'활성':'비활성'}</span>
     </div>
-    <div><label class="block text-xs text-gray-600 mb-1 font-semibold">정책명</label>
-      <input id="mp-edit-name" class="w-full border rounded-lg px-3 py-2 text-sm" value="${escapeHtml(p.name)}"></div>
-    <div><label class="block text-xs text-gray-600 mb-1 font-semibold">지표 JSON</label>
-      <textarea id="mp-edit-json" rows="8" class="w-full border rounded-lg px-3 py-2 text-xs font-mono">${escapeHtml(JSON.stringify(metrics, null, 2))}</textarea>
-      <p class="text-[10px] text-gray-400 mt-1">JSON 형식으로 직접 편집하세요. 각 지표에 weight, target, description을 설정할 수 있습니다.</p>
+
+    <div>
+      <label class="block text-xs text-gray-600 mb-1 font-semibold">완료 기준</label>
+      <select id="mp-edit-completion" class="w-full border rounded-lg px-3 py-2 text-sm">
+        <option value="SUBMITTED_AT" ${p.completion_basis==='SUBMITTED_AT'?'selected':''}>보고서 제출일</option>
+        <option value="HQ_APPROVED_AT" ${p.completion_basis==='HQ_APPROVED_AT'?'selected':''}>HQ 승인일</option>
+        <option value="SETTLEMENT_CONFIRMED_AT" ${p.completion_basis==='SETTLEMENT_CONFIRMED_AT'?'selected':''}>정산 확정일</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs text-gray-600 mb-1 font-semibold">지역 접수 기준</label>
+      <select id="mp-edit-region" class="w-full border rounded-lg px-3 py-2 text-sm">
+        <option value="DISTRIBUTED_AT" ${p.region_intake_basis==='DISTRIBUTED_AT'?'selected':''}>배분일</option>
+        <option value="REGION_ACCEPT_AT" ${p.region_intake_basis==='REGION_ACCEPT_AT'?'selected':''}>지역 접수일</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs text-gray-600 mb-1 font-semibold">적용일</label>
+      <input id="mp-edit-from" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${p.effective_from ? p.effective_from.split(' ')[0] : ''}">
     </div>
   </div>`;
 
-  showModal(`지표 정책 수정 — v${p.version}`, content, `
+  showModal(`지표 정책 수정 — #${p.metrics_policy_id}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
-    <button onclick="submitEditMetricsPolicy(${p.metrics_policy_id})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`, { large: true });
+    <button onclick="submitEditMetricsPolicy(${p.metrics_policy_id})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`);
 }
 
 async function submitEditMetricsPolicy(id) {
-  const raw = document.getElementById('mp-edit-json')?.value?.trim();
-  if (raw) { try { JSON.parse(raw); } catch { showToast('JSON 형식이 올바르지 않습니다.', 'warning'); return; } }
   await _policyApiAction('PUT', `/stats/policies/metrics/${id}`, {
-    name: document.getElementById('mp-edit-name')?.value,
-    metrics_json: raw,
+    completion_basis: document.getElementById('mp-edit-completion')?.value,
+    region_intake_basis: document.getElementById('mp-edit-region')?.value,
+    effective_from: document.getElementById('mp-edit-from')?.value,
   }, { successMsg: '수정 완료' });
 }
 
