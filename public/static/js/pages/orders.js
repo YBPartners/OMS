@@ -43,6 +43,10 @@ async function renderOrders(el) {
             <option value="">전체</option>
             ${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${params.get('status') === k ? 'selected' : ''}>${v.label}</option>`).join('')}
           </select></div>
+        <div><label class="block text-xs text-gray-500 mb-1">채널</label>
+          <select id="f-channel" class="border rounded-lg px-3 py-2 text-sm" onchange="applyOrderFilter()">
+            <option value="">전체</option>
+          </select></div>
         <div><label class="block text-xs text-gray-500 mb-1">검색</label>
           <input id="f-search" class="border rounded-lg px-3 py-2 text-sm w-48" placeholder="고객명/주소/주문번호" value="${params.get('search') || ''}" onkeypress="if(event.key==='Enter')applyOrderFilter()"></div>
         <div><label class="block text-xs text-gray-500 mb-1">시작일</label>
@@ -68,7 +72,7 @@ async function renderOrders(el) {
                   ${orderListState.selected.size === (res.orders || []).length && res.orders?.length > 0 ? 'checked' : ''}
                   onchange="toggleAllOrderSelection(this.checked)" data-tooltip="전체 선택/해제">
               </th>
-              <th class="px-3 py-3 text-left">ID</th><th class="px-3 py-3 text-left">주문번호</th><th class="px-3 py-3 text-left">고객명</th>
+              <th class="px-3 py-3 text-left">ID</th><th class="px-3 py-3 text-left">주문번호</th><th class="px-3 py-3 text-left">채널</th><th class="px-3 py-3 text-left">고객명</th>
               <th class="px-3 py-3 text-left">주소</th><th class="px-3 py-3 text-right">금액</th><th class="px-3 py-3 text-left">지역총판</th>
               <th class="px-3 py-3 text-left">팀장</th><th class="px-3 py-3 text-center">상태</th><th class="px-3 py-3 text-left">요청일</th>
               <th class="px-3 py-3 text-center">진행</th><th class="px-3 py-3 text-center w-10"></th>
@@ -87,6 +91,7 @@ async function renderOrders(el) {
                   <td class="px-3 py-3 text-gray-400 font-mono text-xs"
                       data-preview="order" data-preview-id="${o.order_id}" data-preview-title="주문 #${o.order_id}">${o.order_id}</td>
                   <td class="px-3 py-3 font-mono text-xs">${o.external_order_no || '<span class="text-gray-400">미확정</span>'}</td>
+                  <td class="px-3 py-3 text-xs">${o.channel_name ? `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100"><i class="fas fa-satellite-dish text-[10px]"></i>${o.channel_name}</span>` : '<span class="text-gray-300">-</span>'}</td>
                   <td class="px-3 py-3 font-medium">${o.customer_name || '-'}</td>
                   <td class="px-3 py-3 text-gray-600 max-w-[180px] truncate" title="${o.address_text || ''}">${o.address_text || '-'}</td>
                   <td class="px-3 py-3 text-right font-medium">${formatAmount(o.base_amount)}</td>
@@ -103,7 +108,7 @@ async function renderOrders(el) {
                   </td>
                 </tr>`;
               }).join('')}
-              ${(res.orders || []).length === 0 ? '<tr><td colspan="12" class="px-4 py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>' : ''}
+              ${(res.orders || []).length === 0 ? '<tr><td colspan="13" class="px-4 py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>' : ''}
             </tbody>
           </table>
         </div>
@@ -120,6 +125,24 @@ async function renderOrders(el) {
 
   // 배치 액션 바
   updateOrderBatchBar();
+
+  // 채널 필터 드롭다운 비동기 로드
+  (async () => {
+    try {
+      const chRes = await api('GET', '/hr/channels?active_only=1');
+      const chSelect = document.getElementById('f-channel');
+      if (chSelect && chRes?.channels) {
+        const savedChannelId = params.get('channel_id') || '';
+        chRes.channels.forEach(ch => {
+          const opt = document.createElement('option');
+          opt.value = ch.channel_id;
+          opt.textContent = ch.name;
+          if (String(ch.channel_id) === savedChannelId) opt.selected = true;
+          chSelect.appendChild(opt);
+        });
+      }
+    } catch(e) { /* 채널 로드 실패 — 필터만 무시 */ }
+  })();
 }
 
 // ─── 행 클릭 → 드로어 상세 ───
@@ -153,6 +176,14 @@ async function showOrderDetailDrawer(orderId) {
 
       <!-- 기본 정보 -->
       <div class="grid grid-cols-2 gap-3">
+        <div class="bg-gray-50 rounded-lg p-3">
+          <div class="text-[10px] text-gray-400 uppercase">주문 채널</div>
+          <div class="text-sm mt-1 font-medium">${o.channel_name ? `<span class="inline-flex items-center gap-1"><i class="fas fa-satellite-dish text-blue-500"></i>${o.channel_name}</span>` : '<span class="text-gray-400">미지정</span>'}</div>
+        </div>
+        <div class="bg-gray-50 rounded-lg p-3">
+          <div class="text-[10px] text-gray-400 uppercase">서비스 유형</div>
+          <div class="text-sm mt-1">${getServiceTypeBadge(o.service_type)}</div>
+        </div>
         <div class="bg-gray-50 rounded-lg p-3">
           <div class="text-[10px] text-gray-400 uppercase">주소</div>
           <div class="text-sm mt-1">${o.address_text || '-'}</div>
@@ -324,7 +355,7 @@ function showBatchOrderSummary() {
 }
 
 function applyOrderFilter() {
-  window._orderFilters = { status: document.getElementById('f-status')?.value, search: document.getElementById('f-search')?.value, from: document.getElementById('f-from')?.value, to: document.getElementById('f-to')?.value, page: 1 };
+  window._orderFilters = { status: document.getElementById('f-status')?.value, channel_id: document.getElementById('f-channel')?.value, search: document.getElementById('f-search')?.value, from: document.getElementById('f-from')?.value, to: document.getElementById('f-to')?.value, page: 1 };
   Object.keys(window._orderFilters).forEach(k => { if (!window._orderFilters[k]) delete window._orderFilters[k]; });
   orderListState.selected.clear();
   renderContent();
@@ -347,6 +378,8 @@ async function showOrderDetail(orderId) {
         <div><label class="text-xs text-gray-500">행정동코드</label><div class="font-mono text-xs">${o.admin_dong_code || '-'}</div></div>
         <div><label class="text-xs text-gray-500">금액</label><div class="font-bold text-blue-600">${formatAmount(o.base_amount)}</div></div>
         <div><label class="text-xs text-gray-500">상태</label><div>${statusBadge(o.status)}</div></div>
+        <div><label class="text-xs text-gray-500">주문 채널</label><div class="font-medium">${o.channel_name || '<span class="text-gray-400">미지정</span>'}</div></div>
+        <div><label class="text-xs text-gray-500">서비스 유형</label><div>${getServiceTypeBadge(o.service_type)}</div></div>
         <div><label class="text-xs text-gray-500">지역총판</label><div>${o.region_name || '-'}</div></div>
         <div><label class="text-xs text-gray-500">배정팀장</label><div>${o.team_leader_name || '-'}</div></div>
         <div><label class="text-xs text-gray-500">요청일</label><div>${o.requested_date || '-'}</div></div>
@@ -385,15 +418,54 @@ async function showOrderDetail(orderId) {
     <button onclick="closeModal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">닫기</button>`, { large: true });
 }
 
+// ─── 서비스 유형 정의 (에어컨 세척 도메인) ───
+const SERVICE_TYPES = [
+  { code: 'WALL_AC', label: '벽걸이 에어컨', icon: 'fa-wind' },
+  { code: 'STAND_AC', label: '스탠드 에어컨', icon: 'fa-tower-broadcast' },
+  { code: 'CEILING_AC', label: '천장형 에어컨', icon: 'fa-up-long' },
+  { code: 'SYSTEM_AC', label: '시스템 에어컨', icon: 'fa-building' },
+  { code: 'WINDOW_AC', label: '창문형 에어컨', icon: 'fa-window-maximize' },
+  { code: 'MULTI_AC', label: '멀티 에어컨', icon: 'fa-layer-group' },
+  { code: 'DEFAULT', label: '기타/미분류', icon: 'fa-question' },
+];
+
+function getServiceTypeLabel(code) {
+  const st = SERVICE_TYPES.find(s => s.code === code);
+  return st ? st.label : (code || '미분류');
+}
+function getServiceTypeBadge(code) {
+  const st = SERVICE_TYPES.find(s => s.code === code);
+  if (!st) return `<span class="text-xs text-gray-400">미분류</span>`;
+  return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-violet-50 text-violet-700 border border-violet-200"><i class="fas ${st.icon}"></i>${st.label}</span>`;
+}
+
 // ─── 수동 등록 모달 ───
-function showNewOrderModal() {
+async function showNewOrderModal() {
+  // 활성 채널 목록을 API에서 가져옴
+  const channelRes = await api('GET', '/hr/channels?active_only=1');
+  const channels = channelRes?.channels || [];
+
   const content = `
     <form id="new-order-form" class="space-y-4">
       <div class="grid grid-cols-2 gap-4">
-        <div><label class="block text-xs text-gray-500 mb-1">외부주문번호</label><input name="external_order_no" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="AJD-2026-XXXX"></div>
-        <div><label class="block text-xs text-gray-500 mb-1">서비스유형</label><input name="service_type" value="DEFAULT" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
+        <!-- 주문 채널 (필수) -->
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">주문 채널 *</label>
+          <select name="channel_id" required class="w-full border rounded-lg px-3 py-2 text-sm">
+            ${channels.map(ch => `<option value="${ch.channel_id}" ${ch.code === 'LOCAL' ? 'selected' : ''}>${ch.name} (${ch.code})</option>`).join('')}
+          </select>
+        </div>
+        <!-- 서비스 유형 (선택형) -->
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">서비스 유형 *</label>
+          <select name="service_type" required class="w-full border rounded-lg px-3 py-2 text-sm">
+            ${SERVICE_TYPES.map(st => `<option value="${st.code}">${st.label}</option>`).join('')}
+          </select>
+        </div>
+        <div><label class="block text-xs text-gray-500 mb-1">외부주문번호</label><input name="external_order_no" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="채널에서 부여한 주문번호 (선택)"></div>
         <div><label class="block text-xs text-gray-500 mb-1">고객명 *</label><input name="customer_name" required class="w-full border rounded-lg px-3 py-2 text-sm"></div>
-        <div><label class="block text-xs text-gray-500 mb-1">연락처</label><input name="customer_phone" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">연락처 *</label><input name="customer_phone" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="01012345678"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">메모</label><input name="memo" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="특이사항 (선택)"></div>
 
         <!-- 주소 검색 영역 -->
         <div class="col-span-2">
@@ -430,8 +502,8 @@ function showNewOrderModal() {
 
         <input type="hidden" name="admin_dong_code" id="new-order-dong-code">
 
-        <div><label class="block text-xs text-gray-500 mb-1">금액 *</label><input name="base_amount" type="number" required class="w-full border rounded-lg px-3 py-2 text-sm"></div>
-        <div><label class="block text-xs text-gray-500 mb-1">요청일</label><input name="requested_date" type="date" value="${new Date().toISOString().split('T')[0]}" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">금액(원) *</label><input name="base_amount" type="number" min="10000" step="1000" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="최소 10,000원"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">요청일 *</label><input name="requested_date" type="date" required value="${new Date().toISOString().split('T')[0]}" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
       </div>
     </form>`;
   showModal('주문 수동 등록', content, `
@@ -507,8 +579,18 @@ async function matchAdminDongCode(sido, sigungu, dong) {
 async function submitNewOrder() {
   const form = document.getElementById('new-order-form');
   const data = Object.fromEntries(new FormData(form));
+
+  // 프론트엔드 검증
+  if (!data.customer_name?.trim()) { showToast('고객명을 입력해주세요.', 'warning'); return; }
+  if (!data.customer_phone?.trim()) { showToast('연락처를 입력해주세요.', 'warning'); return; }
   if (!data.address_text) { showToast('주소를 검색해주세요.', 'warning'); return; }
+  if (!data.channel_id) { showToast('주문 채널을 선택해주세요.', 'warning'); return; }
+
   data.base_amount = Number(data.base_amount);
+  data.channel_id = Number(data.channel_id);
+
+  if (data.base_amount < 10000) { showToast('금액은 최소 10,000원 이상이어야 합니다.', 'warning'); return; }
+
   const res = await api('POST', '/orders', data);
   if (res?._status === 201) { showToast('주문이 등록되었습니다.', 'success'); closeModal(); renderContent(); }
   else showToast(res?.error || res?.warning || '등록 실패', 'error');
@@ -925,6 +1007,8 @@ async function exportOrdersCSV() {
   exportToCSV(res.orders, [
     { label: '주문ID', key: 'order_id' },
     { label: '외부주문번호', key: 'external_order_no' },
+    { label: '주문채널', key: 'channel_name' },
+    { label: '서비스유형', value: (o) => getServiceTypeLabel(o.service_type) },
     { label: '고객명', key: 'customer_name' },
     { label: '연락처', key: 'customer_phone' },
     { label: '주소', key: 'address_text' },
@@ -953,6 +1037,8 @@ async function exportOrdersExcel() {
   exportToExcel(res.orders, [
     { label: '주문ID', key: 'order_id' },
     { label: '외부주문번호', key: 'external_order_no' },
+    { label: '주문채널', key: 'channel_name' },
+    { label: '서비스유형', value: (o) => getServiceTypeLabel(o.service_type) },
     { label: '고객명', key: 'customer_name' },
     { label: '연락처', key: 'customer_phone' },
     { label: '주소', key: 'address_text' },

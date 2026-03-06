@@ -131,3 +131,14 @@ OMS.SEVERITY = {
   MEDIUM: { label: '보통', color: 'bg-yellow-100 text-yellow-700 border-yellow-300' },
   LOW: { label: '낮음', color: 'bg-gray-100 text-gray-600 border-gray-300' },
 };
+
+// 서비스 유형 (에어컨 세척 도메인) — 글로벌 상수
+OMS.SERVICE_TYPES = {
+  WALL_AC: { label: '벽걸이 에어컨', icon: 'fa-wind' },
+  STAND_AC: { label: '스탠드 에어컨', icon: 'fa-tower-broadcast' },
+  CEILING_AC: { label: '천장형 에어컨', icon: 'fa-up-long' },
+  SYSTEM_AC: { label: '시스템 에어컨', icon: 'fa-building' },
+  WINDOW_AC: { label: '창문형 에어컨', icon: 'fa-window-maximize' },
+  MULTI_AC: { label: '멀티 에어컨', icon: 'fa-layer-group' },
+  DEFAULT: { label: '기타/미분류', icon: 'fa-question' },
+};

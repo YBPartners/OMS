@@ -81,8 +81,10 @@ export function mountCrud(router: Hono<Env>) {
     const order = await db.prepare(`
       SELECT o.*, od.region_org_id, org.name as region_name, od.distributed_at, od.distribution_policy_version,
              oa.team_leader_id, tl.name as team_leader_name, oa.assigned_at, oa.status as assignment_status,
-             team_org.name as team_name, team_org.org_id as team_org_id
+             team_org.name as team_name, team_org.org_id as team_org_id,
+             ch.name as channel_name, ch.code as channel_code
       FROM orders o
+      LEFT JOIN order_channels ch ON o.channel_id = ch.channel_id
       LEFT JOIN order_distributions od ON o.order_id = od.order_id AND od.status = 'ACTIVE'
       LEFT JOIN organizations org ON od.region_org_id = org.org_id
       LEFT JOIN order_assignments oa ON o.order_id = oa.order_id AND oa.status != 'REASSIGNED'
@@ -136,10 +138,25 @@ export function mountCrud(router: Hono<Env>) {
     let body: any;
     try { body = await c.req.json(); } catch { return c.json({ error: '잘못된 요청 형식입니다.' }, 400); }
 
-    if (!body.address_text) return c.json({ error: '주소(address_text)는 필수입니다.' }, 400);
-    if (body.base_amount !== undefined && (isNaN(Number(body.base_amount)) || Number(body.base_amount) < 0)) {
-      return c.json({ error: '금액은 0 이상의 숫자여야 합니다.' }, 400);
+    // ★ 필수 필드 검증 강화
+    if (!body.customer_name?.trim()) return c.json({ error: '고객명(customer_name)은 필수입니다.' }, 400);
+    if (!body.address_text?.trim()) return c.json({ error: '주소(address_text)는 필수입니다.' }, 400);
+    if (!body.customer_phone?.trim()) return c.json({ error: '연락처(customer_phone)는 필수입니다.' }, 400);
+    if (body.base_amount === undefined || body.base_amount === null || isNaN(Number(body.base_amount)) || Number(body.base_amount) < 10000) {
+      return c.json({ error: '금액은 10,000원 이상의 숫자여야 합니다.' }, 400);
     }
+
+    // ★ 채널 유효성 검증
+    const channelId = Number(body.channel_id) || null;
+    if (channelId) {
+      const ch = await db.prepare('SELECT channel_id, is_active FROM order_channels WHERE channel_id = ?').bind(channelId).first();
+      if (!ch) return c.json({ error: '유효하지 않은 채널입니다.' }, 400);
+      if (!(ch as any).is_active) return c.json({ error: '비활성화된 채널입니다. 활성 채널을 선택하세요.' }, 400);
+    }
+
+    // ★ 서비스유형 유효성 검증
+    const validServiceTypes = ['WALL_AC', 'STAND_AC', 'CEILING_AC', 'SYSTEM_AC', 'WINDOW_AC', 'MULTI_AC', 'DEFAULT'];
+    const serviceType = validServiceTypes.includes(body.service_type) ? body.service_type : 'DEFAULT';
 
     const fpData = `${body.address_text}|${body.requested_date}|${body.service_type || 'DEFAULT'}|${body.base_amount || 0}`;
     const fingerprint = await generateFingerprint(fpData);
@@ -198,16 +215,21 @@ export function mountCrud(router: Hono<Env>) {
         const fpData = `${row.address_text}|${row.requested_date}|${row.service_type || 'DEFAULT'}|${row.base_amount || 0}`;
         const fingerprint = await generateFingerprint(fpData);
 
+        // ★ 배치 임포트: channel_id, service_type 유효성 검증 추가
+        const validServiceTypes = ['WALL_AC', 'STAND_AC', 'CEILING_AC', 'SYSTEM_AC', 'WINDOW_AC', 'MULTI_AC', 'DEFAULT'];
+        const rowServiceType = validServiceTypes.includes(row.service_type) ? row.service_type : 'DEFAULT';
+        const rowChannelId = row.channel_id ? Number(row.channel_id) : null;
+
         await db.prepare(`
           INSERT INTO orders (batch_id, external_order_no, source_fingerprint, service_type, customer_name, customer_phone,
-            address_text, address_detail, admin_dong_code, requested_date, base_amount, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
+            address_text, address_detail, admin_dong_code, requested_date, base_amount, channel_id, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
         `).bind(
-          batchId, row.external_order_no || null, fingerprint, row.service_type || 'DEFAULT',
+          batchId, row.external_order_no || null, fingerprint, rowServiceType,
           row.customer_name || null, row.customer_phone || null,
           row.address_text, row.address_detail || null,
           row.admin_dong_code || null, row.requested_date || new Date().toISOString().split('T')[0],
-          row.base_amount || 0
+          row.base_amount || 0, rowChannelId
         ).run();
         successCount++;
       } catch (e: any) {

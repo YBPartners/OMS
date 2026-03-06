@@ -39,6 +39,7 @@ export interface Env {
     DB: D1Database;
     SESSION_CACHE: KVNamespace;
     RESEND_API_KEY?: string;
+    ASSETS?: Fetcher;
   };
   Variables: {
     user: SessionUser | null;

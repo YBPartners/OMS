@@ -80,12 +80,27 @@ app.route('/api/audit', auditRoutes);
 app.route('/api/system', systemRoutes);
 
 // ─── 헬스체크 ───
-app.get('/api/health', (c) => c.json({ status: 'ok', version: '16.0.0', system: '와이비 OMS' }));
+app.get('/api/health', (c) => c.json({ status: 'ok', version: '19.1.0', system: '와이비 OMS' }));
+
+// ─── Service Worker (루트 경로 서빙 필수) ───
+app.get('/sw.js', async (c) => {
+  // Cloudflare Pages에서 정적 파일은 자동 서빙되지만,
+  // _worker.js가 모든 요청을 가로채므로 SW는 명시적으로 처리
+  try {
+    const asset = await c.env.ASSETS?.fetch(new URL('/sw.js', c.req.url));
+    if (asset && asset.status === 200) {
+      return new Response(asset.body, {
+        headers: { 'Content-Type': 'application/javascript', 'Service-Worker-Allowed': '/' }
+      });
+    }
+  } catch(e) { /* fallback below */ }
+  return c.notFound();
+});
 
 // ─── SPA 라우팅: 모든 페이지 요청에 index.html 반환 ───
 app.get('*', async (c) => {
   const path = c.req.path;
-  if (path.startsWith('/api/') || path.startsWith('/static/')) {
+  if (path.startsWith('/api/') || path.startsWith('/static/') || path === '/sw.js') {
     return c.notFound();
   }
   return c.html(getIndexHtml());

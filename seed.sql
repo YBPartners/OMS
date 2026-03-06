@@ -6,7 +6,7 @@
 INSERT OR IGNORE INTO roles (code, name, description) VALUES
   ('SUPER_ADMIN', '슈퍼관리자', '전권 - 와이비 HQ'),
   ('HQ_OPERATOR', 'HQ 운영자', '본사 운영(수신/배분/대사/최종검수/정산/통계)'),
-  ('REGION_ADMIN', '지역총판 관리자', '지역총판 운영(배정/1차검수/지역정산/통계)'),
+  ('REGION_ADMIN', '파트장', '총판 운영(배정/1차검수/지역정산/통계)'),
   ('TEAM_LEADER', '팀장', '현장 수행/보고서 제출/본인 통계 조회'),
   ('AUDITOR', '감사/조회', '읽기 전용 + 대사/통계 열람');
 
@@ -247,8 +247,9 @@ INSERT OR IGNORE INTO user_roles (user_id, role_id)
 -- 김팀장(7) 대리점에 이팀장(8)을 소속시킴
 INSERT OR IGNORE INTO agency_team_mappings (agency_user_id, team_user_id) VALUES (7, 8);
 
--- 추가 주문 채널 등록
+-- 주문 채널 등록 (에어컨 브랜드 기준 v19.1)
+-- 채널 1(로컬)은 기본 마이그레이션으로 생성됨
 INSERT OR IGNORE INTO order_channels (channel_id, name, code, description, is_active, priority) VALUES
-  (2, 'KT 주문원장', 'KT_ORDERS', 'KT 통신사 주문 채널', 1, 10),
-  (3, 'LG U+ 주문원장', 'LGU_ORDERS', 'LG U+ 통신사 주문 채널', 1, 9),
-  (4, 'SK 주문원장', 'SK_ORDERS', 'SK 통신사 주문 채널', 1, 8);
+  (2, '삼성', 'SAMSUNG', '삼성전자 에어컨 주문 채널', 1, 90),
+  (3, '엘지', 'LG', 'LG전자 에어컨 주문 채널', 1, 80),
+  (4, '캐리어', 'CARRIER', '캐리어 에어컨 주문 채널', 1, 70);
