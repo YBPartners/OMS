@@ -258,6 +258,7 @@ function getIndexHtml(adsenseAccount: string = ''): string {
   <meta name="theme-color" content="#0d9488">
   <meta name="description" content="Airflow - 스마트 주문관리시스템">
   <meta name="google-adsense-account" content="${adsenseAccount}">
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseAccount}" crossorigin="anonymous"></script>
   <link rel="icon" type="image/png" href="/static/img/airflow-logo.png">
   <link rel="apple-touch-icon" href="/static/img/airflow-logo.png">
   <title>Airflow - 주문관리시스템</title>
