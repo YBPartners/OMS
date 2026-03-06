@@ -394,8 +394,42 @@ function showNewOrderModal() {
         <div><label class="block text-xs text-gray-500 mb-1">서비스유형</label><input name="service_type" value="DEFAULT" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
         <div><label class="block text-xs text-gray-500 mb-1">고객명 *</label><input name="customer_name" required class="w-full border rounded-lg px-3 py-2 text-sm"></div>
         <div><label class="block text-xs text-gray-500 mb-1">연락처</label><input name="customer_phone" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
-        <div class="col-span-2"><label class="block text-xs text-gray-500 mb-1">주소 *</label><input name="address_text" required class="w-full border rounded-lg px-3 py-2 text-sm"></div>
-        <div><label class="block text-xs text-gray-500 mb-1">행정동코드</label><input name="admin_dong_code" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="1168010100"></div>
+
+        <!-- 주소 검색 영역 -->
+        <div class="col-span-2">
+          <label class="block text-xs text-gray-500 mb-1">주소 *</label>
+          <div class="flex gap-2">
+            <input name="address_text" id="new-order-address" required readonly
+              class="flex-1 border rounded-lg px-3 py-2 text-sm bg-gray-50 cursor-pointer"
+              placeholder="주소 검색 버튼을 클릭하세요"
+              onclick="openAddressSearch()">
+            <button type="button" onclick="openAddressSearch()"
+              class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition whitespace-nowrap">
+              <i class="fas fa-search mr-1"></i>주소 검색
+            </button>
+          </div>
+        </div>
+
+        <!-- 상세주소 -->
+        <div class="col-span-2">
+          <label class="block text-xs text-gray-500 mb-1">상세주소</label>
+          <input name="address_detail" id="new-order-address-detail"
+            class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="동/호수 등 상세주소 입력">
+        </div>
+
+        <!-- 행정동 자동 매핑 결과 -->
+        <div class="col-span-2" id="address-match-result" style="display:none;">
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div class="flex items-center gap-2 mb-1">
+              <i class="fas fa-map-marker-alt text-blue-600"></i>
+              <span class="text-xs font-semibold text-blue-700">행정동 매칭 결과</span>
+            </div>
+            <div class="text-sm text-blue-800" id="address-match-text">-</div>
+          </div>
+        </div>
+
+        <input type="hidden" name="admin_dong_code" id="new-order-dong-code">
+
         <div><label class="block text-xs text-gray-500 mb-1">금액 *</label><input name="base_amount" type="number" required class="w-full border rounded-lg px-3 py-2 text-sm"></div>
         <div><label class="block text-xs text-gray-500 mb-1">요청일</label><input name="requested_date" type="date" value="${new Date().toISOString().split('T')[0]}" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
       </div>
@@ -404,8 +438,76 @@ function showNewOrderModal() {
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitNewOrder()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">등록</button>`);
 }
+
+// ─── 카카오 주소 검색 ───
+function openAddressSearch() {
+  if (typeof daum === 'undefined' || !daum.Postcode) {
+    showToast('주소 검색 서비스를 불러오는 중입니다. 잠시 후 다시 시도해주세요.', 'warning');
+    return;
+  }
+  new daum.Postcode({
+    oncomplete: function(data) {
+      // data: { address, roadAddress, jibunAddress, sido, sigungu, bname, bname1, zonecode, ... }
+      const fullAddress = data.roadAddress || data.jibunAddress || data.address;
+      const addrInput = document.getElementById('new-order-address');
+      const detailInput = document.getElementById('new-order-address-detail');
+      if (addrInput) {
+        addrInput.value = fullAddress;
+        addrInput.classList.remove('bg-gray-50');
+        addrInput.classList.add('bg-white');
+      }
+      if (detailInput) detailInput.focus();
+
+      // 행정동코드 자동 매핑
+      matchAdminDongCode(data.sido, data.sigungu, data.bname || data.bname1 || '');
+    },
+    width: '100%',
+    height: '100%',
+  }).open({
+    popupTitle: '와이비 OMS - 주소 검색',
+  });
+}
+
+// ─── 행정동코드 자동 매핑 ───
+async function matchAdminDongCode(sido, sigungu, dong) {
+  const resultEl = document.getElementById('address-match-result');
+  const textEl = document.getElementById('address-match-text');
+  const codeInput = document.getElementById('new-order-dong-code');
+
+  if (!resultEl || !textEl || !codeInput) return;
+
+  try {
+    const params = new URLSearchParams({ sido, sigungu });
+    if (dong) params.set('dong', dong);
+    const res = await api('GET', `/system/address-lookup?${params.toString()}`);
+
+    if (res?.regions?.length > 0) {
+      const match = res.regions[0];
+      codeInput.value = match.admin_code;
+      textEl.innerHTML = `
+        <span class="font-mono text-xs bg-blue-100 px-1.5 py-0.5 rounded mr-2">${match.admin_code}</span>
+        <span>${match.full_name}</span>
+        ${res.regions.length > 1 ? `<span class="text-xs text-blue-500 ml-2">(외 ${res.regions.length - 1}건 매칭)</span>` : ''}`;
+      resultEl.style.display = '';
+      resultEl.querySelector('.bg-blue-50').className = 'bg-blue-50 border border-blue-200 rounded-lg p-3';
+    } else {
+      codeInput.value = '';
+      textEl.innerHTML = `<span class="text-amber-700"><i class="fas fa-exclamation-triangle mr-1"></i>행정동 매칭 실패 — 배분 시 수동 지정이 필요합니다.</span>`;
+      resultEl.style.display = '';
+      resultEl.querySelector('div').className = 'bg-amber-50 border border-amber-200 rounded-lg p-3';
+      resultEl.querySelector('.text-blue-600')?.classList?.replace('text-blue-600', 'text-amber-600');
+      resultEl.querySelector('.text-blue-700')?.classList?.replace('text-blue-700', 'text-amber-700');
+    }
+  } catch (e) {
+    console.error('행정동 매핑 실패:', e);
+    codeInput.value = '';
+  }
+}
+
 async function submitNewOrder() {
-  const data = Object.fromEntries(new FormData(document.getElementById('new-order-form')));
+  const form = document.getElementById('new-order-form');
+  const data = Object.fromEntries(new FormData(form));
+  if (!data.address_text) { showToast('주소를 검색해주세요.', 'warning'); return; }
   data.base_amount = Number(data.base_amount);
   const res = await api('POST', '/orders', data);
   if (res?._status === 201) { showToast('주문이 등록되었습니다.', 'success'); closeModal(); renderContent(); }

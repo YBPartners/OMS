@@ -581,4 +581,51 @@ system.post('/push/unsubscribe', async (c) => {
   return c.json({ ok: true, message: '푸시 알림이 비활성화되었습니다.' });
 });
 
+// ─── 주소 → 행정동코드 조회 ───
+system.get('/address-lookup', async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: '인증 필요' }, 401);
+
+  const db = c.env.DB;
+  const sido = c.req.query('sido') || '';
+  const sigungu = c.req.query('sigungu') || '';
+  const dong = c.req.query('dong') || '';
+
+  if (!sido || !sigungu) return c.json({ error: 'sido, sigungu 필수' }, 400);
+
+  let query = 'SELECT region_id, admin_code, sido, sigungu, eupmyeondong, full_name FROM admin_regions WHERE sido LIKE ? AND sigungu LIKE ?';
+  const params: string[] = [`%${sido}%`, `%${sigungu}%`];
+
+  if (dong) {
+    query += ' AND eupmyeondong LIKE ?';
+    params.push(`%${dong}%`);
+  }
+  query += ' ORDER BY full_name LIMIT 20';
+
+  const results = await db.prepare(query).bind(...params).all();
+  return c.json({ regions: results.results || [] });
+});
+
+// ─── 행정동 전체 목록 (시도/시군구 기준) ───
+system.get('/admin-regions', async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: '인증 필요' }, 401);
+
+  const db = c.env.DB;
+  const sido = c.req.query('sido') || '';
+
+  if (sido) {
+    const results = await db.prepare(
+      'SELECT region_id, admin_code, sido, sigungu, eupmyeondong, full_name FROM admin_regions WHERE sido LIKE ? AND is_active = 1 ORDER BY full_name'
+    ).bind(`%${sido}%`).all();
+    return c.json({ regions: results.results || [] });
+  }
+
+  // 시도 목록 반환
+  const sidos = await db.prepare(
+    'SELECT DISTINCT sido FROM admin_regions WHERE is_active = 1 ORDER BY sido'
+  ).all();
+  return c.json({ sidos: (sidos.results || []).map((r: any) => r.sido) });
+});
+
 export default system;
