@@ -28,7 +28,7 @@ auth.post('/login', async (c) => {
   }
 
   const user = await db.prepare(`
-    SELECT u.user_id, u.org_id, u.login_id, u.name, u.password_hash, o.org_type, o.name as org_name
+    SELECT u.user_id, u.org_id, u.login_id, u.name, u.password_hash, o.org_type, o.name as org_name, o.code as org_code
     FROM users u JOIN organizations o ON u.org_id = o.org_id
     WHERE u.login_id = ? AND u.status = 'ACTIVE'
   `).bind(login_id).first();
@@ -105,6 +105,7 @@ auth.post('/login', async (c) => {
       org_id: user.org_id,
       org_type: user.org_type,
       org_name: user.org_name,
+      org_code: user.org_code || '',
       login_id: user.login_id,
       name: user.name,
       roles: roleCodes,
@@ -142,7 +143,7 @@ auth.get('/me', async (c) => {
   if (!user) return c.json({ error: '인증이 필요합니다.' }, 401);
   
   const org = await c.env.DB.prepare('SELECT * FROM organizations WHERE org_id = ?').bind(user.org_id).first();
-  return c.json({ user: { ...user, org_name: user.org_name || (org as any)?.name }, organization: org });
+  return c.json({ user: { ...user, org_name: user.org_name || (org as any)?.name, org_code: (org as any)?.code || '' }, organization: org });
 });
 
 // 사용자 목록 (HQ/REGION 관리자)

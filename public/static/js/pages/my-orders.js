@@ -167,12 +167,28 @@ async function submitReadyDone(orderId) {
 function completeOrder(orderId) {
   const content = `
     <div class="space-y-4">
-      <p class="text-sm text-gray-600">영수증을 첨부하면 최종완료 처리되며 검수 단계로 넘어갑니다.</p>
+      <p class="text-sm text-gray-600">영수증을 촬영하거나 갤러리에서 선택하면 최종완료 처리됩니다.</p>
+      
+      <!-- 영수증 사진 첨부 -->
       <div>
-        <label class="block text-xs text-gray-500 mb-1">영수증 URL (선택)</label>
-        <input id="receipt-url" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="https://example.com/receipt.jpg">
-        <p class="text-[10px] text-gray-400 mt-1">* 데모에서는 URL 입력으로 대체합니다.</p>
+        <label class="block text-xs text-gray-500 mb-2">영수증 사진 (선택)</label>
+        <div id="receipt-preview-area" class="mb-2"></div>
+        <div class="flex gap-2">
+          <label class="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-sky-50 border-2 border-dashed border-sky-300 rounded-lg cursor-pointer hover:bg-sky-100 transition">
+            <i class="fas fa-camera text-sky-600"></i>
+            <span class="text-sm text-sky-700 font-medium">카메라 촬영</span>
+            <input type="file" accept="image/*" capture="environment" class="hidden"
+              onchange="handleFileAttach(this, 'receipt-preview-area', 'RECEIPT')">
+          </label>
+          <label class="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 transition">
+            <i class="fas fa-images text-gray-600"></i>
+            <span class="text-sm text-gray-700 font-medium">갤러리</span>
+            <input type="file" accept="image/*" class="hidden"
+              onchange="handleFileAttach(this, 'receipt-preview-area', 'RECEIPT')">
+          </label>
+        </div>
       </div>
+
       <div>
         <label class="block text-xs text-gray-500 mb-1">메모 (선택)</label>
         <textarea id="complete-note" rows="2" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="추가 메모..."></textarea>
@@ -184,31 +200,64 @@ function completeOrder(orderId) {
 }
 
 async function submitComplete(orderId) {
-  const receiptUrl = document.getElementById('receipt-url')?.value || '';
   const note = document.getElementById('complete-note')?.value || '';
-  const res = await api('POST', `/orders/${orderId}/complete`, {
-    receipt_url: receiptUrl || undefined, note: note || '영수증 첨부 완료'
-  });
+  const receiptFile = window._attachedFiles?.['RECEIPT'];
+  
+  const payload = { note: note || '최종완료' };
+  if (receiptFile) {
+    payload.receipt_url = receiptFile.dataUrl;
+    payload.file_name = receiptFile.fileName;
+    payload.file_size = receiptFile.fileSize;
+    payload.mime_type = receiptFile.mimeType;
+  }
+  
+  const res = await api('POST', `/orders/${orderId}/complete`, payload);
   if (res?.ok) {
     showToast('최종완료! 검수 단계로 이동합니다.', 'success');
+    window._attachedFiles = {};
     closeModal();
     renderContent();
   } else showToast(res?.error || '실패', 'error');
 }
 
 function showReportModal(orderId) {
+  // 첨부 파일 임시 저장소 초기화
+  window._attachedFiles = {};
+
   const content = `
     <form id="report-form" class="space-y-4">
       <div>
-        <h4 class="font-semibold mb-2"><i class="fas fa-clipboard-list mr-1 text-cyan-500"></i>체크리스트</h4>
-        <div class="space-y-2">
+        <h4 class="font-semibold mb-2"><i class="fas fa-clipboard-list mr-1 text-cyan-500"></i>체크리스트 + 사진 첨부</h4>
+        <p class="text-xs text-gray-400 mb-3">각 항목의 사진을 촬영하거나 갤러리에서 선택하세요. 파일명은 자동 규칙화됩니다.</p>
+        <div class="space-y-3">
           ${OMS.REPORT_CHECKLIST.map(item => `
-            <label class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition">
-              <input type="checkbox" name="checklist" value="${item.key || item.label}" class="w-4 h-4 rounded text-cyan-600">
-              <i class="fas ${item.icon || 'fa-check'} text-gray-400 text-sm w-5 text-center"></i>
-              <span class="text-sm">${item.label}</span>
-              ${item.required ? '<span class="text-red-400 text-[10px] ml-auto">필수</span>' : ''}
-            </label>
+            <div class="bg-gray-50 rounded-lg p-3 border border-gray-200">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" name="checklist" value="${item.key}" 
+                  class="w-4 h-4 rounded text-cyan-600" ${item.required ? '' : ''}>
+                <i class="fas ${item.icon || 'fa-check'} text-gray-500 text-sm w-5 text-center"></i>
+                <span class="text-sm font-medium">${item.label}</span>
+                ${item.required ? '<span class="text-red-400 text-[10px] ml-auto">필수</span>' : '<span class="text-gray-300 text-[10px] ml-auto">선택</span>'}
+              </label>
+              <!-- 사진 첨부 영역 -->
+              <div class="mt-2">
+                <div id="preview-${item.key}" class="mb-2"></div>
+                <div class="flex gap-2">
+                  <label class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-cyan-50 hover:border-cyan-300 transition text-xs">
+                    <i class="fas fa-camera text-cyan-600"></i>
+                    <span class="text-gray-600">촬영</span>
+                    <input type="file" accept="image/*" capture="environment" class="hidden"
+                      onchange="handleFileAttach(this, 'preview-${item.key}', '${item.key.toUpperCase()}')">
+                  </label>
+                  <label class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 transition text-xs">
+                    <i class="fas fa-images text-gray-500"></i>
+                    <span class="text-gray-600">갤러리</span>
+                    <input type="file" accept="image/*" class="hidden"
+                      onchange="handleFileAttach(this, 'preview-${item.key}', '${item.key.toUpperCase()}')">
+                  </label>
+                </div>
+              </div>
+            </div>
           `).join('')}
         </div>
       </div>
@@ -216,22 +265,112 @@ function showReportModal(orderId) {
         <label class="block text-xs text-gray-500 mb-1">작업 메모</label>
         <textarea id="report-note" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="작업 내용을 기록하세요..."></textarea>
       </div>
-      <div>
-        <label class="block text-xs text-gray-500 mb-1">사진 URL (쉼표 구분)</label>
-        <input id="report-photos" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="https://example.com/photo1.jpg, ...">
-        <p class="text-[10px] text-gray-400 mt-1">* 데모에서는 URL 입력으로 대체합니다.</p>
-      </div>
     </form>`;
   showModal(`보고서 제출 — 주문 #${orderId}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
-    <button onclick="submitReport(${orderId})" class="px-4 py-2 bg-cyan-600 text-white rounded-lg text-sm">제출</button>`);
+    <button onclick="submitReport(${orderId})" class="px-4 py-2 bg-cyan-600 text-white rounded-lg text-sm">제출</button>`, { large: true });
+}
+
+// ─── 파일 첨부 핸들러 (카메라/갤러리 공용) ───
+function handleFileAttach(input, previewElId, category) {
+  const file = input.files?.[0];
+  if (!file) return;
+
+  // 2MB 제한
+  if (file.size > 2 * 1024 * 1024) {
+    showToast('파일 크기는 2MB 이하여야 합니다. 사진을 다시 선택해주세요.', 'warning');
+    input.value = '';
+    return;
+  }
+
+  if (!file.type.startsWith('image/')) {
+    showToast('이미지 파일만 첨부 가능합니다.', 'warning');
+    input.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const dataUrl = e.target.result;
+    const ext = file.name?.split('.').pop()?.toLowerCase() || 'jpg';
+    
+    // 파일명 자동 생성
+    const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const userInfo = (typeof currentUser !== 'undefined' ? currentUser : null) || {};
+    const teamCode = userInfo.org_code || userInfo.login_id || 'TEAM';
+    const categoryLabels = {
+      'EXTERIOR': '외부촬영', 'INTERIOR': '내부촬영',
+      'BEFORE_WASH': '세척전', 'AFTER_WASH': '세척후',
+      'RECEIPT': '영수증', 'CUSTOMER_CONFIRM': '고객확인',
+      'EXTERIOR_PHOTO': '외부촬영', 'INTERIOR_PHOTO': '내부촬영',
+      'ETC': '기타'
+    };
+    const catLabel = categoryLabels[category] || category;
+    const fileName = `${today}_${teamCode}_${catLabel}.${ext}`;
+
+    // 임시 저장
+    if (!window._attachedFiles) window._attachedFiles = {};
+    window._attachedFiles[category] = {
+      dataUrl,
+      fileName,
+      fileSize: file.size,
+      mimeType: file.type,
+      category,
+    };
+
+    // 미리보기 표시
+    const previewEl = document.getElementById(previewElId);
+    if (previewEl) {
+      previewEl.innerHTML = `
+        <div class="relative inline-block">
+          <img src="${dataUrl}" class="w-20 h-20 object-cover rounded-lg border-2 border-cyan-300 shadow-sm">
+          <button type="button" onclick="removeAttachedFile('${category}', '${previewElId}')"
+            class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center hover:bg-red-600 shadow">
+            <i class="fas fa-times"></i>
+          </button>
+          <div class="text-[10px] text-gray-500 mt-1 max-w-[80px] truncate" title="${fileName}">${fileName}</div>
+        </div>`;
+    }
+
+    // 체크리스트 자동 체크
+    const checkbox = document.querySelector(`input[name="checklist"][value="${category.toLowerCase()}"]`)
+      || document.querySelector(`input[name="checklist"][value="${category}"]`);
+    if (checkbox) checkbox.checked = true;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeAttachedFile(category, previewElId) {
+  if (window._attachedFiles) delete window._attachedFiles[category];
+  const previewEl = document.getElementById(previewElId);
+  if (previewEl) previewEl.innerHTML = '';
 }
 
 async function submitReport(orderId) {
   const checks = Array.from(document.querySelectorAll('input[name="checklist"]:checked')).map(el => el.value);
   const note = document.getElementById('report-note')?.value || '';
-  const photoStr = document.getElementById('report-photos')?.value || '';
-  const photos = photoStr.split(',').filter(s => s.trim()).map(url => ({ category: 'ETC', file_url: url.trim() }));
+
+  // 필수 체크리스트 검증
+  const requiredItems = OMS.REPORT_CHECKLIST.filter(i => i.required).map(i => i.key);
+  const missingRequired = requiredItems.filter(k => !checks.includes(k));
+  if (missingRequired.length > 0) {
+    const labels = missingRequired.map(k => OMS.REPORT_CHECKLIST.find(i => i.key === k)?.label || k);
+    showToast(`필수 항목을 완료해주세요: ${labels.join(', ')}`, 'warning');
+    return;
+  }
+
+  // 첨부 파일 수집
+  const photos = [];
+  const files = window._attachedFiles || {};
+  for (const [cat, fileInfo] of Object.entries(files)) {
+    photos.push({
+      category: cat,
+      file_url: fileInfo.dataUrl,
+      file_name: fileInfo.fileName,
+      file_size: fileInfo.fileSize,
+      mime_type: fileInfo.mimeType,
+    });
+  }
 
   const checklist = {};
   checks.forEach(c => { checklist[c] = true; });
@@ -239,6 +378,7 @@ async function submitReport(orderId) {
   const res = await api('POST', `/orders/${orderId}/reports`, { checklist, note, photos });
   if (res?.ok) {
     showToast(`보고서 v${res.version} 제출 완료`, 'success');
+    window._attachedFiles = {};
     closeModal();
     renderContent();
   } else showToast(res?.error || '제출 실패', 'error');
