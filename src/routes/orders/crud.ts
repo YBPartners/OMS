@@ -118,14 +118,20 @@ export function mountCrud(router: Hono<Env>) {
       JOIN users u ON rv.reviewer_id = u.user_id WHERE rv.order_id = ? ORDER BY rv.reviewed_at DESC
     `).bind(orderId).all();
 
+    // ★ R2: 각 보고서별 사진 포함 + 전체 사진도 최상위에 유지 (하위호환)
     let photos: any[] = [];
-    if (reports.results.length > 0) {
-      const latestReportId = (reports.results[0] as any).report_id;
-      const photoResult = await db.prepare('SELECT * FROM work_report_photos WHERE report_id = ?').bind(latestReportId).all();
-      photos = photoResult.results;
+    const enrichedReports = [];
+    for (const report of reports.results as any[]) {
+      const photoResult = await db.prepare(
+        'SELECT * FROM work_report_photos WHERE report_id = ? ORDER BY photo_id ASC'
+      ).bind(report.report_id).all();
+      enrichedReports.push({ ...report, photos: photoResult.results });
+      if (report.report_id === (reports.results[0] as any).report_id) {
+        photos = photoResult.results;  // 최신 보고서 사진 = 최상위 photos
+      }
     }
 
-    return c.json({ order, history: history.results, reports: reports.results, reviews: reviews.results, photos });
+    return c.json({ order, history: history.results, reports: enrichedReports, reviews: reviews.results, photos });
   });
 
   // ─── 주문 수동 등록 ───

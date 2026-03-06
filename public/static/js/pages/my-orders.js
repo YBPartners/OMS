@@ -73,13 +73,17 @@ async function renderMyOrders(el) {
                   <i class="fas fa-play mr-1"></i>작업시작
                 </button>` : ''}
               ${['IN_PROGRESS', 'REGION_REJECTED', 'HQ_REJECTED'].includes(o.status) ? `
-                <button onclick="showReportModal(${o.order_id})" class="px-3 py-1.5 bg-cyan-600 text-white rounded-lg text-xs hover:bg-cyan-700 transition" data-tooltip="보고서를 제출합니다">
-                  <i class="fas fa-file-pen mr-1"></i>보고서 제출
-                </button>` : ''}
+                <button onclick="showReportModal(${o.order_id})" class="px-3 py-1.5 ${o.status.includes('REJECTED') ? 'bg-amber-600 hover:bg-amber-700' : 'bg-cyan-600 hover:bg-cyan-700'} text-white rounded-lg text-xs transition" data-tooltip="${o.status.includes('REJECTED') ? '반려된 보고서를 재제출합니다' : '보고서를 제출합니다'}">
+                  <i class="fas ${o.status.includes('REJECTED') ? 'fa-rotate-right' : 'fa-file-pen'} mr-1"></i>${o.status.includes('REJECTED') ? '보고서 재제출' : '보고서 제출'}
+                </button>` : ''}}
               ${o.status === 'SUBMITTED' ? `
                 <button onclick="completeOrder(${o.order_id})" class="px-3 py-1.5 bg-sky-600 text-white rounded-lg text-xs hover:bg-sky-700 transition" data-tooltip="영수증 첨부 후 최종완료">
                   <i class="fas fa-receipt mr-1"></i>최종완료
                 </button>` : ''}
+              ${o.status === 'DONE' ? `
+                <span class="px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs border border-amber-200">
+                  <i class="fas fa-clock mr-1"></i>검수 대기중
+                </span>` : ''}
               <button onclick="event.stopPropagation();showMyOrderContextMenu(event, ${JSON.stringify(o).replace(/"/g, '&quot;')})" 
                 class="ml-auto w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" data-tooltip="더보기">
                 <i class="fas fa-ellipsis-vertical"></i>
@@ -111,7 +115,7 @@ function showMyOrderContextMenu(event, order) {
     items.push({ icon: 'fa-play', label: '작업 시작', action: () => startWork(o.order_id) });
   }
   if (['IN_PROGRESS', 'REGION_REJECTED', 'HQ_REJECTED'].includes(o.status)) {
-    items.push({ icon: 'fa-file-pen', label: '보고서 제출', action: () => showReportModal(o.order_id) });
+    items.push({ icon: o.status.includes('REJECTED') ? 'fa-rotate-right' : 'fa-file-pen', label: o.status.includes('REJECTED') ? '보고서 재제출' : '보고서 제출', action: () => showReportModal(o.order_id) });
   }
   if (o.status === 'SUBMITTED') {
     items.push({ icon: 'fa-receipt', label: '최종완료 (영수증)', action: () => completeOrder(o.order_id) });
@@ -157,6 +161,10 @@ function readyDone(orderId) {
 async function submitReadyDone(orderId) {
   const scheduledDate = document.getElementById('ready-done-date')?.value || '';
   const note = document.getElementById('ready-done-note')?.value || '';
+  if (!scheduledDate) {
+    showToast('방문 예정일을 선택해주세요.', 'warning');
+    return;
+  }
   const res = await api('POST', `/orders/${orderId}/ready-done`, {
     scheduled_date: scheduledDate, note: note || '고객 통화 후 일정 확정'
   });

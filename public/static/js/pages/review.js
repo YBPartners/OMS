@@ -75,6 +75,9 @@ async function renderReviewRegion(el) {
               <button onclick="showOrderDetailDrawer(${o.order_id})" class="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition" data-tooltip="주문 상세 보기">
                 <i class="fas fa-eye mr-1"></i>상세보기
               </button>
+              <button onclick="showReportPreview(${o.order_id},'region')" class="px-3 py-2 bg-cyan-50 text-cyan-700 rounded-lg text-sm hover:bg-cyan-100 transition" data-tooltip="보고서 사진/체크리스트 확인">
+                <i class="fas fa-images mr-1"></i>보고서
+              </button>
               <button onclick="quickApprove(${o.order_id},'region')" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition ix-review-approve" data-tooltip="빠른 승인 (코멘트 없이)">
                 <i class="fas fa-check mr-1"></i>승인
               </button>
@@ -158,6 +161,9 @@ async function renderReviewHQ(el) {
             <div class="flex gap-2 mt-4" onclick="event.stopPropagation()">
               <button onclick="showOrderDetailDrawer(${o.order_id})" class="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition">
                 <i class="fas fa-eye mr-1"></i>상세보기
+              </button>
+              <button onclick="showReportPreview(${o.order_id},'hq')" class="px-3 py-2 bg-cyan-50 text-cyan-700 rounded-lg text-sm hover:bg-cyan-100 transition">
+                <i class="fas fa-images mr-1"></i>보고서
               </button>
               <button onclick="quickApprove(${o.order_id},'hq')" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition">
                 <i class="fas fa-check mr-1"></i>최종 승인
@@ -368,4 +374,72 @@ async function submitReview(orderId, stage, result) {
     console.error('[DEBUG] submitReview exception:', err);
     showToast('검수 처리 중 오류 발생: ' + (err.message || err), 'error');
   }
+}
+
+// ─── 보고서 미리보기 (검수 시 보고서 확인) ───
+async function showReportPreview(orderId, stage) {
+  const res = await api('GET', `/orders/${orderId}`);
+  if (!res?.order) { showToast('주문 정보를 불러올 수 없습니다.', 'error'); return; }
+  const o = res.order;
+  const report = res.reports?.[0];
+  const photos = res.photos || [];
+
+  let checklistHtml = '';
+  if (report?.checklist_json) {
+    try {
+      const cl = typeof report.checklist_json === 'string' ? JSON.parse(report.checklist_json) : report.checklist_json;
+      const items = Object.entries(cl);
+      checklistHtml = `
+        <div class="mb-3">
+          <div class="text-xs text-gray-500 mb-1"><i class="fas fa-clipboard-list mr-1"></i>체크리스트</div>
+          <div class="flex flex-wrap gap-1">
+            ${items.map(([k, v]) => {
+              const label = OMS.REPORT_CHECKLIST?.find(c => c.key === k)?.label || k;
+              const required = OMS.REPORT_CHECKLIST?.find(c => c.key === k)?.required;
+              return `<span class="text-[10px] px-2 py-0.5 rounded-full ${v ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}">${v ? '<i class="fas fa-check mr-0.5"></i>' : '<i class="fas fa-times mr-0.5"></i>'}${label}${required ? '*' : ''}</span>`;
+            }).join('')}
+          </div>
+        </div>`;
+    } catch(e) {}
+  }
+
+  const photosHtml = photos.length > 0 ? `
+    <div class="mb-3">
+      <div class="text-xs text-gray-500 mb-2"><i class="fas fa-camera mr-1"></i>첨부 사진 (${photos.length}장)</div>
+      <div class="grid grid-cols-3 gap-2">
+        ${photos.map(p => `
+          <div class="relative">
+            <img src="${p.file_url}" class="w-full h-24 object-cover rounded-lg border border-gray-200 cursor-pointer hover:ring-2 hover:ring-cyan-400 transition"
+                 onclick="window.open('${p.file_url}','_blank')" title="${p.file_name || p.category}">
+            <div class="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[8px] text-center rounded-b-lg py-0.5">${p.category || ''}</div>
+          </div>`).join('')}
+      </div>
+    </div>` : `<div class="text-sm text-gray-400 mb-3"><i class="fas fa-camera-slash mr-1"></i>첨부 사진 없음</div>`;
+
+  const content = `
+    <div class="space-y-3">
+      <div class="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+        <div>
+          <span class="font-bold">${o.customer_name || '-'}</span>
+          <span class="font-mono text-gray-400 text-xs ml-2">#${o.order_id}</span>
+        </div>
+        ${statusBadge(o.status)}
+      </div>
+      ${report ? `
+        <div class="bg-cyan-50 rounded-lg p-3 border border-cyan-200">
+          <div class="flex justify-between text-sm">
+            <span><i class="fas fa-file-lines mr-1 text-cyan-600"></i>보고서 v${report.version}</span>
+            <span class="text-xs text-gray-400">${formatDate(report.submitted_at)}</span>
+          </div>
+          <div class="text-sm text-gray-600 mt-1">${report.note || '-'}</div>
+        </div>
+        ${checklistHtml}
+        ${photosHtml}
+      ` : '<div class="text-center text-gray-400 py-4"><i class="fas fa-file-excel text-2xl mb-2"></i><p>보고서 없음</p></div>'}
+    </div>`;
+
+  showModal(`보고서 확인 — 주문 #${orderId}`, content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>
+    <button onclick="closeModal();quickApprove(${orderId},'${stage}')" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm">승인</button>
+    <button onclick="closeModal();showReviewModal(${orderId},'${stage}','REJECT')" class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm">반려</button>`, { large: true });
 }

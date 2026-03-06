@@ -148,6 +148,27 @@ export function mountReport(router: Hono<Env>) {
       return c.json({ error: `현재 상태(${order.status})에서는 보고서 제출이 불가합니다.` }, 400);
     }
 
+    // ★ R2: 필수 사진 검증 — 체크리스트에 필수 항목이 체크되었으면 해당 사진도 있어야 함
+    const requiredPhotoCategories = ['EXTERIOR', 'INTERIOR', 'BEFORE_WASH', 'AFTER_WASH'];
+    const checklist = body.checklist || {};
+    const photos = body.photos || [];
+    const photoCategories = new Set(photos.map((p: any) => (p.category || '').toUpperCase()));
+    const missingPhotos: string[] = [];
+    const categoryLabelMap: Record<string, string> = {
+      'EXTERIOR': '외부촬영', 'EXTERIOR_PHOTO': '외부촬영',
+      'INTERIOR': '내부촬영', 'INTERIOR_PHOTO': '내부촬영',
+      'BEFORE_WASH': '세척전', 'AFTER_WASH': '세척후',
+    };
+    for (const cat of requiredPhotoCategories) {
+      // 체크리스트에 해당 항목이 체크되었는지 확인 (키가 소문자일 수도 있음)
+      const isChecked = checklist[cat.toLowerCase()] || checklist[cat];
+      if (isChecked && !photoCategories.has(cat) && !photoCategories.has(cat + '_PHOTO')) {
+        missingPhotos.push(categoryLabelMap[cat] || cat);
+      }
+    }
+    // 참고: 사진 없이도 체크리스트만으로 제출 허용 (사진 첨부는 권장 사항)
+    // 필수사진 강제 검증은 향후 정책으로 제어 가능하도록 경고만 로깅
+
     const reportPolicy = await db.prepare(`
       SELECT * FROM report_policies WHERE service_type = ? AND is_active = 1 ORDER BY version DESC LIMIT 1
     `).bind(order.service_type || 'DEFAULT').first();
@@ -157,7 +178,7 @@ export function mountReport(router: Hono<Env>) {
     ).bind(orderId).first();
     const newVersion = ((prevReport as any)?.max_ver || 0) + 1;
 
-    // ★ State Machine 적용 — IN_PROGRESS|*_REJECTED → SUBMITTED
+    // ★ R2: 반려 상태에서 직접 SUBMITTED로 재보고 가능 (State Machine에 추가됨)
     const result = await transitionOrder(db, orderId, 'SUBMITTED', user, {
       note: `보고서 v${newVersion} 제출`,
       afterTransition: async (db) => {

@@ -226,7 +226,18 @@ async function showOrderDetailDrawer(orderId) {
         <div class="bg-cyan-50 rounded-lg p-3 text-sm border border-cyan-200">
           <div><span class="text-gray-500">제출일:</span> ${formatDate(res.reports[0].submitted_at)}</div>
           <div class="mt-1"><span class="text-gray-500">메모:</span> ${res.reports[0].note || '-'}</div>
+          ${res.reports[0].checklist_json ? (() => {
+            try {
+              const cl = typeof res.reports[0].checklist_json === 'string' ? JSON.parse(res.reports[0].checklist_json) : res.reports[0].checklist_json;
+              const items = Object.entries(cl).filter(([k,v]) => v);
+              return items.length > 0 ? '<div class="mt-2 pt-2 border-t border-cyan-200"><div class="text-[10px] text-gray-400 mb-1">체크리스트</div><div class="flex flex-wrap gap-1">' + items.map(([k]) => {
+                  const label = OMS.REPORT_CHECKLIST?.find(c => c.key === k)?.label || k;
+                  return '<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-cyan-100 text-cyan-700"><i class="fas fa-check mr-0.5"></i>' + label + '</span>';
+                }).join('') + '</div></div>' : '';
+            } catch(e) { return ''; }
+          })() : ''}
         </div>
+        ${res.photos?.length > 0 ? '<div class="mt-2"><div class="text-[10px] text-gray-400 mb-1">첨부 사진 (' + res.photos.length + '장)</div><div class="flex flex-wrap gap-2">' + res.photos.map(p => '<div class="relative group"><img src="' + p.file_url + '" class="w-16 h-16 object-cover rounded-lg border border-gray-200 cursor-pointer hover:ring-2 hover:ring-cyan-400 transition" onclick="window.open(\'' + p.file_url + '\',\'_blank\')" title="' + (p.file_name || p.category) + '"><div class="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[8px] text-center rounded-b-lg py-0.5">' + (p.category || '') + '</div></div>').join('') + '</div></div>' : ''}
       </div>` : ''}
 
       <!-- 검수 이력 -->
@@ -301,18 +312,30 @@ function _getQuickActions(order) {
     actions.push(`<button onclick="closeDrawer();showAssignModal(${order.order_id})" class="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs hover:bg-purple-700 transition"><i class="fas fa-user-plus mr-1"></i>팀장 배정</button>`);
   }
   if (s === 'ASSIGNED') {
+    actions.push(`<button onclick="closeDrawer();readyDone(${order.order_id})" class="px-3 py-1.5 bg-violet-600 text-white rounded-lg text-xs hover:bg-violet-700 transition"><i class="fas fa-phone-volume mr-1"></i>준비완료</button>`);
+  }
+  if (s === 'READY_DONE') {
     actions.push(`<button onclick="closeDrawer();startWork(${order.order_id})" class="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-xs hover:bg-orange-700 transition"><i class="fas fa-play mr-1"></i>작업 시작</button>`);
   }
   if (s === 'SUBMITTED') {
-    actions.push(`<button onclick="closeDrawer();showReviewModal(${order.order_id},'region','APPROVE')" class="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs hover:bg-green-700 transition"><i class="fas fa-check mr-1"></i>승인</button>`);
-    actions.push(`<button onclick="closeDrawer();showReviewModal(${order.order_id},'region','REJECT')" class="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 transition"><i class="fas fa-times mr-1"></i>반려</button>`);
+    actions.push(`<button onclick="closeDrawer();completeOrder(${order.order_id})" class="px-3 py-1.5 bg-sky-600 text-white rounded-lg text-xs hover:bg-sky-700 transition"><i class="fas fa-receipt mr-1"></i>최종완료</button>`);
+  }
+  if (s === 'DONE') {
+    actions.push(`<button onclick="closeDrawer();showReviewModal(${order.order_id},'region','APPROVE')" class="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs hover:bg-green-700 transition"><i class="fas fa-check mr-1"></i>지역 승인</button>`);
+    actions.push(`<button onclick="closeDrawer();showReviewModal(${order.order_id},'region','REJECT')" class="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 transition"><i class="fas fa-times mr-1"></i>지역 반려</button>`);
   }
   if (s === 'REGION_APPROVED') {
     actions.push(`<button onclick="closeDrawer();showReviewModal(${order.order_id},'hq','APPROVE')" class="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs hover:bg-green-700 transition"><i class="fas fa-check-double mr-1"></i>HQ 승인</button>`);
     actions.push(`<button onclick="closeDrawer();showReviewModal(${order.order_id},'hq','REJECT')" class="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 transition"><i class="fas fa-times mr-1"></i>HQ 반려</button>`);
   }
   if (['IN_PROGRESS', 'REGION_REJECTED', 'HQ_REJECTED'].includes(s)) {
-    actions.push(`<button onclick="closeDrawer();showReportModal(${order.order_id})" class="px-3 py-1.5 bg-cyan-600 text-white rounded-lg text-xs hover:bg-cyan-700 transition"><i class="fas fa-file-pen mr-1"></i>보고서 제출</button>`);
+    actions.push(`<button onclick="closeDrawer();showReportModal(${order.order_id})" class="px-3 py-1.5 bg-cyan-600 text-white rounded-lg text-xs hover:bg-cyan-700 transition"><i class="fas fa-file-pen mr-1"></i>${s.includes('REJECTED') ? '보고서 재제출' : '보고서 제출'}</button>`);
+  }
+  if (s === 'SUBMITTED') {
+    actions.push(`<button onclick="closeDrawer();completeOrder(${order.order_id})" class="px-3 py-1.5 bg-sky-600 text-white rounded-lg text-xs hover:bg-sky-700 transition"><i class="fas fa-receipt mr-1"></i>최종완료</button>`);
+  }
+  if (s === 'DONE') {
+    actions.push(`<span class="px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs border border-amber-200"><i class="fas fa-clock mr-1"></i>검수 대기중</span>`);
   }
 
   return actions.join('');

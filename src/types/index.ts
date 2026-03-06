@@ -80,9 +80,9 @@ export const STATUS_TRANSITIONS: Record<string, TransitionRule> = {
   'SUBMITTED':            { next: ['DONE'],                              requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
   'DONE':                 { next: ['REGION_APPROVED', 'REGION_REJECTED'], requiredRoles: ['SUPER_ADMIN', 'REGION_ADMIN', 'AGENCY_LEADER'] },
   'REGION_APPROVED':      { next: ['HQ_APPROVED', 'HQ_REJECTED'],       requiredRoles: ['SUPER_ADMIN', 'HQ_OPERATOR'] },
-  'REGION_REJECTED':      { next: ['IN_PROGRESS'],                       requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
+  'REGION_REJECTED':      { next: ['SUBMITTED', 'IN_PROGRESS'],           requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
   'HQ_APPROVED':          { next: ['SETTLEMENT_CONFIRMED'],              requiredRoles: ['SUPER_ADMIN', 'HQ_OPERATOR'] },
-  'HQ_REJECTED':          { next: ['IN_PROGRESS'],                       requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
+  'HQ_REJECTED':          { next: ['SUBMITTED', 'IN_PROGRESS'],           requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
   'SETTLEMENT_CONFIRMED': { next: ['PAID'],                              requiredRoles: ['SUPER_ADMIN', 'HQ_OPERATOR'] },
 };
 

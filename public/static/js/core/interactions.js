@@ -592,18 +592,29 @@ function getStatusActions(order) {
   }
   if (s === 'ASSIGNED') {
     actions.push({
-      icon: 'fa-play', label: '작업 시작',
-      action: () => startWork(order.order_id)
+      icon: 'fa-phone-volume', label: '준비완료 (일정확정)',
+      action: () => readyDone(order.order_id)
     });
     actions.push({
       icon: 'fa-user-minus', label: '배정 해제', danger: true,
       action: () => kanbanUnassign(order.order_id)
     });
   }
+  if (s === 'READY_DONE') {
+    actions.push({
+      icon: 'fa-play', label: '작업 시작',
+      action: () => startWork(order.order_id)
+    });
+  }
   if (s === 'SUBMITTED') {
     actions.push(
-      { icon: 'fa-check', label: '승인', action: () => showReviewModal(order.order_id, 'region', 'APPROVE') },
-      { icon: 'fa-times', label: '반려', danger: true, action: () => showReviewModal(order.order_id, 'region', 'REJECT') }
+      { icon: 'fa-receipt', label: '최종완료 (영수증)', action: () => completeOrder(order.order_id) }
+    );
+  }
+  if (s === 'DONE') {
+    actions.push(
+      { icon: 'fa-check', label: '지역 승인', action: () => showReviewModal(order.order_id, 'region', 'APPROVE') },
+      { icon: 'fa-times', label: '지역 반려', danger: true, action: () => showReviewModal(order.order_id, 'region', 'REJECT') }
     );
   }
   if (s === 'REGION_APPROVED') {
@@ -614,7 +625,8 @@ function getStatusActions(order) {
   }
   if (['IN_PROGRESS', 'REGION_REJECTED', 'HQ_REJECTED'].includes(s)) {
     actions.push({
-      icon: 'fa-file-pen', label: '보고서 제출',
+      icon: s.includes('REJECTED') ? 'fa-rotate-right' : 'fa-file-pen',
+      label: s.includes('REJECTED') ? '보고서 재제출' : '보고서 제출',
       action: () => showReportModal(order.order_id)
     });
   }
