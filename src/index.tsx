@@ -80,12 +80,12 @@ app.use('*', async (c, next) => {
   if (!c.req.path.startsWith('/api/')) {
     c.res.headers.set('Content-Security-Policy', [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://t1.daumcdn.net https://pagead2.googlesyndication.com https://adservice.google.com https://www.googletagservices.com https://static.cloudflareinsights.com https://www.googletagmanager.com https://ep1.adtrafficquality.google https://ep2.adtrafficquality.google",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://t1.daumcdn.net https://static.cloudflareinsights.com",
       "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
       "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com",
-      "img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com https://pagead2.googlesyndication.com https://*.google.com https://*.googleusercontent.com",
-      "connect-src 'self' https://pagead2.googlesyndication.com https://adservice.google.com https://cloudflareinsights.com https://static.cloudflareinsights.com https://www.google-analytics.com https://ep1.adtrafficquality.google https://ep2.adtrafficquality.google",
-      "frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com https://www.google.com https://t1.daumcdn.net https://postcode.map.daum.net",
+      "img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com",
+      "connect-src 'self' https://cloudflareinsights.com https://static.cloudflareinsights.com",
+      "frame-src https://www.google.com https://t1.daumcdn.net https://postcode.map.daum.net",
       "object-src 'none'",
       "base-uri 'self'",
     ].join('; '));
@@ -278,19 +278,10 @@ app.get('*', async (c) => {
     return c.notFound();
   }
   
-  // DB에서 AdSense 계정 ID 조회 (폴백: 하드코딩)
-  let adsenseAccount = 'ca-pub-6838924334474689';
-  try {
-    const result = await c.env.DB.prepare(
-      "SELECT value FROM ad_settings WHERE key = 'adsense_client_id'"
-    ).first<{ value: string }>();
-    if (result?.value) adsenseAccount = result.value;
-  } catch (e) { /* DB 없으면 빈값 */ }
-  
-  return c.html(getIndexHtml(adsenseAccount));
+  return c.html(getIndexHtml());
 });
 
-function getIndexHtml(adsenseAccount: string = ''): string {
+function getIndexHtml(): string {
   const V = '38';
   return `<!DOCTYPE html>
 <html lang="ko">
@@ -301,8 +292,6 @@ function getIndexHtml(adsenseAccount: string = ''): string {
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0d9488">
   <meta name="description" content="Airflow - 스마트 주문관리시스템">
-  <meta name="google-adsense-account" content="${adsenseAccount}">
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseAccount}" crossorigin="anonymous"></script>
   <link rel="icon" type="image/png" href="/static/img/airflow-logo.png">
   <link rel="apple-touch-icon" href="/static/img/icon-192x192.png">
   <link rel="manifest" href="/manifest.json">
