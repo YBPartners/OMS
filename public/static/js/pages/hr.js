@@ -1043,7 +1043,7 @@ async function renderHRUserRegions(el) {
         <div class="flex items-center justify-between">
           <div>
             <h3 class="font-semibold text-gray-800"><i class="fas fa-map-location mr-2 text-indigo-500"></i>사용자별 지역 매핑 (주문 수취 권한)</h3>
-            <p class="text-xs text-gray-500 mt-1">각 팀장에게 특정 행정동을 매핑하여 해당 지역 주문 수취 권한을 부여합니다.</p>
+            <p class="text-xs text-gray-500 mt-1">각 팀장에게 특정 시군구를 매핑하여 해당 지역 주문 수취 권한을 부여합니다.</p>
           </div>
         </div>
       </div>

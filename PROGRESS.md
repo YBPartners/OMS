@@ -57,15 +57,15 @@
 | **SCHEDULE-1** | **일정/캘린더 기능** | **✅ 완료** | **2026-03-07** | **scheduled_time 컬럼, 캘린더 뷰(월/주/일), schedule API(GET/PATCH), 드래그 일정변경** |
 | **GUIDE-1** | **온보딩 가이드 + 수동배분 UI v2.0** | **✅ 완료** | **2026-03-07** | **24메뉴 가이드, 3탭 배분(수동/자동/현황), 드래그앤드롭, PWA** |
 | **INTEGRITY-1** | **시스템 정합성 감사 + 성능 개선** | **✅ 완료** | **2026-03-07** | **자동 감사 스크립트(scripts/audit.py), 통합 API(7→1), 매핑 해제 PUT→DELETE, 캐시 버스팅 v38** |
-| **REFACTOR-1** | **시군구 전환 + 서비스항목 단가표 + 가격확정 플로우** | **🔄 진행중** | **2026-03-07~** | **행정동→시군구, 채널별 단가표, order_items, 가격확정 워크플로우** |
+| **REFACTOR-1** | **시군구 전환 + 서비스항목 단가표 + 가격확정 플로우** | **✅ 완료** | **2026-03-07** | **행정동→시군구, 채널별 단가표, order_items, 가격확정 워크플로우, UI 용어 통일** |
 | **RULE-1** | **개발 원칙 제정 + 실행 절차 체계화** | **✅ 완료** | **2026-03-07** | **5대 원칙 + 4단계 실행 절차(만들기→넣기→확인하기→기록하기) + PROGRESS.md 체크리스트 형식 + 작업 시작 전 확인 절차. DEVELOPMENT_METHOD.md §0 기록** |
-| **PERF-1** | **초기 로딩 성능 근본 개선 — CDN 지연 로딩** | **✅ 완료** | **2026-03-07** | **Chart.js(205KB)+XLSX(882KB)+Daum(34KB)=1.12MB 동기 차단 제거, Google Fonts @import→preconnect, FontAwesome preload** |
+| **PERF-1** | **초기 로딩 성능 근본 개선 — CDN 지연 로딩 + AdSense 제거** | **✅ 완료** | **2026-03-07** | **Chart.js+XLSX+Daum=1.12MB 동기 차단 제거, AdSense 미승인 스크립트 제거(403에러 해소), CSP 정리, Google Fonts preconnect, FontAwesome preload** |
 
 ---
 
 ---
 
-## Phase REFACTOR-1 — 시군구 전환 + 서비스항목 단가표 + 가격확정 플로우 🔄 (2026-03-07~)
+## Phase REFACTOR-1 — 시군구 전환 + 서비스항목 단가표 + 가격확정 플로우 ✅ 완료 (2026-03-07)
 
 > **목적**: 행정동(3,042개) → 시군구(~250개) 전환, 채널별 서비스항목 단가표 도입, 주문 상세항목(order_items) 기반 가격확정 워크플로우 구현
 > **배경**: 실제 업무에서 행정동은 불필요하고, 시군구 기준으로 총판/팀장이 매핑됨. 서비스 항목별 판매가/수행가가 채널마다 다르며, 팀장 통화 후 가격이 확정되어야 함.
@@ -120,7 +120,7 @@ RECEIVED → DISTRIBUTED → ASSIGNED → CONFIRMED → IN_PROGRESS → SUBMITTE
 | Phase 1-8 | 빌드 + 로컬 테스트 + 배포 | ✅ 완료 |
 | Phase 2 | 가격확정 플로우 (팀장 UI + 자동산출 + 현장변동) | ✅ 완료 |
 | Phase 3 | 정산 재작성 (order_items 기반) | ✅ 완료 (2026-03-07) |
-| Phase 4 | 대시보드/HR/가이드/가격표 관리 UI | ⏳ 대기 |
+| Phase 4 | 대시보드/HR/가이드/가격표 관리 UI | ✅ 완료 (2026-03-07) |
 
 ### RULE-1 완료 상세 — 개발 원칙 제정 + 실행 절차 체계화 ✅ (2026-03-07)
 
@@ -174,6 +174,54 @@ margin = sell - work (참고 지표)
 - [x] 동작확인: OK — health API 응답 정상 (`{"status":"ok","version":"25.0.0"}`)
 - [x] 데이터확인: N/A (DB 스키마 변경 없음, 기존 데이터 호환)
 
+### Phase 4 완료 상세 — 대시보드/HR/가이드/가격표 UI 시군구 전환 ✅ (2026-03-07)
+
+> **완료일**: 2026-03-07
+> **변경 파일**: `public/static/js/pages/hr.js`, `public/static/js/shared/guide.js`
+
+**분석 결과 및 변경 내용:**
+
+1. **대시보드 (dashboard.js)** — 변경 불필요 ✅
+   - 이미 `region_summary` (지역총판 기반 organizations JOIN) 구조
+   - 히트맵/차트/카드 모두 지역총판(organization) 단위 — 행정동 참조 없음
+
+2. **통계 (statistics.js)** — 변경 불필요 ✅
+   - `region_daily_stats`, `team_leader_daily_stats` 기반
+   - 지역총판별/팀장별 통계 — 행정동 참조 없음
+
+3. **HR 인사관리 (hr.js)** — 용어 전환 1건 ✅
+   - line 1046: "특정 행정동을 매핑하여" → "특정 시군구를 매핑하여"
+   - 시군구 매핑 UI (sido→sigungu→dong 드롭다운, 추가/삭제)는 이미 sigungu 기반 동작
+
+4. **온보딩 가이드 (guide.js)** — 용어 전환 2건 ✅
+   - line 65: "행정동코드" → "시군구코드", "행정구역 코드" → "시/군/구 단위 지역 코드"
+   - line 77: "행정동 기준으로 자동 할당" → "시군구 기준으로 자동 할당"
+
+5. **가격표 UI (policies-pricing.js)** — 이미 완성 ✅
+   - 332줄 구현 완료 (renderPricingTab, 개별/일괄 수정, CSV 내보내기)
+   - 프로덕션 데이터: service_categories 20건, service_prices 40건, service_options 3건
+
+**프로덕션 검증:**
+- [x] 빌드: OK (76 modules, 365.10 kB, 2.54s)
+- [x] 배포: OK — https://8a759015.dahada-oms.pages.dev
+- [x] 동작확인: OK — health API 정상, 콘솔 에러 0건
+- [x] 데이터확인: OK — hr.js 시군구 용어 확인, guide.js 시군구 용어 확인, pricing API 인증 정상
+
+---
+
+### REFACTOR-1 Phase 4 완료 — 전체 진행 상태
+
+| 단계 | 범위 | 상태 |
+|------|------|------|
+| Phase 1 (1-1~1-8) | DB 마이그레이션 + 백엔드 시군구 전환 | ✅ 완료 |
+| Phase 2 | 가격확정 플로우 (CONFIRMED) | ✅ 완료 |
+| Phase 3 | 정산 재작성 (order_items 기반) | ✅ 완료 |
+| Phase 4 | 대시보드/HR/가이드/가격표 UI 전환 | ✅ 완료 |
+
+> **REFACTOR-1 전체 완료** — 행정동→시군구 전환, 채널별 단가표, order_items 기반 가격확정+정산, 전 UI 용어 통일
+
+---
+
 ### 시군구 프로덕션 시드 데이터 투입 ✅ (2026-03-07)
 
 **변경 내용:**
@@ -202,22 +250,24 @@ margin = sell - work (참고 지표)
 6. Google Fonts: `@import` → `<link rel="preconnect">` + `<link rel="stylesheet">` (비차단)
 7. FontAwesome: `<link rel="preload" as="style">` (비차단)
 
-**변경 파일:** `src/index.tsx`, `public/static/js/pages/dashboard.js`, `public/static/js/core/ui.js`, `public/static/js/pages/orders.js` (4개 파일, +49/-20)
+**변경 파일:** `src/index.tsx`, `public/static/js/pages/dashboard.js`, `public/static/js/core/ui.js`, `public/static/js/pages/orders.js` (4개 파일)
 
 **프로덕션 검증:**
-- [x] 빌드: OK (76 modules, 366.02 kB, 2.09s)
-- [x] 배포: OK — 커밋 `cbeca96`, https://dahada-oms.pages.dev
-- [x] 동작확인: OK — Health 200 (TTFB 0.12s), HTML 응답 0.21s, `<head>`에서 동기 외부 script 0개 확인
+- [x] 빌드: OK (76 modules, 365.10 kB, 2.14s)
+- [x] 배포: OK — 커밋 `55f4f1d`, https://dahada-oms.pages.dev
+- [x] 동작확인: OK — Health 200 (TTFB 0.11~0.26s), HTML 12,418bytes, `<head>`에서 동기 외부 script 0개, AdSense 완전 제거, 콘솔 에러 4개→1개(autocomplete 경고만)
 - [x] 데이터확인: N/A (코드 변경만)
 
 **성능 측정 비교:**
 
 | 지표 | 변경 전 | 변경 후 | 차이 |
 |------|---------|---------|------|
-| `<head>` 동기 외부 script | 3개 (1.12MB) | 0개 | **-1.12MB 차단 제거** |
+| `<head>` 동기 외부 script | 3개 (1.12MB) + AdSense | 0개 | **-1.12MB 차단 + AdSense 제거** |
+| 콘솔 에러 | 4개 (403 + CSP) | 1개 (autocomplete 경고) | **에러 3개 해소** |
+| HTML 크기 | 12,641 bytes | 12,418 bytes | **-223 bytes** |
 | Google Fonts 로딩 | CSS @import (이중 차단) | preconnect + link (비차단) | **차단 해소** |
 | FontAwesome | link (렌더 차단) | preload + fallback (비차단) | **차단 해소** |
-| HTML TTFB | 0.12s | 0.12s | 동일 (서버 측은 무관) |
+| CSP 헤더 | 광고 도메인 8개 포함 | 필요 도메인만 | **보안 강화** |
 
 ---
 
