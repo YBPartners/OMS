@@ -383,26 +383,35 @@ function getIndexHtml(adsenseAccount: string = ''): string {
   <script>
     // ─── Page Lazy Loader v1.0 ───
     const _pageScripts = {
+      // orders.js._getQuickActions → my-orders.js(startWork,readyDone,completeOrder,showReportModal)
+      //                                + kanban.js(showAssignModal) + review.js(showReviewModal)
+      // 따라서 orders.js를 로드하는 모든 페이지는 이 3개도 함께 필요
       'dashboard': ['/static/js/pages/dashboard.js'],
-      'orders': ['/static/js/pages/orders.js'],
-      'distribute': ['/static/js/pages/orders.js'],
-      'kanban': ['/static/js/pages/kanban.js'],
-      'review-hq': ['/static/js/pages/orders.js', '/static/js/pages/review.js'],
-      'review-region': ['/static/js/pages/orders.js', '/static/js/pages/review.js'],
-      'settlement': ['/static/js/pages/orders.js', '/static/js/pages/settlement.js'],
-      'reconciliation': ['/static/js/pages/orders.js', '/static/js/pages/settlement.js'],
-      'statistics': ['/static/js/pages/statistics.js'],
+      'orders': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/kanban.js', '/static/js/pages/review.js'],
+      'distribute': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/kanban.js', '/static/js/pages/review.js'],
+      'kanban': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/kanban.js', '/static/js/pages/review.js'],
+      'review-hq': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/kanban.js', '/static/js/pages/review.js'],
+      'review-region': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/kanban.js', '/static/js/pages/review.js'],
+      'settlement': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/kanban.js', '/static/js/pages/review.js', '/static/js/pages/settlement.js'],
+      'reconciliation': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/kanban.js', '/static/js/pages/review.js', '/static/js/pages/settlement.js'],
+      'statistics': ['/static/js/pages/statistics.js', '/static/js/pages/dashboard.js'],
       'policies': ['/static/js/pages/policies.js', '/static/js/pages/policies-dist.js', '/static/js/pages/policies-report.js', '/static/js/pages/policies-comm.js', '/static/js/pages/policies-territory.js', '/static/js/pages/policies-metrics.js'],
-      'hr-management': ['/static/js/pages/hr.js'],
+      // hr.js → signup-admin.js(renderHROrgTree,renderHRSignupRequests,renderHRRegionAddRequests)
+      //       → agency.js(showAgencyOnboardingModal) → agency.js 내부에서 orders/review/my-orders 함수 참조하나
+      //         HR에서 호출되는 showAgencyOnboardingModal 경로에서는 미사용 (approveOnboarding 등만 사용)
+      //         그러나 안전을 위해 orders.js 체인 전체를 포함
+      'hr-management': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/kanban.js', '/static/js/pages/review.js', '/static/js/pages/hr.js', '/static/js/pages/signup-admin.js', '/static/js/pages/agency.js'],
       'audit-log': ['/static/js/pages/audit.js'],
       'notifications': ['/static/js/pages/notifications.js'],
-      'my-orders': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js'],
-      'my-stats': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js'],
-      'my-profile': ['/static/js/pages/my-orders.js'],
-      'agency-dashboard': ['/static/js/pages/agency.js'],
-      'agency-orders': ['/static/js/pages/agency.js'],
-      'agency-team': ['/static/js/pages/agency.js'],
-      'agency-statement': ['/static/js/pages/agency.js'],
+      'my-orders': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/kanban.js', '/static/js/pages/review.js'],
+      'my-stats': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/kanban.js', '/static/js/pages/review.js'],
+      'my-profile': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/kanban.js', '/static/js/pages/review.js'],
+      // agency.js → orders.js(showOrderDetailDrawer) + review.js(quickApprove,showReviewModal)
+      //           + my-orders.js(startWork,showReportModal)
+      'agency-dashboard': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/review.js', '/static/js/pages/kanban.js', '/static/js/pages/agency.js'],
+      'agency-orders': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/review.js', '/static/js/pages/kanban.js', '/static/js/pages/agency.js'],
+      'agency-team': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/review.js', '/static/js/pages/kanban.js', '/static/js/pages/agency.js'],
+      'agency-statement': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/review.js', '/static/js/pages/kanban.js', '/static/js/pages/agency.js'],
       'channels': ['/static/js/pages/channels.js'],
       'system-admin': ['/static/js/pages/system.js'],
       'banner-manage': ['/static/js/pages/banner-manage.js'],
