@@ -97,8 +97,8 @@ app.use('*', cors({
   origin: (origin) => {
     if (!origin) return '*'; // 서버-to-서버, curl 등 origin 없는 요청 허용
     const allowed = [
-      'https://dahada-oms.pages.dev',
-      /^https:\/\/[a-z0-9-]+\.dahada-oms\.pages\.dev$/,  // 프리뷰 배포 (branch.project.pages.dev)
+      'https://airflow-oms.pages.dev',
+      /^https:\/\/[a-z0-9-]+\.airflow-oms\.pages\.dev$/,  // 프리뷰 배포 (branch.project.pages.dev)
       'https://www.airflow.co.kr',
       'https://airflow.co.kr',
       'http://localhost:3000',
@@ -108,7 +108,7 @@ app.use('*', cors({
       if (typeof a === 'string' && a === origin) return origin;
       if (a instanceof RegExp && a.test(origin)) return origin;
     }
-    return 'https://dahada-oms.pages.dev'; // 허용되지 않은 origin → 기본값
+    return 'https://airflow-oms.pages.dev'; // 허용되지 않은 origin → 기본값
   },
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'X-Session-Id'],

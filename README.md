@@ -8,7 +8,7 @@
 - **기술 스택**: Hono + TypeScript + Cloudflare Workers + D1(SQLite) + KV(Session) + TailwindCSS + Vanilla JS
 
 ## URLs
-- **프로덕션**: https://dahada-oms.pages.dev
+- **프로덕션**: https://airflow-oms.pages.dev
 - **GitHub**: https://github.com/YBPartners/OMS
 
 ## 관련 문서
@@ -281,8 +281,8 @@ cd /home/user/webapp && python3 scripts/audit.py
 ## 배포 정보
 - **플랫폼**: Cloudflare Pages + D1 + KV
 - **상태**: ✅ Active
-- **프로덕션**: https://dahada-oms.pages.dev
-- **Cloudflare 프로젝트명**: dahada-oms
+- **프로덕션**: https://airflow-oms.pages.dev
+- **Cloudflare 프로젝트명**: airflow-oms
 - **D1 ID**: 0b7aedd5-7510-44d3-8b81-d421b03fffa6
 - **KV ID**: 5024085768aa47ba943e4e65a454795e (SESSION_CACHE)
 - **빌드 크기**: ~337 KB (dist/_worker.js)
@@ -304,6 +304,6 @@ curl http://localhost:3000/api/health
 bash tests/e2e.sh
 
 # DB 초기화
-npx wrangler d1 migrations apply dahada-production --local
-npx wrangler d1 execute dahada-production --local --file=./seed.sql
+npx wrangler d1 migrations apply airflow-production --local
+npx wrangler d1 execute airflow-production --local --file=./seed.sql
 ```

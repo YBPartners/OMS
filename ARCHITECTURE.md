@@ -2,7 +2,7 @@
 
 > **최종 업데이트**: 2026-03-07
 > **현재 버전**: v22.0.0
-> **프로덕션**: https://dahada-oms.pages.dev
+> **프로덕션**: https://airflow-oms.pages.dev
 > **이 문서는 새 대화에서 컨텍스트 복구용 — 반드시 먼저 읽을 것**
 
 ---
@@ -376,34 +376,34 @@ AUDITOR: dashboard, statistics, audit-log, notifications
 ```bash
 cd /home/user/webapp
 npm run build                    # Vite → dist/_worker.js (~252KB)
-pm2 start ecosystem.config.cjs   # wrangler pages dev dist --d1=dahada-production --kv=SESSION_CACHE --local
+pm2 start ecosystem.config.cjs   # wrangler pages dev dist --d1=airflow-production --kv=SESSION_CACHE --local
 curl http://localhost:3000/api/health
 ```
 
 ### 7.2 DB 관리
 ```bash
-npx wrangler d1 migrations apply dahada-production --local  # 마이그레이션 (22개)
-npx wrangler d1 execute dahada-production --local --file=./seed.sql  # 시드
-npx wrangler d1 execute dahada-production --local --command="SELECT ..."  # 쿼리
+npx wrangler d1 migrations apply airflow-production --local  # 마이그레이션 (22개)
+npx wrangler d1 execute airflow-production --local --file=./seed.sql  # 시드
+npx wrangler d1 execute airflow-production --local --command="SELECT ..."  # 쿼리
 ```
 
 ### 7.3 프로덕션 배포
 ```bash
 npm run build
-npx wrangler pages deploy dist --project-name dahada-oms
-npx wrangler d1 migrations apply dahada-production --remote  # 프로덕션 DB
+npx wrangler pages deploy dist --project-name airflow-oms
+npx wrangler d1 migrations apply airflow-production --remote  # 프로덕션 DB
 ```
 
 ### 7.4 wrangler.jsonc
 ```jsonc
 {
-  "name": "dahada-oms",
+  "name": "airflow-oms",
   "compatibility_date": "2026-03-03",
   "pages_build_output_dir": "./dist",
   "compatibility_flags": ["nodejs_compat"],
   "d1_databases": [{
     "binding": "DB",
-    "database_name": "dahada-production",
+    "database_name": "airflow-production",
     "database_id": "0b7aedd5-7510-44d3-8b81-d421b03fffa6"
   }],
   "kv_namespaces": [{
@@ -432,9 +432,9 @@ npx wrangler d1 migrations apply dahada-production --remote  # 프로덕션 DB
 
 3. **DB 상태 확인**:
    ```bash
-   npx wrangler d1 execute dahada-production --local --command="SELECT COUNT(*) FROM users"
+   npx wrangler d1 execute airflow-production --local --command="SELECT COUNT(*) FROM users"
    # 결과가 0이면 → seed.sql 재적용 필요
-   npx wrangler d1 execute dahada-production --local --file=./seed.sql
+   npx wrangler d1 execute airflow-production --local --file=./seed.sql
    ```
 
 4. **서비스 재시작**:

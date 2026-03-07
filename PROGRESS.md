@@ -170,7 +170,7 @@ margin = sell - work (참고 지표)
 
 **프로덕션 검증:**
 - [x] 빌드: OK (76 modules, 364.90 kB, 2.12s)
-- [x] 배포: OK — 커밋 `177534a`, https://dahada-oms.pages.dev
+- [x] 배포: OK — 커밋 `177534a`, https://airflow-oms.pages.dev
 - [x] 동작확인: OK — health API 응답 정상 (`{"status":"ok","version":"25.0.0"}`)
 - [x] 데이터확인: N/A (DB 스키마 변경 없음, 기존 데이터 호환)
 
@@ -203,7 +203,7 @@ margin = sell - work (참고 지표)
 
 **프로덕션 검증:**
 - [x] 빌드: OK (76 modules, 365.10 kB, 2.54s)
-- [x] 배포: OK — https://8a759015.dahada-oms.pages.dev
+- [x] 배포: OK — https://8a759015.airflow-oms.pages.dev
 - [x] 동작확인: OK — health API 정상, 콘솔 에러 0건
 - [x] 데이터확인: OK — hr.js 시군구 용어 확인, guide.js 시군구 용어 확인, pricing API 인증 정상
 
@@ -230,7 +230,7 @@ margin = sell - work (참고 지표)
 
 **프로덕션 검증:**
 - [x] 빌드: N/A (데이터 투입만)
-- [x] 배포: OK — `wrangler d1 execute dahada-production --remote --file=/tmp/seed_sigungu.sql` (457 rows written, 77 changes)
+- [x] 배포: OK — `wrangler d1 execute airflow-production --remote --file=/tmp/seed_sigungu.sql` (457 rows written, 77 changes)
 - [x] 동작확인: OK — `SELECT COUNT(*) FROM sigungu WHERE is_active=1` → 76건, `SELECT COUNT(DISTINCT sido)` → 4건
 - [x] 데이터확인: OK — 서울특별시 25, 경기도 27, 인천광역시 8, 부산광역시 16
 
@@ -254,7 +254,7 @@ margin = sell - work (참고 지표)
 
 **프로덕션 검증:**
 - [x] 빌드: OK (76 modules, 365.10 kB, 2.14s)
-- [x] 배포: OK — 커밋 `55f4f1d`, https://dahada-oms.pages.dev
+- [x] 배포: OK — 커밋 `55f4f1d`, https://airflow-oms.pages.dev
 - [x] 동작확인: OK — Health 200 (TTFB 0.11~0.26s), HTML 12,418bytes, `<head>`에서 동기 외부 script 0개, AdSense 완전 제거, 콘솔 에러 4개→1개(autocomplete 경고만)
 - [x] 데이터확인: N/A (코드 변경만)
 
@@ -299,7 +299,7 @@ margin = sell - work (참고 지표)
 ### 변경 통계
 - 신규 파일 1개: guide.js (524줄)
 - 수정 파일 5개: orders.js (+466/-233), sw.js, index.tsx, tailwind.css, manifest.json
-- 배포: dahada-oms.pages.dev
+- 배포: airflow-oms.pages.dev
 - asset v31, SW cache v21
 
 ---
@@ -357,7 +357,7 @@ margin = sell - work (참고 지표)
 - **신규 파일 3개**: `migrations/0022_scheduled_time.sql`, `public/static/js/pages/schedule.js` (462줄), `src/routes/orders/schedule.ts` (110줄)
 - **수정 파일 9개**: assign.ts, crud.ts, orders/index.ts, index.tsx, constants.js, auth.js, my-orders.js, orders.js, kanban.js
 - **빌드**: dist/_worker.js 336.65 KB
-- **프로덕션**: https://dahada-oms.pages.dev
+- **프로덕션**: https://airflow-oms.pages.dev
 
 ---
 
@@ -425,7 +425,7 @@ margin = sell - work (참고 지표)
 
 ### R15-2: CORS 도메인 제한 ✅
 - 이전: `cors()` — 모든 origin 허용
-- 이후: `dahada-oms.pages.dev`, `localhost:3000` 만 허용
+- 이후: `airflow-oms.pages.dev`, `localhost:3000` 만 허용
 - 개발/프로덕션 환경 자동 전환
 
 ### R15-3: Request Body 크기 제한 ✅
@@ -1708,7 +1708,7 @@ margin = sell - work (참고 지표)
 
 | 구분 | URL |
 |------|-----|
-| 프로덕션 | https://dahada-oms.pages.dev |
+| 프로덕션 | https://airflow-oms.pages.dev |
 | 샌드박스 | https://3000-inedg4lr7hnug2y22i9nx-5185f4aa.sandbox.novita.ai |
 | D1 Database ID | 0b7aedd5-7510-44d3-8b81-d421b03fffa6 |
 
