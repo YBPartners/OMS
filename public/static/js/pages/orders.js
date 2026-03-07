@@ -475,9 +475,8 @@ function getServiceTypeLabel(code) {
   return st ? st.label : (code || '미분류');
 }
 function getServiceTypeBadge(order) {
-  const st = SERVICE_TYPES.find(s => s.code === code);
-  if (!st) return `<span class="text-xs text-gray-400">미분류</span>`;
-  return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-violet-50 text-violet-700 border border-violet-200"><i class="fas ${st.icon}"></i>${st.label}</span>`;
+  // order_items 기반으로 전환 예정 - 현재는 미분류 표시
+  return `<span class="text-xs text-gray-400">항목 미등록</span>`;
 }
 
 // ─── 수동 등록 모달 ───

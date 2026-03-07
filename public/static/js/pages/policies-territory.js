@@ -1,5 +1,5 @@
 // ============================================================
-// Airflow OMS — 지역권 매핑 탭 v10.0 (R13 고도화)
+// Airflow OMS — 시군구 매핑 탭 v11.0 (REFACTOR-1 시군구 전환)
 // 시도 드릴다운, 일괄매핑/해제, 전국 검색, CSV 내보내기
 // ============================================================
 
@@ -33,8 +33,8 @@ function renderTerritoryTab(territories) {
       <div class="bg-white rounded-xl p-5 border border-gray-100">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <h3 class="font-semibold text-lg"><i class="fas fa-map-location-dot mr-2 text-rose-500"></i>지역권 매핑 현황</h3>
-            <p class="text-xs text-gray-500 mt-1">주문 자동 배분을 위한 지역권-조직 매핑을 관리합니다.</p>
+            <h3 class="font-semibold text-lg"><i class="fas fa-map-location-dot mr-2 text-rose-500"></i>시군구 매핑 현황</h3>
+            <p class="text-xs text-gray-500 mt-1">주문 자동 배분을 위한 시군구-총판 매핑을 관리합니다.</p>
           </div>
           <div class="flex gap-2">
             ${canEditPolicy ? `<button onclick="showBulkMappingModal()" class="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs hover:bg-indigo-700"><i class="fas fa-layer-group mr-1"></i>일괄 매핑</button>` : ''}
@@ -46,7 +46,7 @@ function renderTerritoryTab(territories) {
         <!-- 매핑률 + 통계 -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           <div class="bg-gradient-to-r from-rose-50 to-pink-50 rounded-lg p-3 border border-rose-100">
-            <div class="text-[10px] text-gray-500 mb-1">전체 지역권</div>
+            <div class="text-[10px] text-gray-500 mb-1">전체 시군구</div>
             <div class="text-2xl font-bold text-gray-800">${territories.length}</div>
           </div>
           <div class="bg-green-50 rounded-lg p-3 border border-green-100 cursor-pointer hover:shadow-sm" onclick="window._terrFilterStatus='mapped';renderContent()">
@@ -99,12 +99,12 @@ function renderTerritoryTab(territories) {
             <button onclick="showTerritoryMappingModal(${t.territory_id})" class="px-2 py-1 ${t.org_name ? 'bg-gray-100 text-gray-700' : 'bg-blue-100 text-blue-700'} rounded text-xs hover:opacity-80">${t.org_name ? '<i class="fas fa-edit"></i>' : '<i class="fas fa-link"></i> 매핑'}</button>
             ${t.org_name ? `<button onclick="unmapTerritory(${t.territory_id})" class="px-2 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100 ml-1"><i class="fas fa-unlink"></i></button>` : ''}
           ` }
-        ], rows: filtered, compact: true, noBorder: true, emptyText: filterSido || filterStatus ? '조건에 맞는 지역권이 없습니다.' : '지역권이 없습니다.' })}
+        ], rows: filtered, compact: true, noBorder: true, emptyText: filterSido || filterStatus ? '조건에 맞는 시군구가 없습니다.' : '시군구 데이터가 없습니다.' })}
       </div>
     </div>`;
 }
 
-// ── 지역권 검색 모달 ──
+// ── 시군구 검색 모달 ──
 async function showTerritorySearchModal() {
   const content = `<div class="space-y-3">
     <div class="flex gap-2">
@@ -116,7 +116,7 @@ async function showTerritorySearchModal() {
     </div>
     <div id="terr-search-results" class="max-h-[50vh] overflow-y-auto"><div class="text-center text-gray-400 py-8 text-sm">검색어를 입력하세요</div></div>
   </div>`;
-  showModal('<i class="fas fa-search mr-2 text-blue-600"></i>지역권 검색', content, `<button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>`, { large: true });
+  showModal('<i class="fas fa-search mr-2 text-blue-600"></i>시군구 검색', content, `<button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>`, { large: true });
 }
 
 let _terrSearchTimer = null;
@@ -150,7 +150,7 @@ async function _terrSearchFilter() {
 // ── 단건 매핑 모달 ──
 async function showTerritoryMappingModal(territoryId) {
   const t = (window._cachedTerritories||[]).find(x => x.territory_id === territoryId);
-  if (!t) { showToast('지역권을 찾을 수 없습니다.', 'error'); return; }
+  if (!t) { showToast('시군구을 찾을 수 없습니다.', 'error'); return; }
   const orgsRes = await api('GET', '/auth/organizations');
   const orgs = (orgsRes?.organizations || []).filter(o => o.org_type === 'REGION');
 
@@ -168,7 +168,7 @@ async function showTerritoryMappingModal(territoryId) {
     </div>
   </div>`;
 
-  showModal(`<i class="fas fa-link mr-2 text-blue-600"></i>지역권 매핑 — #${territoryId}`, content, `
+  showModal(`<i class="fas fa-link mr-2 text-blue-600"></i>시군구 매핑 — #${territoryId}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitTerritoryMapping(${territoryId})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">매핑 저장</button>`);
 }
@@ -181,7 +181,7 @@ async function submitTerritoryMapping(territoryId) {
 
 // ── 매핑 해제 ──
 function unmapTerritory(territoryId) {
-  showConfirmModal('매핑 해제', `지역권 #${territoryId}의 조직 매핑을 해제하시겠습니까?\n해제 후 해당 지역의 주문은 자동 배분되지 않습니다.`, async () => {
+  showConfirmModal('매핑 해제', `시군구 #${territoryId}의 조직 매핑을 해제하시겠습니까?\n해제 후 해당 지역의 주문은 자동 배분되지 않습니다.`, async () => {
     try {
       const res = await api('PUT', `/stats/territories/${territoryId}/mapping`, { org_id: null });
       if (res?.ok) { showToast('매핑 해제 완료', 'success'); renderContent(); }
@@ -201,7 +201,7 @@ async function showBulkMappingModal() {
   const orgs = (orgsRes?.organizations || []).filter(o => o.org_type === 'REGION');
 
   const content = `<div class="space-y-4">
-    <div class="bg-indigo-50 rounded-lg p-3 text-xs text-indigo-700"><i class="fas fa-info-circle mr-1"></i>시도와 시군구를 선택하면 해당 지역의 <strong>미매핑</strong> 지역권을 선택한 조직에 일괄 매핑합니다.</div>
+    <div class="bg-indigo-50 rounded-lg p-3 text-xs text-indigo-700"><i class="fas fa-info-circle mr-1"></i>시도와 시군구를 선택하면 해당 지역의 <strong>미매핑</strong> 시군구을 선택한 조직에 일괄 매핑합니다.</div>
 
     <div class="grid grid-cols-2 gap-3">
       <div><label class="block text-xs text-gray-600 mb-1 font-semibold">대상 조직 (지역총판) *</label>
@@ -225,7 +225,7 @@ async function showBulkMappingModal() {
     <button onclick="_executeBulkMapping()" class="w-full px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition"><i class="fas fa-layer-group mr-1"></i>일괄 매핑 실행</button>
   </div>`;
 
-  showModal('<i class="fas fa-layer-group mr-2 text-indigo-600"></i>지역권 일괄 매핑', content, `<button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>`, { large: true });
+  showModal('<i class="fas fa-layer-group mr-2 text-indigo-600"></i>시군구 일괄 매핑', content, `<button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>`, { large: true });
 }
 
 async function _loadBulkSigungu() {
@@ -268,8 +268,8 @@ function _updateBulkPreview() {
   }
   window._bulkTargetIds = target.map(t => t.territory_id);
   el.innerHTML = target.length
-    ? `<div class="text-left"><div class="text-indigo-700 font-bold mb-1"><i class="fas fa-map-pin mr-1"></i>${target.length}개 지역권을 일괄 매핑합니다</div><div class="text-[10px] text-gray-400 max-h-20 overflow-y-auto">${target.slice(0, 20).map(t => `${t.sido} ${t.sigungu} ${t.eupmyeondong||''}`).join(', ')}${target.length > 20 ? ` 외 ${target.length - 20}건` : ''}</div></div>`
-    : '<span class="text-gray-400">매핑할 미매핑 지역권이 없습니다.</span>';
+    ? `<div class="text-left"><div class="text-indigo-700 font-bold mb-1"><i class="fas fa-map-pin mr-1"></i>${target.length}개 시군구을 일괄 매핑합니다</div><div class="text-[10px] text-gray-400 max-h-20 overflow-y-auto">${target.slice(0, 20).map(t => `${t.sido} ${t.sigungu} ${t.eupmyeondong||''}`).join(', ')}${target.length > 20 ? ` 외 ${target.length - 20}건` : ''}</div></div>`
+    : '<span class="text-gray-400">매핑할 미매핑 시군구이 없습니다.</span>';
 }
 
 async function _executeBulkMapping() {
@@ -294,12 +294,12 @@ function exportTerritoryCSV() {
   if (!data.length) { showToast('데이터가 없습니다.', 'warning'); return; }
   const rows = [['ID', '시도', '시군구', '읍면동', '행정코드', '법정코드', '매핑조직', '상태']];
   data.forEach(t => rows.push([t.code, t.sido, t.sigungu, t.full_name, t.org_name || '', t.org_name ? '매핑' : '미매핑']));
-  if (typeof exportToCSV === 'function') exportToCSV(rows, '지역권매핑현황');
+  if (typeof exportToCSV === 'function') exportToCSV(rows, '시군구매핑현황');
   else {
     const csv = rows.map(r => r.map(c => `"${(c+'').replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = `지역권매핑_${new Date().toISOString().slice(0,10)}.csv`;
+    a.download = `시군구매핑_${new Date().toISOString().slice(0,10)}.csv`;
     a.click(); URL.revokeObjectURL(a.href);
   }
 }

@@ -9,8 +9,8 @@ function renderDistPolicyTab(policies) {
     <div class="bg-white rounded-xl p-5 border border-gray-100">
       <div class="flex items-center justify-between mb-3">
         <div>
-          <h3 class="font-semibold text-lg">배분 정책 (행정동 기반 자동배분)</h3>
-          <p class="text-xs text-gray-500 mt-1">주문 인입 시 행정동 코드를 기반으로 지역총판에 자동 배분하는 규칙을 정의합니다. <strong class="text-blue-600">활성 정책 1개만 적용</strong>됩니다.</p>
+          <h3 class="font-semibold text-lg">배분 정책 (시군구 기반 자동배분)</h3>
+          <p class="text-xs text-gray-500 mt-1">주문 인입 시 주소의 시군구를 기반으로 총판에 자동 배분하는 규칙을 정의합니다. <strong class="text-blue-600">활성 정책 1개만 적용</strong>됩니다.</p>
         </div>
         ${canEditPolicy ? `<button onclick="showNewDistPolicyModal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition"><i class="fas fa-plus mr-1"></i>새 버전</button>` : ''}
       </div>
@@ -78,7 +78,7 @@ async function showDistDetailModal(policyId) {
     </div>
 
     <div class="bg-blue-50 rounded-lg p-3 text-xs text-blue-700 leading-relaxed">
-      <i class="fas fa-info-circle mr-1"></i><strong>동작 원리:</strong> 주문의 설치 주소에서 행정동 코드를 추출 → <code class="bg-blue-100 px-1 rounded">territories</code> 테이블에서 일치하는 지역권 검색 → 해당 지역총판에 자동 배분. 매칭 실패 시 <code class="bg-blue-100 px-1 rounded">${ruleObj.fallback || 'DISTRIBUTION_PENDING'}</code> 상태로 전환.
+      <i class="fas fa-info-circle mr-1"></i><strong>동작 원리:</strong> 주문의 설치 주소에서 시군구를 식별 → <code class="bg-blue-100 px-1 rounded">region_sigungu_map</code>에서 매칭된 총판 검색 → 해당 총판에 자동 배분. 매칭 실패 시 <code class="bg-blue-100 px-1 rounded">${ruleObj.fallback || 'DISTRIBUTION_PENDING'}</code> 상태로 전환.
     </div>
     ${p.created_at ? `<div class="text-[11px] text-gray-400 text-right">생성: ${new Date(p.created_at).toLocaleString('ko-KR')}</div>` : ''}
   </div>`;
@@ -97,11 +97,11 @@ async function showDistDetailModal(policyId) {
         <div class="text-xs font-semibold text-gray-600 mb-2"><i class="fas fa-chart-line mr-1"></i>영향도 분석</div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
           <div class="bg-orange-50 rounded-lg p-2.5 text-center border border-orange-100"><div class="text-lg font-bold text-orange-700">${imp.pending_orders||0}</div><div class="text-[10px] text-gray-500">배분 대기 주문</div></div>
-          <div class="bg-green-50 rounded-lg p-2.5 text-center border border-green-100"><div class="text-lg font-bold text-green-700">${imp.mapping_rate||0}%</div><div class="text-[10px] text-gray-500">지역권 매핑률</div></div>
-          <div class="bg-blue-50 rounded-lg p-2.5 text-center border border-blue-100"><div class="text-lg font-bold text-blue-700">${imp.mapped_territories||0}/${imp.total_territories||0}</div><div class="text-[10px] text-gray-500">매핑된 지역권</div></div>
-          <div class="bg-red-50 rounded-lg p-2.5 text-center border border-red-100"><div class="text-lg font-bold text-red-700">${imp.unmapped_territories||0}</div><div class="text-[10px] text-gray-500">미매핑 지역</div></div>
+          <div class="bg-green-50 rounded-lg p-2.5 text-center border border-green-100"><div class="text-lg font-bold text-green-700">${imp.mapping_rate||0}%</div><div class="text-[10px] text-gray-500">시군구 매핑률</div></div>
+          <div class="bg-blue-50 rounded-lg p-2.5 text-center border border-blue-100"><div class="text-lg font-bold text-blue-700">${imp.mapped_sigungu||0}/${imp.total_sigungu||0}</div><div class="text-[10px] text-gray-500">매핑된 시군구</div></div>
+          <div class="bg-red-50 rounded-lg p-2.5 text-center border border-red-100"><div class="text-lg font-bold text-red-700">${imp.unmapped_sigungu||0}</div><div class="text-[10px] text-gray-500">미매핑 시군구</div></div>
         </div>
-        ${imp.unmapped_territories > 0 ? `<div class="mt-2 bg-red-50 rounded-lg p-2 text-xs text-red-700"><i class="fas fa-exclamation-triangle mr-1"></i><strong>${imp.unmapped_territories}개</strong> 지역이 매핑되지 않았습니다. 해당 지역의 주문은 자동 배분되지 않습니다. <button onclick="window._policyTab='territory';closeModal();renderContent()" class="underline font-bold ml-1">지역권 매핑 →</button></div>` : ''}
+        ${imp.unmapped_sigungu > 0 ? `<div class="mt-2 bg-red-50 rounded-lg p-2 text-xs text-red-700"><i class="fas fa-exclamation-triangle mr-1"></i><strong>${imp.unmapped_sigungu}개</strong> 시군구가 매핑되지 않았습니다. 해당 시군구의 주문은 자동 배분되지 않습니다. <button onclick="window._policyTab='territory';closeModal();renderContent()" class="underline font-bold ml-1">시군구 매핑 →</button></div>` : ''}
         ${imp.sido_mapping?.length ? `<div class="mt-2"><div class="text-[10px] text-gray-500 mb-1">시도별 매핑 현황</div><div class="flex flex-wrap gap-1">${imp.sido_mapping.map(s => {
           const pct = s.total ? Math.round(s.mapped/s.total*100) : 0;
           const color = pct === 100 ? 'bg-green-100 text-green-700' : pct > 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700';
@@ -119,7 +119,7 @@ function showNewDistPolicyModal() {
   const content = `<div class="space-y-4">
     <div class="bg-blue-50 rounded-lg p-3 text-xs text-blue-700"><i class="fas fa-info-circle mr-1"></i>새 버전을 생성하면 기존 활성 버전은 자동으로 비활성화됩니다.</div>
     <div><label class="block text-xs text-gray-600 mb-1 font-semibold">정책명 *</label>
-      <input id="dp-name" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none" placeholder="예: 행정동 기반 자동배분 v2"></div>
+      <input id="dp-name" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none" placeholder="예: 시군구 기반 자동배분 v2"></div>
 
     <div class="bg-gray-50 rounded-lg p-4 border">
       <div class="text-xs font-semibold text-gray-600 mb-3"><i class="fas fa-sliders mr-1"></i>배분 규칙 설정</div>

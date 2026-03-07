@@ -37,7 +37,7 @@ async function renderPolicies(el) {
       { id: 'distribution', icon: 'fa-share-nodes', label: '배분 정책', count: distPolicies.length },
       { id: 'report', icon: 'fa-file-lines', label: '보고서 정책', count: reportPolicies.length },
       { id: 'commission', icon: 'fa-percent', label: '수수료 정책', count: commPolicies.length },
-      { id: 'territory', icon: 'fa-map-location-dot', label: '지역권 매핑', count: territories.length },
+      { id: 'territory', icon: 'fa-map-location-dot', label: '시군구 매핑', count: territories.length },
       { id: 'metrics', icon: 'fa-chart-bar', label: '지표 정책', count: metricsPolicies.length },
       { id: 'audit', icon: 'fa-clock-rotate-left', label: '변경 이력' },
     ];
@@ -89,12 +89,12 @@ function _policySummaryCards(s) {
     { icon:'fa-file-lines', color:'emerald', label:'보고서', val:`${s.report?.active||0}/${s.report?.total||0}`, sub:'활성/전체' },
     { icon:'fa-percent', color:'amber', label:'수수료', val:`${s.commission?.active||0}/${s.commission?.total||0}`, sub:'활성/전체' },
     { icon:'fa-chart-bar', color:'purple', label:'지표', val:`${s.metrics?.active||0}/${s.metrics?.total||0}`, sub:'활성/전체' },
-    { icon:'fa-map-location-dot', color:'rose', label:'지역권', val:`${s.territories?.total||0}`, sub:`${s.territories?.sido_cnt||0}개 시도` },
-    { icon:'fa-earth-asia', color:'cyan', label:'행정구역', val:`${s.admin_regions?.total||0}`, sub:`${s.admin_regions?.sigungu_cnt||0}개 시군구` },
+    { icon:'fa-map-location-dot', color:'rose', label:'시군구', val:`${s.sigungu?.total||0}`, sub:`${s.sigungu?.sido_cnt||0}개 시도` },
+    { icon:'fa-earth-asia', color:'cyan', label:'매핑', val:`${s.region_mappings?.total||0}`, sub:'총판 매핑' },
     { icon:'fa-boxes-stacked', color:'orange', label:'활성주문', val:`${s.active_orders||0}`, sub:'배분 대기' },
   ];
   return cards.map(c => `
-    <div class="bg-white rounded-xl p-3 border border-gray-100 hover:shadow-md transition cursor-pointer" onclick="window._policyTab='${c.label==='배분'?'distribution':c.label==='보고서'?'report':c.label==='수수료'?'commission':c.label==='지표'?'metrics':c.label==='지역권'?'territory':'overview'}';renderContent()">
+    <div class="bg-white rounded-xl p-3 border border-gray-100 hover:shadow-md transition cursor-pointer" onclick="window._policyTab='${c.label==='배분'?'distribution':c.label==='보고서'?'report':c.label==='수수료'?'commission':c.label==='지표'?'metrics':c.label==='시군구 매핑'?'territory':'overview'}';renderContent()">
       <div class="flex items-center gap-2 mb-1"><div class="w-7 h-7 rounded-lg bg-${c.color}-100 flex items-center justify-center"><i class="fas ${c.icon} text-${c.color}-600 text-xs"></i></div><span class="text-[11px] text-gray-500">${c.label}</span></div>
       <div class="text-lg font-bold text-gray-800">${c.val}</div>
       <div class="text-[10px] text-gray-400">${c.sub}</div>
@@ -105,7 +105,7 @@ function _policySummaryCards(s) {
 function _policyOverviewTab(s) {
   const audit = s.recent_audit || [];
   const _icon = a => a === 'CREATE' ? '<i class="fas fa-plus text-green-500 text-xs"></i>' : a === 'UPDATE' ? '<i class="fas fa-pen text-blue-500 text-xs"></i>' : a === 'DELETE' ? '<i class="fas fa-trash text-red-500 text-xs"></i>' : a === 'CLONE' ? '<i class="fas fa-copy text-purple-500 text-xs"></i>' : '<i class="fas fa-circle text-gray-400 text-xs"></i>';
-  const _lbl = t => ({ DISTRIBUTION_POLICY:'배분', REPORT_POLICY:'보고서', COMMISSION_POLICY:'수수료', METRICS_POLICY:'지표', TERRITORY:'지역권', ORG_REGION_MAPPING:'행정구역매핑' }[t] || t);
+  const _lbl = t => ({ DISTRIBUTION_POLICY:'배분', REPORT_POLICY:'보고서', COMMISSION_POLICY:'수수료', METRICS_POLICY:'지표', TERRITORY:'시군구', ORG_REGION_MAPPING:'시군구매핑', REGION_MAPPING:'시군구매핑', SIGUNGU_MAPPING:'시군구매핑' }[t] || t);
   return `<div class="space-y-6">
     <div class="bg-white rounded-xl p-5 border border-gray-100">
       <h3 class="font-semibold mb-4"><i class="fas fa-chart-pie mr-2 text-indigo-500"></i>정책 활성률</h3>
@@ -118,14 +118,14 @@ function _policyOverviewTab(s) {
         </div>
         <div class="space-y-3">
           <div class="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg p-4 cursor-pointer hover:shadow-sm transition" onclick="window._policyTab='territory';renderContent()">
-            <div class="text-xs text-gray-500 mb-1"><i class="fas fa-earth-asia mr-1"></i>전국 행정구역</div>
-            <div class="text-2xl font-bold text-indigo-700">${s.admin_regions?.total||0}<span class="text-sm font-normal text-gray-500 ml-1">행정동</span></div>
-            <div class="text-xs text-gray-500 mt-1">${s.admin_regions?.sido_cnt||0}개 시도 · ${s.admin_regions?.sigungu_cnt||0}개 시군구</div>
+            <div class="text-xs text-gray-500 mb-1"><i class="fas fa-earth-asia mr-1"></i>전국 시군구</div>
+            <div class="text-2xl font-bold text-indigo-700">${s.sigungu?.total||0}<span class="text-sm font-normal text-gray-500 ml-1">시군구</span></div>
+            <div class="text-xs text-gray-500 mt-1">${s.sigungu?.sido_cnt||0}개 시도</div>
           </div>
           <div class="bg-gradient-to-r from-rose-50 to-pink-50 rounded-lg p-4 cursor-pointer hover:shadow-sm transition" onclick="window._policyTab='territory';renderContent()">
-            <div class="text-xs text-gray-500 mb-1"><i class="fas fa-map-pin mr-1"></i>지역권 매핑</div>
-            <div class="text-2xl font-bold text-rose-700">${s.territories?.total||0}<span class="text-sm font-normal text-gray-500 ml-1">지역권</span></div>
-            <div class="text-xs text-gray-500 mt-1">조직 매핑: ${s.org_region_mappings?.total||0}건</div>
+            <div class="text-xs text-gray-500 mb-1"><i class="fas fa-map-pin mr-1"></i>총판 매핑</div>
+            <div class="text-2xl font-bold text-rose-700">${s.region_mappings?.total||0}<span class="text-sm font-normal text-gray-500 ml-1">매핑</span></div>
+            <div class="text-xs text-gray-500 mt-1">총판 ↔ 시군구 매핑</div>
           </div>
         </div>
       </div>
@@ -158,7 +158,7 @@ async function _loadAuditTab() {
     const res = await api('GET', `/stats/policies/audit?type=${typeFilter}&limit=100`);
     const logs = res?.audit_logs || [];
     const types = ['','DISTRIBUTION_POLICY','REPORT_POLICY','COMMISSION_POLICY','METRICS_POLICY','TERRITORY','ORG_REGION_MAPPING'];
-    const typeLabels = { '':'전체', DISTRIBUTION_POLICY:'배분', REPORT_POLICY:'보고서', COMMISSION_POLICY:'수수료', METRICS_POLICY:'지표', TERRITORY:'지역권', ORG_REGION_MAPPING:'행정구역매핑' };
+    const typeLabels = { '':'전체', DISTRIBUTION_POLICY:'배분', REPORT_POLICY:'보고서', COMMISSION_POLICY:'수수료', METRICS_POLICY:'지표', TERRITORY:'시군구', ORG_REGION_MAPPING:'시군구매핑', REGION_MAPPING:'시군구매핑', SIGUNGU_MAPPING:'시군구매핑' };
     const _icon = a => ({ CREATE:'<i class="fas fa-plus text-green-500"></i>', UPDATE:'<i class="fas fa-pen text-blue-500"></i>', DELETE:'<i class="fas fa-trash text-red-500"></i>', CLONE:'<i class="fas fa-copy text-purple-500"></i>', 'BULK_MAPPING':'<i class="fas fa-layer-group text-teal-500"></i>', 'REGION.MAPPED':'<i class="fas fa-link text-indigo-500"></i>', 'REGION.UNMAPPED':'<i class="fas fa-unlink text-orange-500"></i>' }[a] || '<i class="fas fa-circle text-gray-400"></i>');
     const actionLabel = a => ({ CREATE:'생성', UPDATE:'수정', DELETE:'삭제', CLONE:'복제', BULK_CREATE:'일괄생성', BULK_MAPPING:'일괄매핑', 'REGION.MAPPED':'매핑', 'REGION.UNMAPPED':'매핑해제' }[a] || a);
 
