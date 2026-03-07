@@ -967,8 +967,12 @@ function _renderPriceTotals(items, order) {
     </div>`;
 }
 
-// 항목 추가 바텀시트
+// ─── 항목 추가 시트 (멀티 선택 지원 v2.0) ───
+// 여러 항목을 선택하고 각각 수량/모델명/메모를 설정한 뒤 "확인"으로 일괄 추가
+let _pendingItems = []; // { category_id, category_name, group_name, sell_price, work_price, quantity, model_name, notes, options_json }
+
 async function _showAddItemSheet(orderId) {
+  _pendingItems = [];
   const container = document.getElementById('price-confirm-container');
   const channelId = container?.dataset.channelId;
   const catalog = await _loadCatalog(channelId);
@@ -985,53 +989,252 @@ async function _showAddItemSheet(orderId) {
     groups[c.group_name].push(c);
   }
 
+  // 카탈로그를 window에 임시 저장 (옵션 조회용)
+  window._addItemCatalog = { priceMap, options };
+
   const groupHtml = Object.entries(groups).map(([gn, cats]) => `
     <div class="mb-3">
-      <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">${escapeHtml(gn)}</div>
+      <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 px-1">${escapeHtml(gn)}</div>
       <div class="grid grid-cols-2 gap-2">
         ${cats.map(c => {
           const pr = priceMap[c.category_id];
           return `
-          <button onclick="_addItemFromCatalog(${orderId}, ${c.category_id}, '${escapeHtml(c.name).replace(/'/g, "\\'")}', ${pr?.sell_price || 0}, ${pr?.work_price || 0})"
-            class="text-left px-3 py-2.5 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition">
-            <div class="text-sm font-medium truncate">${escapeHtml(c.name)}</div>
-            ${pr ? `<div class="text-xs text-blue-600 mt-0.5">${formatAmount(pr.sell_price)} <span class="text-gray-400">/ 수행 ${formatAmount(pr.work_price)}</span></div>` : '<div class="text-[10px] text-gray-400 mt-0.5">단가 미설정</div>'}
+          <button type="button" onclick="_toggleCatalogItem(${c.category_id}, '${escapeHtml(c.name).replace(/'/g, "\\'")}', '${escapeHtml(gn).replace(/'/g, "\\'")}')"
+            id="cat-btn-${c.category_id}"
+            class="cat-select-btn text-left px-3 py-2.5 bg-white border-2 border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition relative">
+            <div class="flex items-center gap-1.5">
+              <i class="fas fa-square text-gray-300 text-xs cat-check-icon" id="cat-icon-${c.category_id}"></i>
+              <span class="text-sm font-medium truncate">${escapeHtml(c.name)}</span>
+            </div>
+            ${pr ? `<div class="text-xs text-blue-600 mt-0.5 pl-5">${formatAmount(pr.sell_price)} <span class="text-gray-400">/ ${formatAmount(pr.work_price)}</span></div>` : '<div class="text-[10px] text-gray-400 mt-0.5 pl-5">단가 미설정</div>'}
           </button>`;
         }).join('')}
       </div>
     </div>`).join('');
 
-  // 옵션 목록
+  // 옵션 (글로벌)
   const optHtml = options.length > 0 ? `
-    <div class="mt-3 pt-3 border-t">
-      <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">추가 옵션</div>
+    <div class="mt-2 pt-2 border-t">
+      <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 px-1">공통 추가 옵션</div>
       <div class="flex flex-wrap gap-2">
         ${options.map(o => `
           <label class="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border rounded-lg text-xs cursor-pointer hover:bg-amber-50 hover:border-amber-300 transition">
-            <input type="checkbox" class="add-item-option" value="${escapeHtml(o.code)}" data-sell="${o.additional_sell_price}" data-work="${o.additional_work_price}">
-            ${escapeHtml(o.name)} (+${formatAmount(o.additional_sell_price)})
+            <input type="checkbox" class="add-item-option-global" value="${escapeHtml(o.code)}" data-sell="${o.additional_sell_price}" data-work="${o.additional_work_price}" onchange="_renderPendingItems()">
+            ${escapeHtml(o.name)} <span class="text-amber-600">(+${formatAmount(o.additional_sell_price)})</span>
           </label>`).join('')}
       </div>
     </div>` : '';
 
   const sheetContent = `
     <div class="space-y-3">
-      <p class="text-sm text-gray-600">추가할 서비스 항목을 선택하세요.</p>
-      <div class="max-h-[50vh] overflow-y-auto pr-1">${groupHtml}</div>
-      ${optHtml}
-      <div class="flex items-center gap-3">
-        <label class="text-xs text-gray-500">수량:</label>
-        <input type="number" id="add-item-qty" value="1" min="1" max="99" class="w-16 border rounded-lg px-2 py-1 text-sm text-center">
-        <label class="text-xs text-gray-500 ml-2">모델명:</label>
-        <input type="text" id="add-item-model" placeholder="(선택)" class="flex-1 border rounded-lg px-2 py-1 text-sm">
+      <!-- 1단계: 항목 선택 -->
+      <div>
+        <p class="text-sm text-gray-600 mb-2"><i class="fas fa-hand-pointer mr-1 text-blue-500"></i>추가할 항목을 <b>모두 선택</b>하세요 (여러 개 가능)</p>
+        <div class="max-h-[35vh] overflow-y-auto pr-1 border rounded-xl p-2 bg-gray-50">${groupHtml}</div>
+        ${optHtml}
+      </div>
+      
+      <!-- 2단계: 선택한 항목별 상세 설정 -->
+      <div id="pending-items-detail" class="hidden">
+        <div class="flex items-center gap-2 mb-2">
+          <i class="fas fa-sliders text-green-500"></i>
+          <span class="text-sm font-semibold text-gray-700">선택 항목 상세 설정</span>
+          <span id="pending-items-count" class="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">0</span>
+        </div>
+        <div id="pending-items-list" class="space-y-2 max-h-[30vh] overflow-y-auto"></div>
+      </div>
+
+      <!-- 합계 미리보기 -->
+      <div id="pending-totals" class="hidden bg-blue-50 rounded-xl p-3 border border-blue-200">
+        <div class="grid grid-cols-2 gap-4 text-center">
+          <div>
+            <div class="text-xs text-gray-500">판매가 합계</div>
+            <div class="text-lg font-bold text-blue-700" id="pending-total-sell">₩0</div>
+          </div>
+          <div>
+            <div class="text-xs text-gray-500">수행가 합계</div>
+            <div class="text-lg font-bold text-green-700" id="pending-total-work">₩0</div>
+          </div>
+        </div>
       </div>
     </div>`;
 
-  showModal('<i class="fas fa-plus mr-2 text-green-500"></i>서비스 항목 추가', sheetContent,
-    `<button onclick="closeModal();showPriceConfirmModal(${orderId})" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">돌아가기</button>`,
-    { small: false });
+  showModal('<i class="fas fa-plus mr-2 text-green-500"></i>서비스 항목 추가', sheetContent, `
+    <button onclick="closeModal();showPriceConfirmModal(${orderId})" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">취소</button>
+    <button onclick="_submitBulkItems(${orderId})" id="btn-bulk-add" class="px-5 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition opacity-50 cursor-not-allowed" disabled>
+      <i class="fas fa-check mr-1"></i>선택 항목 추가 <span id="btn-bulk-count"></span>
+    </button>`,
+    { large: true });
 }
 
+function _toggleCatalogItem(categoryId, categoryName, groupName) {
+  const idx = _pendingItems.findIndex(it => it.category_id === categoryId);
+  const btn = document.getElementById(`cat-btn-${categoryId}`);
+  const icon = document.getElementById(`cat-icon-${categoryId}`);
+  const { priceMap } = window._addItemCatalog || {};
+  const pr = priceMap?.[categoryId];
+
+  if (idx >= 0) {
+    // 이미 선택됨 → 제거
+    _pendingItems.splice(idx, 1);
+    if (btn) { btn.classList.remove('border-blue-500', 'bg-blue-50'); btn.classList.add('border-gray-200', 'bg-white'); }
+    if (icon) { icon.classList.remove('fa-square-check', 'text-blue-600'); icon.classList.add('fa-square', 'text-gray-300'); }
+  } else {
+    // 새로 선택
+    _pendingItems.push({
+      category_id: categoryId,
+      category_name: categoryName,
+      group_name: groupName,
+      sell_price: pr?.sell_price || 0,
+      work_price: pr?.work_price || 0,
+      quantity: 1,
+      model_name: '',
+      notes: '',
+    });
+    if (btn) { btn.classList.add('border-blue-500', 'bg-blue-50'); btn.classList.remove('border-gray-200', 'bg-white'); }
+    if (icon) { icon.classList.add('fa-square-check', 'text-blue-600'); icon.classList.remove('fa-square', 'text-gray-300'); }
+  }
+
+  _renderPendingItems();
+}
+
+function _renderPendingItems() {
+  const detailEl = document.getElementById('pending-items-detail');
+  const listEl = document.getElementById('pending-items-list');
+  const countEl = document.getElementById('pending-items-count');
+  const totalsEl = document.getElementById('pending-totals');
+  const bulkBtn = document.getElementById('btn-bulk-add');
+  const bulkCount = document.getElementById('btn-bulk-count');
+
+  if (_pendingItems.length === 0) {
+    if (detailEl) detailEl.classList.add('hidden');
+    if (totalsEl) totalsEl.classList.add('hidden');
+    if (bulkBtn) { bulkBtn.disabled = true; bulkBtn.classList.add('opacity-50', 'cursor-not-allowed'); }
+    if (bulkCount) bulkCount.textContent = '';
+    return;
+  }
+
+  if (detailEl) detailEl.classList.remove('hidden');
+  if (totalsEl) totalsEl.classList.remove('hidden');
+  if (bulkBtn) { bulkBtn.disabled = false; bulkBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
+  if (countEl) countEl.textContent = _pendingItems.length;
+  if (bulkCount) bulkCount.textContent = `(${_pendingItems.length}건)`;
+
+  // 글로벌 옵션 추가금 계산
+  const optCheckboxes = document.querySelectorAll('.add-item-option-global:checked');
+  let optSellAdd = 0, optWorkAdd = 0;
+  optCheckboxes.forEach(cb => {
+    optSellAdd += parseInt(cb.dataset.sell) || 0;
+    optWorkAdd += parseInt(cb.dataset.work) || 0;
+  });
+
+  let totalSell = 0, totalWork = 0;
+
+  if (listEl) {
+    listEl.innerHTML = _pendingItems.map((it, i) => {
+      const unitSell = it.sell_price + optSellAdd;
+      const unitWork = it.work_price + optWorkAdd;
+      const lineSell = unitSell * it.quantity;
+      const lineWork = unitWork * it.quantity;
+      totalSell += lineSell;
+      totalWork += lineWork;
+
+      return `
+      <div class="bg-white rounded-lg border border-gray-200 p-3 hover:border-blue-200 transition">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">${escapeHtml(it.group_name)}</span>
+            <span class="text-sm font-bold">${escapeHtml(it.category_name)}</span>
+          </div>
+          <button onclick="_toggleCatalogItem(${it.category_id}, '${escapeHtml(it.category_name).replace(/'/g, "\\'")}', '${escapeHtml(it.group_name).replace(/'/g, "\\'")}')" class="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition" title="제거">
+            <i class="fas fa-times text-xs"></i>
+          </button>
+        </div>
+        <div class="grid grid-cols-12 gap-2 items-end">
+          <div class="col-span-3 sm:col-span-2">
+            <label class="block text-[10px] text-gray-500 mb-0.5">수량</label>
+            <input type="number" value="${it.quantity}" min="1" max="99"
+              onchange="_updatePendingItem(${i}, 'quantity', this.value)"
+              class="w-full border rounded-lg px-2 py-1.5 text-sm text-center focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
+          </div>
+          <div class="col-span-4 sm:col-span-4">
+            <label class="block text-[10px] text-gray-500 mb-0.5">모델명</label>
+            <input type="text" value="${escapeHtml(it.model_name)}" placeholder="선택사항"
+              onchange="_updatePendingItem(${i}, 'model_name', this.value)"
+              class="w-full border rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
+          </div>
+          <div class="col-span-5 sm:col-span-4">
+            <label class="block text-[10px] text-gray-500 mb-0.5">메모</label>
+            <input type="text" value="${escapeHtml(it.notes)}" placeholder="비고"
+              onchange="_updatePendingItem(${i}, 'notes', this.value)"
+              class="w-full border rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
+          </div>
+          <div class="col-span-12 sm:col-span-2 text-right">
+            <div class="text-xs text-blue-600 font-bold">${formatAmount(lineSell)}</div>
+            <div class="text-[10px] text-gray-400">수행 ${formatAmount(lineWork)}</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // 합계 업데이트
+  const sellEl = document.getElementById('pending-total-sell');
+  const workEl = document.getElementById('pending-total-work');
+  if (sellEl) sellEl.textContent = formatAmount(totalSell);
+  if (workEl) workEl.textContent = formatAmount(totalWork);
+}
+
+function _updatePendingItem(index, field, value) {
+  if (index < 0 || index >= _pendingItems.length) return;
+  if (field === 'quantity') {
+    _pendingItems[index].quantity = Math.max(1, parseInt(value) || 1);
+  } else {
+    _pendingItems[index][field] = value;
+  }
+  _renderPendingItems();
+}
+
+async function _submitBulkItems(orderId) {
+  if (_pendingItems.length === 0) { showToast('추가할 항목을 선택하세요.', 'warning'); return; }
+
+  const btn = document.getElementById('btn-bulk-add');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>저장 중...'; }
+
+  try {
+    // 글로벌 옵션 수집
+    const optCheckboxes = document.querySelectorAll('.add-item-option-global:checked');
+    const optCodes = Array.from(optCheckboxes).map(cb => cb.value);
+    const optJson = optCodes.length > 0 ? JSON.stringify(optCodes) : undefined;
+
+    const payload = {
+      items: _pendingItems.map(it => ({
+        category_id: it.category_id,
+        quantity: it.quantity,
+        model_name: it.model_name || undefined,
+        notes: it.notes || undefined,
+        options_json: optJson,
+      })),
+    };
+
+    const res = await api('POST', `/orders/${orderId}/items/bulk`, payload);
+    if (res?.ok) {
+      showToast(`${res.added_count}개 항목 추가 완료`, 'success');
+      _pendingItems = [];
+      closeModal();
+      showPriceConfirmModal(orderId);
+    } else {
+      showToast(res?.error || '추가 실패', 'error');
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check mr-1"></i>선택 항목 추가'; }
+    }
+  } catch (e) {
+    console.error('[_submitBulkItems]', e);
+    showToast('항목 추가 실패: ' + (e.message||e), 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check mr-1"></i>선택 항목 추가'; }
+  }
+}
+
+// 단건 추가 (레거시 호환 - 외부에서 직접 호출 시)
 async function _addItemFromCatalog(orderId, categoryId, categoryName, sellPrice, workPrice) {
   try {
     const qty = parseInt(document.getElementById('add-item-qty')?.value) || 1;
@@ -1050,7 +1253,7 @@ async function _addItemFromCatalog(orderId, categoryId, categoryName, sellPrice,
     if (res?.ok) {
       showToast(`${categoryName} 추가됨`, 'success');
       closeModal();
-      showPriceConfirmModal(orderId);  // 새로고침
+      showPriceConfirmModal(orderId);
     } else {
       showToast(res?.error || '추가 실패', 'error');
     }

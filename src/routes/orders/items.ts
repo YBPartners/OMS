@@ -151,6 +151,122 @@ export function mountItems(router: Hono<Env>) {
     });
   });
 
+  // ─── 항목 일괄 추가 (멀티 선택) ───
+  router.post('/:order_id/items/bulk', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'TEAM_LEADER']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const orderId = Number(c.req.param('order_id'));
+
+    let body: any;
+    try { body = await c.req.json(); } catch { return c.json({ error: '잘못된 요청' }, 400); }
+
+    const items = body.items;
+    if (!Array.isArray(items) || items.length === 0) {
+      return c.json({ error: '추가할 항목이 없습니다.' }, 400);
+    }
+    if (items.length > 20) {
+      return c.json({ error: '한번에 최대 20개 항목까지 추가할 수 있습니다.' }, 400);
+    }
+
+    // 주문 존재 + 수정 가능 상태 확인
+    const order = await db.prepare('SELECT * FROM orders WHERE order_id = ?').bind(orderId).first() as any;
+    if (!order) return c.json({ error: '주문을 찾을 수 없습니다.' }, 404);
+
+    const editableStatuses = ['ASSIGNED', 'READY_DONE', 'CONFIRMED'];
+    if (!editableStatuses.includes(order.status)) {
+      return c.json({ error: `현재 상태(${order.status})에서는 항목을 추가할 수 없습니다.` }, 400);
+    }
+
+    const results: any[] = [];
+    for (const item of items) {
+      const { category_id, quantity = 1, model_name, options_json, notes } = item;
+      if (!category_id) continue;
+
+      // 카테고리 확인
+      const category = await db.prepare('SELECT * FROM service_categories WHERE category_id = ? AND is_active = 1')
+        .bind(category_id).first() as any;
+      if (!category) continue;
+
+      // 채널별 단가 조회
+      let unitSellPrice = 0, unitWorkPrice = 0;
+      if (order.channel_id) {
+        const price = await db.prepare(`
+          SELECT sell_price, work_price FROM service_prices
+          WHERE category_id = ? AND channel_id = ? AND is_active = 1
+            AND (effective_to IS NULL OR effective_to > datetime('now'))
+          ORDER BY effective_from DESC LIMIT 1
+        `).bind(category_id, order.channel_id).first() as any;
+        if (price) {
+          unitSellPrice = price.sell_price;
+          unitWorkPrice = price.work_price;
+        }
+      }
+
+      // 옵션 추가금 계산
+      let optSellAdd = 0, optWorkAdd = 0;
+      if (options_json) {
+        try {
+          const optionCodes = JSON.parse(options_json);
+          if (Array.isArray(optionCodes) && optionCodes.length > 0) {
+            const placeholders = optionCodes.map(() => '?').join(',');
+            const opts = await db.prepare(
+              `SELECT * FROM service_options WHERE code IN (${placeholders}) AND is_active = 1`
+            ).bind(...optionCodes).all();
+            for (const opt of opts.results as any[]) {
+              optSellAdd += opt.additional_sell_price;
+              optWorkAdd += opt.additional_work_price;
+            }
+          }
+        } catch { /* ignore parse errors */ }
+      }
+
+      const totalSell = (unitSellPrice + optSellAdd) * quantity;
+      const totalWork = (unitWorkPrice + optWorkAdd) * quantity;
+
+      const result = await db.prepare(`
+        INSERT INTO order_items (order_id, category_id, quantity, model_name, options_json,
+          unit_sell_price, unit_work_price, total_sell_price, total_work_price, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        orderId, category_id, quantity, model_name || null, options_json || null,
+        unitSellPrice + optSellAdd, unitWorkPrice + optWorkAdd, totalSell, totalWork, notes || null
+      ).run();
+
+      // 변동 이력 기록
+      await db.prepare(`
+        INSERT INTO order_item_changes (order_id, item_id, change_type, reason, after_json, sell_diff, work_diff, changed_by)
+        VALUES (?, ?, 'ADD', ?, ?, ?, ?, ?)
+      `).bind(
+        orderId, result.meta.last_row_id, '항목 일괄 추가',
+        JSON.stringify({ category: category.name, quantity, model_name }),
+        totalSell, totalWork, user.user_id
+      ).run();
+
+      results.push({
+        item_id: result.meta.last_row_id,
+        category_name: category.name,
+        quantity,
+        total_sell_price: totalSell,
+        total_work_price: totalWork,
+      });
+    }
+
+    // 가격 확정 해제 (항목 변경 시)
+    if (order.price_confirmed === 1 && results.length > 0) {
+      await db.prepare("UPDATE orders SET price_confirmed = 0, updated_at = datetime('now') WHERE order_id = ?")
+        .bind(orderId).run();
+    }
+
+    return c.json({
+      ok: true,
+      added_count: results.length,
+      items: results,
+    });
+  });
+
   // ─── 항목 수정 ───
   router.put('/:order_id/items/:item_id', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'TEAM_LEADER']);
