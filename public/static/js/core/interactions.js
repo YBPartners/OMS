@@ -1031,3 +1031,64 @@ function enableReviewSwipe(cardEl, orderId) {
     ]
   });
 }
+
+// ─── 팀장 배정 모달 (공용) ───
+async function showAssignModal(orderId) {
+  try {
+    // 현재 사용자 조직의 팀장 목록 조회
+    const leadersRes = await api('GET', '/auth/team-leaders');
+    const leaders = leadersRes?.team_leaders || [];
+
+    if (leaders.length === 0) {
+      showModal(`<i class="fas fa-user-plus mr-2 text-purple-500"></i>팀장 배정 — 주문 #${orderId}`,
+        `<div class="text-center py-8">
+          <i class="fas fa-user-slash text-4xl text-gray-300 mb-4 block"></i>
+          <p class="text-gray-500 mb-2">배정 가능한 팀장이 없습니다.</p>
+          <p class="text-xs text-gray-400">조직에 팀장을 먼저 등록해 주세요.</p>
+        </div>`,
+        `<button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 transition">닫기</button>`);
+      return;
+    }
+
+    const content = `
+      <div class="space-y-4">
+        <p class="text-sm text-gray-600">주문 <strong>#${orderId}</strong>을 배정할 팀장을 선택하세요.</p>
+        <div class="space-y-2 max-h-[50vh] overflow-y-auto">
+          ${leaders.map(l => `
+            <button onclick="assignToLeader(${orderId}, ${l.user_id})"
+              class="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-lg hover:bg-purple-50 hover:border-purple-300 border border-gray-200 transition">
+              <div class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                <i class="fas fa-user text-purple-600"></i>
+              </div>
+              <div class="text-left flex-1">
+                <div class="font-medium">${escapeHtml(l.name)}</div>
+                <div class="text-xs text-gray-500">${escapeHtml(l.org_name || '')} · ${formatPhone(l.phone)}</div>
+              </div>
+              <i class="fas fa-arrow-right text-gray-400"></i>
+            </button>
+          `).join('')}
+        </div>
+      </div>`;
+    showModal(`<i class="fas fa-user-plus mr-2 text-purple-500"></i>팀장 배정 — 주문 #${orderId}`, content,
+      `<button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 transition">닫기</button>`);
+  } catch (e) {
+    console.error('[showAssignModal]', e);
+    if (typeof showToast === 'function') showToast('팀장 목록을 불러올 수 없습니다: ' + (e.message||e), 'error');
+  }
+}
+
+async function assignToLeader(orderId, leaderId) {
+  try {
+    const res = await api('POST', `/orders/${orderId}/assign`, { team_leader_id: leaderId });
+    if (res?.ok) {
+      showToast('팀장 배정 완료', 'success');
+      closeModal();
+      if (typeof renderContent === 'function') renderContent();
+    } else {
+      showToast(res?.error || '배정 실패', 'error');
+    }
+  } catch (e) {
+    console.error('[assignToLeader]', e);
+    showToast('배정 실패: ' + (e.message||e), 'error');
+  }
+}
