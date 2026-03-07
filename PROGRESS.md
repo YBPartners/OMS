@@ -59,6 +59,7 @@
 | **INTEGRITY-1** | **시스템 정합성 감사 + 성능 개선** | **✅ 완료** | **2026-03-07** | **자동 감사 스크립트(scripts/audit.py), 통합 API(7→1), 매핑 해제 PUT→DELETE, 캐시 버스팅 v38** |
 | **REFACTOR-1** | **시군구 전환 + 서비스항목 단가표 + 가격확정 플로우** | **🔄 진행중** | **2026-03-07~** | **행정동→시군구, 채널별 단가표, order_items, 가격확정 워크플로우** |
 | **RULE-1** | **개발 원칙 제정 + 실행 절차 체계화** | **✅ 완료** | **2026-03-07** | **5대 원칙 + 4단계 실행 절차(만들기→넣기→확인하기→기록하기) + PROGRESS.md 체크리스트 형식 + 작업 시작 전 확인 절차. DEVELOPMENT_METHOD.md §0 기록** |
+| **PERF-1** | **초기 로딩 성능 근본 개선 — CDN 지연 로딩** | **✅ 완료** | **2026-03-07** | **Chart.js(205KB)+XLSX(882KB)+Daum(34KB)=1.12MB 동기 차단 제거, Google Fonts @import→preconnect, FontAwesome preload** |
 
 ---
 
@@ -184,6 +185,39 @@ margin = sell - work (참고 지표)
 - [x] 배포: OK — `wrangler d1 execute dahada-production --remote --file=/tmp/seed_sigungu.sql` (457 rows written, 77 changes)
 - [x] 동작확인: OK — `SELECT COUNT(*) FROM sigungu WHERE is_active=1` → 76건, `SELECT COUNT(DISTINCT sido)` → 4건
 - [x] 데이터확인: OK — 서울특별시 25, 경기도 27, 인천광역시 8, 부산광역시 16
+
+### PERF-1 완료 상세 — 초기 로딩 성능 근본 개선 ✅ (2026-03-07)
+
+**근본 원인:**
+- `<head>`에 동기 로딩하는 외부 CDN 라이브러리 3개: Chart.js(205KB) + XLSX(882KB) + Daum Postcode(34KB) = **1.12MB**
+- Google Fonts를 CSS `@import`로 로딩 (이중 차단 — 가장 느린 패턴)
+- 모든 페이지 진입 시 1.12MB를 블로킹 로드 → 대부분의 페이지에서 불필요
+
+**변경 내용:**
+1. Chart.js, XLSX, Daum Postcode: `<head>`의 동기 `<script>` 태그 **완전 제거**
+2. `loadCDN(name)` 동적 로딩 헬퍼 추가 — 필요한 페이지에서만 비동기 로드
+3. `dashboard.js`: Chart.js를 `loadCDN('chart')` 후 실행으로 변경
+4. `ui.js/exportToExcel`: XLSX를 `loadCDN('xlsx')` 후 실행으로 변경 (async 전환)
+5. `orders.js/openAddressSearch`: Daum Postcode를 `loadCDN('postcode')` 후 실행으로 변경
+6. Google Fonts: `@import` → `<link rel="preconnect">` + `<link rel="stylesheet">` (비차단)
+7. FontAwesome: `<link rel="preload" as="style">` (비차단)
+
+**변경 파일:** `src/index.tsx`, `public/static/js/pages/dashboard.js`, `public/static/js/core/ui.js`, `public/static/js/pages/orders.js` (4개 파일, +49/-20)
+
+**프로덕션 검증:**
+- [x] 빌드: OK (76 modules, 366.02 kB, 2.09s)
+- [x] 배포: OK — 커밋 `cbeca96`, https://dahada-oms.pages.dev
+- [x] 동작확인: OK — Health 200 (TTFB 0.12s), HTML 응답 0.21s, `<head>`에서 동기 외부 script 0개 확인
+- [x] 데이터확인: N/A (코드 변경만)
+
+**성능 측정 비교:**
+
+| 지표 | 변경 전 | 변경 후 | 차이 |
+|------|---------|---------|------|
+| `<head>` 동기 외부 script | 3개 (1.12MB) | 0개 | **-1.12MB 차단 제거** |
+| Google Fonts 로딩 | CSS @import (이중 차단) | preconnect + link (비차단) | **차단 해소** |
+| FontAwesome | link (렌더 차단) | preload + fallback (비차단) | **차단 해소** |
+| HTML TTFB | 0.12s | 0.12s | 동일 (서버 측은 무관) |
 
 ---
 
