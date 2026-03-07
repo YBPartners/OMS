@@ -204,4 +204,112 @@ export function mountDistribute(router: Hono<Env>) {
       return c.json({ error: '일괄 배분 처리 중 오류가 발생했습니다.', code: 'BATCH_DISTRIBUTE_ERROR' }, 500);
     }
   });
+
+  // ─── 배분 취소 (단건: DISTRIBUTED → DISTRIBUTION_PENDING) ───
+  router.patch('/:order_id/undistribute', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const orderId = Number(c.req.param('order_id'));
+
+    try {
+      const order = await db.prepare(
+        "SELECT * FROM orders WHERE order_id = ? AND status = 'DISTRIBUTED'"
+      ).bind(orderId).first();
+      if (!order) return c.json({ error: '배분 취소 가능한 주문이 아닙니다. (DISTRIBUTED 상태만 가능)' }, 400);
+
+      // 이미 배정(ASSIGNED 이상)된 주문은 취소 불가
+      await db.prepare("UPDATE order_distributions SET status = 'CANCELLED' WHERE order_id = ? AND status = 'ACTIVE'").bind(orderId).run();
+      await db.prepare("UPDATE orders SET status = 'DISTRIBUTION_PENDING', updated_at = datetime('now') WHERE order_id = ?").bind(orderId).run();
+      await writeStatusHistory(db, { order_id: orderId, from_status: 'DISTRIBUTED', to_status: 'DISTRIBUTION_PENDING', actor_id: user.user_id, note: '배분 취소 (수동)' });
+
+      return c.json({ ok: true, order_id: orderId, message: '배분이 취소되었습니다.' });
+    } catch (err: any) {
+      console.error(`[undistribute] 배분 취소 실패 order_id=${orderId}:`, err.message);
+      return c.json({ error: '배분 취소 중 오류가 발생했습니다.', code: 'UNDISTRIBUTE_ERROR' }, 500);
+    }
+  });
+
+  // ─── 일괄 배분 취소 ───
+  router.post('/batch-undistribute', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const { order_ids } = await c.req.json();
+
+    if (!order_ids?.length) return c.json({ error: '주문 ID 목록은 필수입니다.' }, 400);
+    if (order_ids.length > 100) return c.json({ error: '한 번에 최대 100건까지 처리 가능합니다.' }, 400);
+
+    let success = 0, fail = 0;
+    const results: any[] = [];
+
+    for (const orderId of order_ids) {
+      try {
+        const order = await db.prepare(
+          "SELECT order_id, status, customer_name FROM orders WHERE order_id = ? AND status = 'DISTRIBUTED'"
+        ).bind(orderId).first();
+        if (!order) { fail++; results.push({ order_id: orderId, result: 'FAIL', reason: '배분 취소 불가 상태' }); continue; }
+
+        await db.prepare("UPDATE order_distributions SET status = 'CANCELLED' WHERE order_id = ? AND status = 'ACTIVE'").bind(orderId).run();
+        await db.prepare("UPDATE orders SET status = 'DISTRIBUTION_PENDING', updated_at = datetime('now') WHERE order_id = ?").bind(orderId).run();
+        await writeStatusHistory(db, { order_id: orderId, from_status: 'DISTRIBUTED', to_status: 'DISTRIBUTION_PENDING', actor_id: user.user_id, note: '일괄 배분 취소' });
+
+        success++;
+        results.push({ order_id: orderId, result: 'UNDISTRIBUTED', customer_name: order.customer_name });
+      } catch (itemErr: any) {
+        fail++;
+        results.push({ order_id: orderId, result: 'FAIL', reason: '처리 중 오류' });
+      }
+    }
+
+    return c.json({ success, fail, total: order_ids.length, results });
+  });
+
+  // ─── 배분 현황 요약 (총판별 건수/금액) ───
+  router.get('/distribution-summary', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+
+    const db = c.env.DB;
+
+    try {
+      // 총판별 배분 건수 + 금액
+      const summary = await db.prepare(`
+        SELECT od.region_org_id, o.name as region_name, o.code as region_code,
+          COUNT(*) as order_count,
+          COALESCE(SUM(ord.base_amount), 0) as total_amount,
+          COUNT(CASE WHEN ord.status = 'DISTRIBUTED' THEN 1 END) as distributed_count,
+          COUNT(CASE WHEN ord.status = 'ASSIGNED' THEN 1 END) as assigned_count,
+          COUNT(CASE WHEN ord.status IN ('IN_PROGRESS', 'READY_DONE') THEN 1 END) as in_progress_count
+        FROM order_distributions od
+        JOIN organizations o ON od.region_org_id = o.org_id
+        JOIN orders ord ON od.order_id = ord.order_id
+        WHERE od.status = 'ACTIVE'
+        GROUP BY od.region_org_id
+        ORDER BY order_count DESC
+      `).all();
+
+      // 미배분 건수
+      const undistributed = await db.prepare(`
+        SELECT COUNT(*) as count, COALESCE(SUM(base_amount), 0) as amount
+        FROM orders
+        WHERE status IN ('RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING')
+      `).first();
+
+      return c.json({
+        regions: summary.results,
+        undistributed: {
+          count: (undistributed as any)?.count || 0,
+          amount: (undistributed as any)?.amount || 0,
+        },
+      });
+    } catch (err: any) {
+      console.error('[distribution-summary]', err.message);
+      return c.json({ error: '배분 현황 조회 중 오류가 발생했습니다.' }, 500);
+    }
+  });
 }
