@@ -19,20 +19,22 @@ async function renderKanban(el) {
   const user = currentUser;
   const orgId = user.org_id;
 
-  const [distRes, assignedRes, leadersRes, inProgressRes, readyDoneRes] = await Promise.all([
+  const [distRes, assignedRes, leadersRes, inProgressRes, readyDoneRes, confirmedRes] = await Promise.all([
     api('GET', '/orders?status=DISTRIBUTED&limit=200'),
     api('GET', '/orders?status=ASSIGNED&limit=200'),
     api('GET', `/auth/team-leaders?org_id=${orgId}`),
     api('GET', '/orders?status=IN_PROGRESS&limit=200'),
     api('GET', '/orders?status=READY_DONE&limit=200'),
+    api('GET', '/orders?status=CONFIRMED&limit=200'),
   ]);
 
   const distributed = distRes?.orders || [];
   const assigned = assignedRes?.orders || [];
   const inProgress = inProgressRes?.orders || [];
   const readyDone = readyDoneRes?.orders || [];
+  const confirmed = confirmedRes?.orders || [];
   const leaders = leadersRes?.team_leaders || [];
-  const allAssigned = [...assigned, ...readyDone, ...inProgress];
+  const allAssigned = [...assigned, ...readyDone, ...confirmed, ...inProgress];
 
   // 팀장별 배정 그룹화
   const leaderMap = {};
@@ -214,6 +216,7 @@ async function renderKanban(el) {
               <div class="flex items-center gap-3 text-[10px] mt-1">
                 <span class="text-purple-500"><i class="fas fa-user-check mr-0.5"></i>준비 ${assignedCnt}</span>
                 <span class="text-violet-500"><i class="fas fa-phone-volume mr-0.5"></i>준비완료 ${lOrders.filter(o => o.status === 'READY_DONE').length}</span>
+                <span class="text-emerald-500"><i class="fas fa-won-sign mr-0.5"></i>가격확정 ${lOrders.filter(o => o.status === 'CONFIRMED').length}</span>
                 <span class="text-orange-500"><i class="fas fa-wrench mr-0.5"></i>수행중 ${inProgCnt}</span>
                 <span class="text-green-600 font-bold ml-auto">${formatAmount(leaderAmount)}</span>
               </div>
@@ -380,7 +383,12 @@ function showKanbanCardContextMenu(event, order) {
     items.push({ icon: 'fa-phone-volume', label: '준비완료 (일정확정)', action: () => readyDone(o.order_id) });
   }
   if (o.status === 'READY_DONE') {
+    items.push({ icon: 'fa-won-sign', label: '가격 확정', action: () => { if (typeof showPriceConfirmModal === 'function') showPriceConfirmModal(o.order_id); else showToast('가격확정 기능을 로드중입니다', 'warning'); } });
     items.push({ icon: 'fa-play', label: '작업 시작', action: () => startWork(o.order_id) });
+  }
+  if (o.status === 'CONFIRMED') {
+    items.push({ icon: 'fa-play', label: '작업 시작', action: () => startWork(o.order_id) });
+    items.push({ icon: 'fa-pen', label: '가격 수정', action: () => { if (typeof showPriceConfirmModal === 'function') showPriceConfirmModal(o.order_id); } });
   }
   if (['IN_PROGRESS', 'REGION_REJECTED', 'HQ_REJECTED'].includes(o.status)) {
     items.push({ icon: 'fa-file-pen', label: '보고서 제출', action: () => showReportModal(o.order_id) });

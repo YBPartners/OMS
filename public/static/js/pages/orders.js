@@ -197,6 +197,45 @@ async function showOrderDetailDrawer(orderId) {
         <div class="text-sm text-gray-700">${o.memo}</div>
       </div>` : ''}
 
+      <!-- 서비스 항목 (order_items) -->
+      ${res.order_items?.length > 0 ? `
+      <div>
+        <h4 class="font-semibold text-sm mb-2"><i class="fas fa-list-check mr-1 text-emerald-500"></i>서비스 항목 (${res.order_items.length}건)</h4>
+        <div class="space-y-2">
+          ${res.order_items.map(item => `
+            <div class="bg-emerald-50 rounded-lg p-3 text-sm border border-emerald-200">
+              <div class="flex items-center justify-between">
+                <span class="font-medium text-emerald-800">${escapeHtml(item.category_name || item.category_code || '항목')}</span>
+                <span class="text-xs text-gray-500">x${item.quantity}</span>
+              </div>
+              ${item.model_name ? `<div class="text-xs text-gray-500 mt-1"><i class="fas fa-tag mr-1"></i>${escapeHtml(item.model_name)}</div>` : ''}
+              <div class="flex items-center justify-between mt-1.5 pt-1.5 border-t border-emerald-200">
+                <div class="text-xs">
+                  <span class="text-gray-500">매출:</span> <span class="font-bold text-blue-600">${formatAmount(item.total_sell_price)}</span>
+                </div>
+                <div class="text-xs">
+                  <span class="text-gray-500">공임:</span> <span class="font-bold text-orange-600">${formatAmount(item.total_work_price)}</span>
+                </div>
+              </div>
+              ${item.notes ? `<div class="text-xs text-gray-500 mt-1"><i class="fas fa-comment-dots mr-1"></i>${escapeHtml(item.notes)}</div>` : ''}
+            </div>`).join('')}
+          <div class="bg-white rounded-lg p-3 border border-gray-200 flex items-center justify-between">
+            <span class="font-semibold text-sm">합계</span>
+            <div class="flex gap-4">
+              <span class="text-sm"><span class="text-gray-500">매출:</span> <span class="font-bold text-blue-600">${formatAmount(res.order_items.reduce((s, i) => s + (i.total_sell_price || 0), 0))}</span></span>
+              <span class="text-sm"><span class="text-gray-500">공임:</span> <span class="font-bold text-orange-600">${formatAmount(res.order_items.reduce((s, i) => s + (i.total_work_price || 0), 0))}</span></span>
+            </div>
+          </div>
+        </div>
+      </div>` : `
+      ${['CONFIRMED','IN_PROGRESS','SUBMITTED','DONE','REGION_APPROVED','HQ_APPROVED','SETTLEMENT_CONFIRMED','PAID'].includes(o.status) ? '' : 
+        o.price_confirmed ? '' : `
+        <div class="bg-gray-50 rounded-lg p-3 border border-gray-200 text-center text-xs text-gray-400">
+          <i class="fas fa-list text-gray-300 text-lg mb-1 block"></i>
+          서비스 항목 미등록 (팀장 가격확정 시 추가됨)
+        </div>`}
+      `}
+
       <!-- 보고서 -->
       ${res.reports?.length > 0 ? `
       <div>

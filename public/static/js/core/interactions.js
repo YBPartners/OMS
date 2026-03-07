@@ -709,7 +709,7 @@ async function showOrderHistoryDrawer(orderId) {
 }
 
 async function showOrderAuditDrawer(orderId) {
-  const res = await api('GET', `/audit-logs?entity_type=ORDER&entity_id=${orderId}&limit=50`);
+  const res = await api('GET', `/audit?entity_type=ORDER&entity_id=${orderId}&limit=50`);
   const logs = res?.logs || [];
 
   const content = `

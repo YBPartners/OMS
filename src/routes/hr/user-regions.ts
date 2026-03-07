@@ -10,6 +10,37 @@ import { writeAuditLog } from '../../lib/audit';
 
 export function mountUserRegions(router: Hono<Env>) {
 
+  // ─── 전체 사용자 + 매핑 현황 (목록용) ───
+  router.get('/user-region-mappings', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+
+    let query = `
+      SELECT u.user_id, u.name, u.login_id, u.status,
+             o.name as org_name, o.org_type, o.org_id,
+             COUNT(tsm.map_id) as mapped_count
+      FROM users u
+      JOIN organizations o ON u.org_id = o.org_id
+      LEFT JOIN team_sigungu_map tsm ON u.user_id = tsm.user_id
+      WHERE u.status = 'ACTIVE'
+    `;
+    const params: any[] = [];
+
+    // 총판은 자기 조직 사용자만
+    if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
+      query += ' AND u.org_id = ?';
+      params.push(user.org_id);
+    }
+
+    query += ' GROUP BY u.user_id ORDER BY o.name, u.name';
+
+    const result = await db.prepare(query).bind(...params).all();
+    return c.json({ users: result.results });
+  });
+
   // ─── 사용자별 매핑된 시군구 목록 ───
   router.get('/users/:user_id/regions', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);

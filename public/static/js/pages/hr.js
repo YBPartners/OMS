@@ -1160,10 +1160,10 @@ async function showUserRegionDetail(userId, userName) {
 
 async function loadUrmSido() {
   try {
-    const res = await api('GET', '/hr/admin-regions?group=sido');
+    const res = await api('GET', '/hr/regions/sido');
     const select = document.getElementById('urm-sido');
-    if (!select || !res?.sidos) return;
-    select.innerHTML = '<option value="">시/도 선택</option>' + res.sidos.map(s => '<option value="' + s + '">' + s + '</option>').join('');
+    if (!select || !res?.sido_list) return;
+    select.innerHTML = '<option value="">시/도 선택</option>' + res.sido_list.map(s => '<option value="' + s.sido + '">' + s.sido + ' (' + s.district_count + ')</option>').join('');
   } catch (e) {}
 }
 
@@ -1176,9 +1176,9 @@ async function loadUrmSigungu() {
     select.innerHTML = '<option value="">시/군/구 선택</option>';
     if (dongSelect) dongSelect.innerHTML = '';
     if (!sido) return;
-    const res = await api('GET', '/hr/admin-regions?sido=' + encodeURIComponent(sido) + '&group=sigungu');
-    if (res?.sigungus) {
-      select.innerHTML = '<option value="">시/군/구 선택</option>' + res.sigungus.map(s => '<option value="' + s + '">' + s + '</option>').join('');
+    const res = await api('GET', '/hr/regions/sigungu?sido=' + encodeURIComponent(sido));
+    if (res?.sigungu_list) {
+      select.innerHTML = '<option value="">시/군/구 선택</option>' + res.sigungu_list.map(s => '<option value="' + s.code + '">' + s.sigungu + ' (' + s.code + ')</option>').join('');
     }
   } catch (e) {}
 }
@@ -1191,9 +1191,10 @@ async function loadUrmDong() {
     if (!select) return;
     select.innerHTML = '';
     if (!sido || !sigungu) return;
-    const res = await api('GET', '/hr/admin-regions?sido=' + encodeURIComponent(sido) + '&sigungu=' + encodeURIComponent(sigungu));
-    if (res?.regions) {
-      select.innerHTML = res.regions.map(r => '<option value="' + r.region_id + '">' + escapeHtml(r.eupmyeondong) + '</option>').join('');
+    const res = await api('GET', '/hr/regions/sigungu?sido=' + encodeURIComponent(sido));
+    const filtered = (res?.sigungu_list || []).filter(s => s.code.startsWith(sigungu) || s.sigungu === sigungu);
+    if (filtered.length > 0) {
+      select.innerHTML = filtered.map(r => '<option value="' + r.code + '">' + escapeHtml(r.full_name) + '</option>').join('');
     }
   } catch (e) {}
 }
@@ -1202,10 +1203,10 @@ async function addUserRegions(userId, userName) {
   try {
     const select = document.getElementById('urm-dong');
     if (!select) return;
-    const regionIds = Array.from(select.selectedOptions).map(opt => Number(opt.value));
-    if (regionIds.length === 0) { showToast('추가할 지역(읍면동)을 선택하세요.', 'warning'); return; }
+    const sigunguCodes = Array.from(select.selectedOptions).map(opt => opt.value);
+    if (sigunguCodes.length === 0) { showToast('추가할 지역(시군구)을 선택하세요.', 'warning'); return; }
 
-    const res = await api('POST', '/hr/users/' + userId + '/regions', { region_ids: regionIds });
+    const res = await api('POST', '/hr/users/' + userId + '/regions', { sigungu_codes: sigunguCodes });
     if (res?.ok) {
       showToast(res.message || '지역 추가 완료', 'success');
       closeModal();
