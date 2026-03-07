@@ -181,7 +181,7 @@ function showDrawer(content, options = {}) {
   drawer.id = 'ix-drawer';
 
   drawer.innerHTML = `
-    <div class="ix-drawer-overlay fixed inset-0 z-[55] bg-black/30 transition-opacity duration-300 opacity-0" onclick="closeDrawer()"></div>
+    <div class="ix-drawer-overlay fixed inset-0 z-[55] bg-black/30 transition-opacity duration-300 opacity-0"></div>
     <div class="ix-drawer-panel fixed z-[56] top-0 ${side === 'right' ? 'right-0' : 'left-0'} h-full bg-white shadow-2xl flex flex-col transition-transform duration-300 ${side === 'right' ? 'translate-x-full' : '-translate-x-full'}" style="width: ${width}; max-width: 90vw;">
       <div class="flex items-center justify-between px-5 py-4 border-b bg-gray-50">
         <div>
@@ -198,6 +198,19 @@ function showDrawer(content, options = {}) {
 
   document.body.appendChild(drawer);
   IX.activeDrawer = drawer;
+
+  // 드로어 overlay 바깥 클릭 닫기 (드래그 방지: mousedown + mouseup 모두 overlay에서 발생해야 닫힘)
+  const overlayEl = drawer.querySelector('.ix-drawer-overlay');
+  if (overlayEl) {
+    let _mouseDownOnOverlay = false;
+    overlayEl.addEventListener('mousedown', (e) => {
+      _mouseDownOnOverlay = (e.target === overlayEl);
+    });
+    overlayEl.addEventListener('mouseup', (e) => {
+      if (_mouseDownOnOverlay && e.target === overlayEl) closeDrawer();
+      _mouseDownOnOverlay = false;
+    });
+  }
 
   requestAnimationFrame(() => {
     drawer.querySelector('.ix-drawer-overlay').classList.remove('opacity-0');

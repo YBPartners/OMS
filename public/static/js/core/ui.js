@@ -90,7 +90,7 @@ function showModal(title, content, actions = '', options = {}) {
   const sizeClass = options.xlarge ? 'max-w-6xl' : options.large ? 'max-w-4xl' : options.small ? 'max-w-md' : 'max-w-2xl';
   const html = `
     <div id="modal-overlay" class="fixed inset-0 z-50 modal-overlay flex items-center justify-center p-4" 
-      onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" aria-label="${title.replace(/<[^>]*>/g, '')}">
+      role="dialog" aria-modal="true" aria-label="${title.replace(/<[^>]*>/g, '')}">
       <div class="bg-white rounded-2xl shadow-2xl ${sizeClass} w-full max-h-[85vh] flex flex-col fade-in">
         <div class="flex items-center justify-between px-6 py-4 border-b bg-gray-50 rounded-t-2xl">
           <h3 class="text-lg font-bold text-gray-800">${title}</h3>
@@ -102,14 +102,27 @@ function showModal(title, content, actions = '', options = {}) {
     </div>`;
   document.body.insertAdjacentHTML('beforeend', html);
 
+  // 바깥 클릭으로 닫기 (드래그 방지: mousedown + mouseup 모두 overlay에서 발생해야 닫힘)
+  const overlay = document.getElementById('modal-overlay');
+  if (overlay) {
+    let _mouseDownOnOverlay = false;
+    overlay.addEventListener('mousedown', (e) => {
+      _mouseDownOnOverlay = (e.target === overlay);
+    });
+    overlay.addEventListener('mouseup', (e) => {
+      if (_mouseDownOnOverlay && e.target === overlay) closeModal();
+      _mouseDownOnOverlay = false;
+    });
+  }
+
   // ESC 키로 닫기
   document.addEventListener('keydown', _modalEscHandler);
 
   // 첫 번째 포커스 가능 요소에 포커스
   requestAnimationFrame(() => {
-    const overlay = document.getElementById('modal-overlay');
-    if (overlay) {
-      const focusable = overlay.querySelector('button, [href], input:not([type=hidden]), select, textarea, [tabindex]:not([tabindex="-1"])');
+    const ov = document.getElementById('modal-overlay');
+    if (ov) {
+      const focusable = ov.querySelector('button, [href], input:not([type=hidden]), select, textarea, [tabindex]:not([tabindex="-1"])');
       if (focusable) focusable.focus();
     }
   });
