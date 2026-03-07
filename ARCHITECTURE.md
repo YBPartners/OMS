@@ -1,7 +1,7 @@
-# Airflow OMS — 시스템 아키텍처 (v19.0)
+# Airflow OMS — 시스템 아키텍처 (v22.0)
 
-> **최종 업데이트**: 2026-03-06
-> **현재 버전**: v19.0.0
+> **최종 업데이트**: 2026-03-07
+> **현재 버전**: v22.0.0
 > **프로덕션**: https://dahada-oms.pages.dev
 > **이 문서는 새 대화에서 컨텍스트 복구용 — 반드시 먼저 읽을 것**
 
@@ -13,14 +13,14 @@
 |------|------|------|
 | Runtime | Cloudflare Workers (Edge) | 10ms CPU 제한 (free) |
 | Framework | Hono v4 | TypeScript, 경량 라우팅 |
-| Database | Cloudflare D1 (SQLite) | 로컬: `--local` 모드, 44개 테이블, 13개 마이그레이션 |
+| Database | Cloudflare D1 (SQLite) | 로컬: `--local` 모드, 44개 테이블, 22개 마이그레이션 |
 | Session | Cloudflare KV | SESSION_CACHE, TTL 24h |
-| Frontend | Vanilla JS + TailwindCSS (PostCSS) | SPA, 23개 JS 모듈 |
+| Frontend | Vanilla JS + TailwindCSS (PostCSS) | SPA, 32개 JS 모듈 |
 | Icons | FontAwesome 6.5 (CDN) | |
 | Charts | Chart.js 4.4 (CDN) | 대시보드 5종 차트 + SVG 히트맵 |
 | Excel | SheetJS (CDN) | xlsx 내보내기 |
 | Email | Resend API | 정산서/알림 이메일 발송 |
-| Build | Vite + @hono/vite-cloudflare-pages | `dist/_worker.js` (~252KB) |
+| Build | Vite + @hono/vite-cloudflare-pages | `dist/_worker.js` (~337KB) |
 | Dev Server | wrangler pages dev (PM2 관리) | port 3000 |
 | Deployment | Cloudflare Pages | `wrangler pages deploy dist` |
 
@@ -30,7 +30,7 @@
 
 ```
 /home/user/webapp/
-├── src/                          # Backend (TypeScript) — 48 파일, 10,093줄
+├── src/                          # Backend (TypeScript) — 51 파일, ~12,500줄
 │   ├── index.tsx                 # Hono 앱 진입점, 라우트 마운트, SPA HTML
 │   ├── types/index.ts            # 타입 정의 v6.0 (Env, SessionUser, RoleCode, OrderStatus 등)
 │   ├── middleware/
@@ -52,8 +52,8 @@
 │   │   └── stats-service.ts      # 통계 upsert/배치 빌더
 │   └── routes/
 │       ├── auth.ts               # 로그인/로그아웃/계정잠금 (→ session-service)
-│       ├── orders/               # 주문 CRUD, 배분, 배정, 보고서, 검수, 사진업로드
-│       │   ├── index.ts, crud.ts, distribute.ts, assign.ts, report.ts, review.ts
+│       ├── orders/               # 주문 CRUD, 배분, 배정, 보고서, 검수, 사진업로드, 일정
+│       │   ├── index.ts, crud.ts, distribute.ts, assign.ts, report.ts, review.ts, schedule.ts
 │       ├── settlements/          # 정산 Run, 산출, 확정, 인보이스, 이메일발송
 │       │   ├── index.ts, runs.ts, calculation.ts, report.ts
 │       ├── reconciliation/       # 대사 실행, 이슈 관리
@@ -69,7 +69,7 @@
 │       ├── notifications.ts      # 알림 CRUD + 설정
 │       ├── system.ts             # 시스템 관리 + 검색 + 타임라인 + 임포트/백업
 │       └── audit.ts              # 감사 로그 조회/통계
-├── public/                       # Frontend — 23 JS + CSS + SW
+├── public/                       # Frontend — 32 JS + CSS + SW
 │   ├── sw.js                     # Service Worker (오프라인 + 푸시 알림)
 │   ├── static/js/core/
 │   │   ├── constants.js          # OMS.STATUS (15상태), OMS.PERMISSIONS, ROLE_LABELS
@@ -96,12 +96,14 @@
 │   │   ├── audit.js              # 감사 로그
 │   │   ├── channels.js           # ★ 주문 채널 관리 (API 연동 설정, 필드매핑, 테스트, 동기화)
 │   │   ├── agency.js             # 대리점 대시보드/주문/팀장/내역서
-│   │   └── system.js             # 시스템 관리 (세션/DB/임포트/백업)
+│   │   ├── system.js             # 시스템 관리 (세션/DB/임포트/백업)
+│   │   ├── schedule.js           # ★ 일정/캘린더 (월/주/일 뷰, 드래그 일정변경)
+│   │   └── banner-manage.js      # 배너 관리
 │   └── static/css/
 │       ├── tailwind.css          # PostCSS 빌드된 Tailwind 스타일
 │       └── mobile.css            # 모바일 반응형 (420줄)
-├── migrations/                   # D1 마이그레이션 (13개)
-│   ├── 0001_initial_schema.sql ~ 0013_channel_api_integration.sql
+├── migrations/                   # D1 마이그레이션 (22개)
+│   ├── 0001_initial_schema.sql ~ 0022_scheduled_time.sql
 ├── seed.sql                      # 기본 시드 데이터
 ├── seed_test_orders.sql          # 테스트 주문 데이터
 ├── tests/
@@ -226,7 +228,7 @@ RECEIVED → VALIDATED → DISTRIBUTED → ASSIGNED → READY_DONE → IN_PROGRE
 ### 4.6 주문 관련
 ```
 orders (order_id, external_order_no, customer_name, address_text, admin_dong_code,
-        base_amount, status, scheduled_date, channel_id, ...)
+        base_amount, status, scheduled_date, scheduled_time, channel_id, ...)
 order_distributions (order_id → region_org_id)
 order_assignments (order_id → team_leader_id, status)
 work_reports (report_id, order_id, version, note, receipt_url, submitted_at)
@@ -280,13 +282,13 @@ SUPER_ADMIN: 전체 접근 + 시스템관리
 HQ_OPERATOR: dashboard, orders, distribute, channels, review-hq, settlement, reconciliation, statistics, policies, kanban, hr-management, audit-log, notifications
 REGION_ADMIN: dashboard, orders, kanban, review-region, settlement, statistics, hr-management, notifications
 AGENCY_LEADER: agency-dashboard, agency-orders, agency-team, agency-statement, review-region, kanban, my-orders, my-stats, notifications
-TEAM_LEADER: dashboard, my-orders, my-stats, my-profile, kanban, notifications
+TEAM_LEADER: dashboard, my-orders, my-stats, my-profile, kanban, schedule, notifications
 AUDITOR: dashboard, statistics, audit-log, notifications
 ```
 
 ---
 
-## 6. API 엔드포인트 전체 맵 (~125개)
+## 6. API 엔드포인트 전체 맵 (~130개)
 
 ### 인증 (auth.ts)
 | Method | Path | 설명 |
@@ -315,6 +317,8 @@ AUDITOR: dashboard, statistics, audit-log, notifications
 | POST | /api/orders/:id/complete | 최종완료 + 영수증 |
 | POST | /api/orders/:id/review/region | 지역 1차 검수 |
 | POST | /api/orders/:id/review/hq | HQ 2차 검수 |
+| **GET** | **/api/orders/schedule** | **일정 조회 (from/to 기간)** |
+| **PATCH** | **/api/orders/schedule/:id** | **일정 변경 (scheduled_date/time)** |
 
 ### 채널 관리 (hr/channels-agency.ts) ★ v19.0 확장
 | Method | Path | 설명 |
@@ -378,7 +382,7 @@ curl http://localhost:3000/api/health
 
 ### 7.2 DB 관리
 ```bash
-npx wrangler d1 migrations apply dahada-production --local  # 마이그레이션 (13개)
+npx wrangler d1 migrations apply dahada-production --local  # 마이그레이션 (22개)
 npx wrangler d1 execute dahada-production --local --file=./seed.sql  # 시드
 npx wrangler d1 execute dahada-production --local --command="SELECT ..."  # 쿼리
 ```
@@ -447,10 +451,10 @@ npx wrangler d1 migrations apply dahada-production --remote  # 프로덕션 DB
 
 | 영역 | 파일 수 | 줄수 |
 |------|---------|------|
-| Backend (TypeScript) | 48 | 10,093 |
-| Frontend (JavaScript) | 23 | 12,249 |
+| Backend (TypeScript) | 51 | ~12,500 |
+| Frontend (JavaScript) | 32 | ~17,400 |
 | Service Worker | 1 | 143 |
-| CSS | 2 | 420 |
-| SQL (migrations + seed) | 15 | 1,245 |
-| E2E Test (Shell) | 1 | 386 |
-| **총계** | **90** | **24,536** |
+| CSS | 3 | ~1,060 |
+| SQL (migrations + seed) | 24 | ~4,200 |
+| E2E Test (Shell) | 7 | ~1,900 |
+| **총계** | **118** | **~37,200** |

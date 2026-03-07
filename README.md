@@ -57,7 +57,7 @@
 ## 핵심 비즈니스 흐름
 ```
 주문 수신(채널) → 유효성검증 → 행정동 기반 자동배분(총판) → 팀장 배정
-→ 준비완료 → 작업 수행(에어컨 세척) → 보고서 제출(체크리스트+사진첨부)
+→ 준비완료(일정+시간 선택) → 작업 수행(에어컨 세척) → 보고서 제출(체크리스트+사진첨부)
 → 최종완료(영수증 첨부) → 지역 1차 검수 → HQ 2차 검수
 → 정산 산출/확정 → 대사(정합성 검증) → 정산 완료
 ```
@@ -72,6 +72,7 @@
 | 주문관리 | CRUD, 필터, 드로어 상세, 배치 액션, 일괄/개별 배분, CSV/xlsx, 실주소 검색 |
 | 주문채널 | 다채널 등록/수정, **API 연동 설정**(엔드포인트/인증/필드매핑/동기화), 채널별 통계 |
 | 칸반 | 드래그 배정, 다중선택, 배치배정/해제, READY_DONE 카드 |
+| 📅 **일정/캘린더** | **월간/주간/일간 뷰, 배정 주문 일정 관리, 드래그 일정 변경, 상태별 색상, 모바일 대응** |
 | 검수 | 지역1차/HQ2차, 배치 승인/반려, 코멘트, 스와이프 제스처 |
 | 정산 | Run 생성/산출/확정, 딜러 수수료 자동분배, 팀장별 인보이스, 인쇄, CSV/xlsx |
 | 대사 | 자동 정합성 검증, 이슈 관리 |
@@ -83,6 +84,7 @@
 | 시스템관리 | 시스템 정보, 세션관리, DB현황, 임포트/백업/복원, 글로벌 검색(Cmd+K) |
 | 내주문 | 팀장 전용, 보고서 사진첨부, 영수증 카메라첨부, 프로필/알림설정 |
 | 대리점 | 대리점장 전용 대시보드/주문관리/소속 팀장/정산 내역서 |
+| 배너관리 | 배너 CRUD, 슬라이딩 배너, AdSense 광고 관리 |
 
 ---
 
@@ -92,21 +94,22 @@
 |------|--------|------|-----------|
 | SUPER_ADMIN | 총괄관리자 | 전체 | 모든 기능, 시스템 설정 |
 | HQ_OPERATOR | HQ운영자 | 본사 | 주문/배분/HQ검수/정산/대사/통계/인사/채널관리 |
-| REGION_ADMIN | 파트장(총판) | 자기 총판 | 칸반배정/1차검수/팀장관리/통계/대리점관리 |
-| AGENCY_LEADER | 대리점장 | 하위 팀장 | 배정/1차검수/팀장관리/내주문 |
-| TEAM_LEADER | 팀장 | 자기 주문 | 작업시작/보고서제출/내 현황 |
+| REGION_ADMIN | 파트장(총판) | 자기 총판 | 칸반배정/1차검수/팀장관리/통계/대리점관리/일정캘린더 |
+| AGENCY_LEADER | 대리점장 | 하위 팀장 | 배정/1차검수/팀장관리/내주문/일정캘린더 |
+| TEAM_LEADER | 팀장 | 자기 주문 | 작업시작/보고서제출/내 현황/일정캘린더 |
 | AUDITOR | 감사 | 전체(읽기) | 대사/통계/이력 조회 |
 
 ---
 
 ## API 엔드포인트 요약
 
-총 **~120개** API 엔드포인트. 상세 맵은 `ARCHITECTURE.md` 참조.
+총 **~130개** API 엔드포인트. 상세 맵은 `ARCHITECTURE.md` 참조.
 
 | 도메인 | 경로 프리픽스 | 주요 기능 |
 |--------|-------------|-----------|
 | 인증 | /api/auth | 로그인, 로그아웃, 세션, 조직/팀장 조회 |
 | 주문 | /api/orders | CRUD, 자동/수동/일괄배분, 배정, 보고서, 사진업로드, 검수 |
+| **일정** | **/api/orders/schedule** | **일정 조회(기간별), 일정 변경(날짜/시간 PATCH)** |
 | 정산 | /api/settlements | Run 관리, 산출, 확정, 인보이스, 보고서, CSV, 이메일 발송 |
 | 대사 | /api/reconciliation | 대사 실행, 이슈 관리 |
 | HR | /api/hr | 사용자, 조직, 수수료, 행정구역, 총판 |
@@ -123,7 +126,7 @@
 ## 데이터 아키텍처
 
 - **Cloudflare D1**: SQLite 기반 (order_channels에 API 연동 필드 16개 포함)
-- **마이그레이션**: 15개 (0001~0015, 최신: 0015_photo_category_expand.sql)
+- **마이그레이션**: 22개 (0001~0022, 최신: 0022_scheduled_time.sql)
 - **State Machine**: 15단계 주문 상태 전이
 - **Scope Engine v7.0**: 역할별 데이터 가시성 (HQ → 총판 → 대리점 → 팀)
 - **Batch Builder**: D1 batch() 활용 원자적 트랜잭션
@@ -146,15 +149,70 @@
 | 15~16 | 상태전이+정책+E2E | ✅ | READY_DONE/DONE, 정책CRUD, E2E 50/50 |
 | 17.0~17.1 | 실주소검색+사진첨부 | ✅ | 카카오우편번호, 카메라촬영, Base64 저장 |
 | 18.0~18.1 | KV세션+역할대시보드 | ✅ | SESSION_CACHE KV, 역할별 대시보드 |
-| **D-1** | **이메일 필수+Resend** | **✅** | 가입 이메일 필수, Resend 이메일 발송 인프라 |
-| **D-3** | **Tailwind PostCSS** | **✅** | CDN → PostCSS 빌드 전환 |
-| **D-4** | **SVG 히트맵** | **✅** | 지역별 히트맵 SVG 시각화 |
-| **D-5** | **딜러 수수료+인보이스** | **✅** | 수수료 자동분배, 팀장별 인보이스, 일괄인쇄 |
-| **D-6** | **채널 API 연동** | **✅** | 채널별 API 설정/테스트/동기화, 필드매핑, 브랜드별 채널 |
-| **R1** | **주문 CRUD 완성** | **✅** | 수정/삭제 API, 편집모달, 전화번호 검증, 주소변경 |
-| **R2** | **팀장 수행 흐름 E2E** | **✅** | E2E 28/28 100% 통과, 보고서별 사진 구조 개선, 반려→재보고 |
-| **R3** | **정책UI 모듈분리** | **✅** | statistics.js(78KB) → 7개 모듈(9.8~20.1KB) 분리 |
-| **QA-1** | **실사용자 관점 검수** | **✅** | API 5건 수정, 전체 흐름/권한/연결성 검증 완료 |
+| D-1~D-6 | 이메일+Tailwind+히트맵+수수료+채널 | ✅ | Resend, PostCSS, SVG, 딜러수수료, 채널API연동 |
+| R1~R15 | 시스템 고도화 | ✅ | 주문CRUD, E2E100%, 정산PAID, 정책CRUD, HR, UI표준화, 보안, 성능 |
+| **AUDIT-1** | **예방 점검 (크로스 스크립트)** | **✅** | **24페이지 의존성 감사, 12건 누락 수정, pageScripts 전면 재매핑** |
+| **SCHEDULE-1** | **일정/캘린더 기능** | **✅** | **준비완료 시간입력, 캘린더 뷰(월/주/일), schedule API, 드래그 일정변경** |
+
+---
+
+## 예방 점검 보고서 (AUDIT-1, 2026-03-07)
+
+### 점검 범위
+전체 24개 페이지에 대해 9개 항목 점검:
+1. JS/모듈/컴포넌트 실제 로드 여부
+2. 호출 함수의 현재 스코프·로드 파일 존재 여부
+3. onclick/addEventListener/이벤트 위임 ↔ DOM 구조 일치
+4. 버튼·카드·리스트 → 실제 함수·드로어·모달 참조 확인
+5. 공유 함수 import/include 확인
+6. API 경로·파라미터·응답 필드 정합
+7. 동적 생성 요소 이벤트 바인딩
+8. 권한/조건 분기로 인한 의도치 않은 UI 숨김
+9. 미사용 레거시·데드코드·깨진 참조 정리
+
+### 발견 및 수정된 누락 의존성 (12건)
+
+| # | 호출처 → 정의처 | 누락 함수 | 영향 페이지 | 탐지 방법 |
+|---|---|---|---|---|
+| 1 | orders.js → my-orders.js | startWork, readyDone, completeOrder, showReportModal | orders, distribute, settlement 등 8개 | `_getQuickActions()` onclick 분석 |
+| 2 | orders.js → kanban.js | showAssignModal | 동일 8개 | 동일 |
+| 3 | orders.js → review.js | showReviewModal | 동일 8개 | 동일 |
+| 4 | agency.js → orders.js | showOrderDetailDrawer | agency-* 4개 | onclick 직접 참조 |
+| 5 | agency.js → review.js | quickApprove, showReviewModal | 동일 4개 | 동일 |
+| 6 | agency.js → my-orders.js | startWork, showReportModal | 동일 4개 | 동일 |
+| 7 | kanban.js → orders.js | showOrderDetail, showOrderDetailDrawer | kanban | 컨텍스트메뉴 액션 |
+| 8 | kanban.js → my-orders.js | completeOrder, readyDone, startWork, showReportModal | kanban | 동일 |
+| 9 | my-orders.js → orders.js | showOrderDetail, showOrderDetailDrawer | my-profile | onclick + 컨텍스트메뉴 |
+| 10 | hr.js → signup-admin.js | renderHROrgTree, renderHRSignupRequests, renderHRRegionAddRequests | hr-management | switch-case 직접 호출 |
+| 11 | hr.js → agency.js | showAgencyOnboardingModal | hr-management | onclick |
+| 12 | statistics.js → dashboard.js | showRegionDetailModal | statistics | 컨텍스트메뉴 액션 |
+
+### 근본 원인 & 재발 방지
+- **근본 원인**: `orders.js._getQuickActions()`가 4개 다른 파일의 함수를 동적 onclick으로 참조 → 모든 주문 표시 페이지에 전이 의존성 발생
+- **해결**: `_pageScripts` 매핑에 전체 의존성 체인을 명시적으로 포함
+- **충돌 검증**: 동시 로드되는 모든 스크립트 조합에서 함수명 중복 없음 확인 (`escapeHtml` 재정의는 channels.js 내부 격리)
+- **안전 패턴**: `notifications.js → showLocalNotification`은 이미 `typeof` 가드 적용, 수정 불필요
+
+---
+
+## 일정/캘린더 기능 (SCHEDULE-1, 2026-03-07)
+
+### Phase 1: 준비완료 시간 입력
+- **DB**: `scheduled_time TEXT` 컬럼 추가 (마이그레이션 0022) + 복합 인덱스
+- **API**: `POST /orders/:id/ready-done`에 `scheduled_time` 파라미터 추가
+- **UI**: 날짜+시간 입력, 8개 빠른시간 버튼 (08:00~19:00), 주문카드에 시간 뱃지 표시
+
+### Phase 2: 캘린더 뷰
+- **API**: `GET /orders/schedule?from=&to=` — 기간별 일정 조회 (Scope Engine 적용)
+- **API**: `PATCH /orders/schedule/:id` — 일정 변경 (날짜/시간)
+- **UI (schedule.js, 462줄)**: 
+  - 월간 뷰: CSS Grid 달력, 셀 클릭 → 일간 전환, 이벤트 점/뱃지
+  - 주간 뷰: 7일 컬럼 타임라인
+  - 일간 뷰: 시간대별 이벤트 카드, 상태 색상 구분
+  - 드래그 앤 드롭: 이벤트를 다른 날짜로 이동 → PATCH API 호출
+  - 모바일: 일간 리스트 기본 + 축소 월달력
+- **접근 권한**: TEAM_LEADER, AGENCY_LEADER, REGION_ADMIN, SUPER_ADMIN, HQ_OPERATOR
+- **의존성**: orders.js, my-orders.js, kanban.js, review.js, schedule.js (5개 스크립트)
 
 ---
 
@@ -170,6 +228,7 @@
 | **설정값 반영** | 수수료 정책→정산 산출, 배분 정책→주문 배분, 검수 정책→보고서 | ✅ 반영 확인 |
 | **CRUD 흐름** | 주문/사용자/채널/정책 생성→수정→삭제→상태변경 | ✅ 정상 |
 | **대시보드 숫자** | 카드 숫자 ↔ 실제 DB 건수 일치, 카드 클릭 → 해당 페이지 이동 | ✅ 정확 |
+| **크로스 스크립트** | 24개 페이지 의존성 검증, 12건 수정 후 전체 통과 | ✅ 정상 |
 
 ### 발견 및 수정된 문제 (P1~P5)
 | # | 문제 | 원인 | 수정 |
@@ -194,11 +253,11 @@
 - **Cloudflare 프로젝트명**: dahada-oms
 - **D1 ID**: 0b7aedd5-7510-44d3-8b81-d421b03fffa6
 - **KV ID**: 5024085768aa47ba943e4e65a454795e (SESSION_CACHE)
-- **빌드 크기**: ~296 KB (dist/_worker.js)
-- **코드량**: Backend 49 TS (~11,100줄) + Frontend 27 JS (~15,000줄) + 18 SQL migrations + CSS/SW
+- **빌드 크기**: ~337 KB (dist/_worker.js)
+- **코드량**: Backend 51 TS (~12,500줄) + Frontend 32 JS (~17,400줄) + 22 SQL migrations (~4,200줄) + CSS/SW
 - **E2E 테스트**: 28/28 PASS (100%) — 정상플로우, 반려재보고, 권한체크, 목록필터, 상세조회
 - **프론트엔드 최적화**: 지연 로딩 (코어 ~120KB 즉시 + 페이지별 동적 로드)
-- **최종 업데이트**: 2026-03-06
+- **최종 업데이트**: 2026-03-07
 
 ## 로컬 개발
 ```bash

@@ -1,8 +1,8 @@
 # Airflow OMS — 개발 진척도 (Development Progress)
 
-> **최종 업데이트**: 2026-03-06
-> **현재 버전**: v21.1.0 (R15 완료)
-> **총 코드량**: Backend ~11,100줄 (49 TS) + Frontend ~15,000줄 (27 JS) + SW 143줄 + CSS 620줄 + SQL 4,500줄 + E2E 1,500줄 = **~32,860줄**
+> **최종 업데이트**: 2026-03-07
+> **현재 버전**: v22.0.0 (SCHEDULE-1 완료)
+> **총 코드량**: Backend ~12,500줄 (51 TS) + Frontend ~17,400줄 (32 JS) + SW 143줄 + CSS 1,063줄 + SQL 4,200줄 + E2E 1,900줄 = **~37,200줄**
 
 ---
 
@@ -53,6 +53,115 @@
 | **R13** | **전국 행정구역 + 정책관리 UI 대폭 고도화** | **✅ 완료** | **2026-03-06** | **전국 2,726개 읍면동 + 264개 지역권 데이터, 정책 요약 대시보드, 5개 정책 상세 모달, 수수료 계산 미리보기, 지역권 검색/필터, 행정구역 관리 탭, E2E 115/122** |
 | **R14** | **보안 강화 + 성능 최적화 + 품질 개선** | **✅ 완료** | **2026-03-06** | **SQL 인젝션 3건 수정, JS 지연 로딩(689KB→코어만 즉시), 스켈레톤 UI, 캐시 헤더, 에러 재시도 UX** |
 | **R15** | **프로덕션 보안 강화 + 운영 안정성** | **✅ 완료** | **2026-03-06** | **보안 헤더, CORS 제한, Body 크기 제한, 핵심 라우트 try-catch 30개, 인쇄 스타일** |
+| **AUDIT-1** | **예방 점검 — 크로스 스크립트 의존성** | **✅ 완료** | **2026-03-07** | **24페이지 9항목 감사, 12건 누락 수정, pageScripts 전면 재매핑** |
+| **SCHEDULE-1** | **일정/캘린더 기능** | **✅ 완료** | **2026-03-07** | **scheduled_time 컬럼, 캘린더 뷰(월/주/일), schedule API(GET/PATCH), 드래그 일정변경** |
+
+---
+
+## Phase SCHEDULE-1 — 일정/캘린더 기능 ✅ (2026-03-07)
+
+> **목적**: 팀장 배정 주문의 방문 일정(날짜+시간)을 입력·조회·관리하는 캘린더 뷰 제공
+> **배경**: 준비완료 시 날짜만 선택 가능 → 시간 입력 요구 + 배정 주문 전체를 캘린더로 조회 요구
+
+### SCHEDULE-1-1: DB 마이그레이션 ✅
+- `0022_scheduled_time.sql` — `scheduled_time TEXT` 컬럼 추가 + `idx_orders_schedule` 복합 인덱스 (scheduled_date, scheduled_time, status)
+
+### SCHEDULE-1-2: API 수정 ✅
+- `POST /orders/:id/ready-done` — `scheduled_time` 파라미터 추가 (HH:MM 형식)
+- `PATCH /orders/:id` — `scheduled_time` 편집 가능 필드에 추가
+- `GET /orders/schedule?from=&to=` — 기간별 일정 조회 (Scope Engine 적용)
+- `PATCH /orders/schedule/:id` — 일정 변경 (scheduled_date, scheduled_time)
+
+### SCHEDULE-1-3: readyDone() UI 시간 입력 ✅
+- 날짜 입력 + 시간 입력 (`<input type="time">`)
+- 빠른 시간 버튼 8개: 08:00, 09:00, 10:00, 11:00, 13:00, 14:00, 16:00, 19:00
+- 선택 시 파란 하이라이트 + 시간 필드 자동 채움
+- `submitReadyDone()`에 `scheduled_time` 전송 로직 추가
+
+### SCHEDULE-1-4: 기존 UI 시간 표시 ✅
+- `orders.js` — 주문 상세/생성/수정 모달에 `scheduled_time` 표시
+- `my-orders.js` — 주문 카드에 시간 뱃지 (시계 아이콘)
+- `kanban.js` — 이미 scheduled_date 미사용 확인 (변경 불필요)
+
+### SCHEDULE-1-5: 캘린더 페이지 ✅
+- **schedule.js (462줄)** — 순수 CSS Grid 캘린더 (외부 라이브러리 없음)
+  - **월간 뷰**: 7열 CSS Grid, 셀 클릭 → 일간 전환, 이벤트 점(상태별 색상)
+  - **주간 뷰**: 7일 컬럼 타임라인, 시간대별 이벤트 카드
+  - **일간 뷰**: 시간대별 상세 카드 (고객명/주소/시간/팀장/상태)
+  - **이벤트 클릭**: `showOrderDetailDrawer()` 호출
+  - **드래그 앤 드롭**: 날짜 셀로 이벤트 드래그 → PATCH API → 자동 새로고침
+  - **더블 클릭**: 빈 셀 더블클릭 → 주문 필터 이동
+  - **모바일**: 일간 뷰 기본 + 축소 미니 월달력
+
+### SCHEDULE-1-6: 메뉴·라우트·권한·의존성 ✅
+- `constants.js` — PERMISSIONS에 `schedule` 추가 (5개 역할: TL/AL/RA/SA/HQ)
+- `constants.js` — MENU_ITEMS에 `{ id: 'schedule', icon: 'fa-calendar-alt', label: '일정/캘린더' }` 추가
+- `auth.js` — `renderContent` switch-case에 `schedule` → `renderSchedule(el)` 추가
+- `index.tsx` — `_pageScripts.schedule = [orders.js, my-orders.js, kanban.js, review.js, schedule.js]`
+- `src/routes/orders/index.ts` — `mountSchedule` 추가
+
+### SCHEDULE-1-7: 의존성 검증 ✅
+- `schedule.js` → `showOrderDetailDrawer` (orders.js) ✅
+- `schedule.js` → `readyDone`, `startWork` (my-orders.js) ✅
+- 함수 충돌 없음 확인
+- 브라우저 콘솔 에러 0건
+
+### 변경 통계
+- **12 files changed**: +630 insertions, -18 deletions
+- **신규 파일 3개**: `migrations/0022_scheduled_time.sql`, `public/static/js/pages/schedule.js` (462줄), `src/routes/orders/schedule.ts` (110줄)
+- **수정 파일 9개**: assign.ts, crud.ts, orders/index.ts, index.tsx, constants.js, auth.js, my-orders.js, orders.js, kanban.js
+- **빌드**: dist/_worker.js 336.65 KB
+- **프로덕션**: https://dahada-oms.pages.dev
+
+---
+
+## Phase AUDIT-1 — 예방 점검 (크로스 스크립트 의존성) ✅ (2026-03-07)
+
+> **목적**: 전체 24개 페이지에 대해 JS 의존성·함수 존재·이벤트 바인딩·API 정합성 등 9개 항목 사전 감사
+> **배경**: 지연 로딩 도입 후 페이지별 스크립트 로드 매핑과 실제 함수 호출 간의 불일치 가능성 해소
+
+### AUDIT-1-1: 감사 항목 (9개) ✅
+1. 모든 필수 JS/모듈/컴포넌트가 실제로 로드되는가
+2. 호출되는 모든 함수가 현재 스코프 또는 로드된 파일에 존재하는가
+3. onclick/addEventListener/이벤트 위임이 DOM 구조와 일치하는가
+4. 버튼·카드·리스트가 실제 함수·드로어·모달·상세 뷰를 참조하는가
+5. 공유 함수가 해당 페이지에 적절히 import/include 되었는가
+6. API 경로·파라미터·응답 필드가 페이지 로직과 정합하는가
+7. 동적 생성 요소에 이벤트가 바인딩되었는가
+8. 권한·조건 분기가 의도치 않게 UI를 숨기지 않는가
+9. 미사용 레거시 코드·데드코드·깨진 참조가 없는가
+
+### AUDIT-1-2: 발견된 누락 의존성 (12건) ✅
+
+| # | 호출처 파일 | 정의처 파일 | 누락 함수 | 영향 페이지 | 탐지 방법 |
+|---|---|---|---|---|---|
+| 1 | orders.js | my-orders.js | startWork, readyDone, completeOrder, showReportModal | 8개 페이지 | `_getQuickActions()` onclick 분석 |
+| 2 | orders.js | kanban.js | showAssignModal | 동일 | 동일 |
+| 3 | orders.js | review.js | showReviewModal | 동일 | 동일 |
+| 4 | agency.js | orders.js | showOrderDetailDrawer | agency-* 4개 | onclick 참조 |
+| 5 | agency.js | review.js | quickApprove, showReviewModal | 동일 | 동일 |
+| 6 | agency.js | my-orders.js | startWork, showReportModal | 동일 | 동일 |
+| 7 | kanban.js | orders.js | showOrderDetail, showOrderDetailDrawer | kanban | 컨텍스트메뉴 |
+| 8 | kanban.js | my-orders.js | completeOrder, readyDone, startWork, showReportModal | 동일 | 동일 |
+| 9 | my-orders.js | orders.js | showOrderDetail, showOrderDetailDrawer | my-profile | onclick + 컨텍스트메뉴 |
+| 10 | hr.js | signup-admin.js | renderHROrgTree, renderHRSignupRequests, renderHRRegionAddRequests | hr-management | switch-case 호출 |
+| 11 | hr.js | agency.js | showAgencyOnboardingModal | hr-management | onclick |
+| 12 | statistics.js | dashboard.js | showRegionDetailModal | statistics | 컨텍스트메뉴 |
+
+### AUDIT-1-3: 수정 내역 ✅
+- `_pageScripts` 매핑을 전면 재작성하여 transitive dependency 명시적 포함
+- 동시 로드 스크립트 간 함수명 충돌 검증 → 없음
+- `notifications.js → showLocalNotification`은 `typeof` 가드 적용으로 안전, 수정 불필요
+- **근본 원인**: `orders.js._getQuickActions()`가 주문 상태별로 4개 다른 파일의 함수를 동적 onclick에 참조
+
+### AUDIT-1-4: 재검증 ✅
+- 전체 24개 페이지 재감사 → **모든 페이지 통과**
+- 빌드 정상, 브라우저 콘솔 에러 0건
+- 프로덕션 배포 완료
+
+### 변경 통계
+- **1 file changed**: src/index.tsx (+80 insertions, -40 deletions)
+- 24개 페이지 _pageScripts 매핑 전면 재작성
 
 ---
 
