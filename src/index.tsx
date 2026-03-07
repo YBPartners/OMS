@@ -308,14 +308,15 @@ function getIndexHtml(adsenseAccount: string = ''): string {
   <link rel="manifest" href="/manifest.json">
   <title>Airflow - 주문관리시스템</title>
   <link href="/static/css/tailwind.css?v=${V}" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.0/css/all.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="preload" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.0/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.0/css/all.min.css" rel="stylesheet"></noscript>
   <link href="/static/css/mobile.css?v=${V}" rel="stylesheet">
   <link href="/static/css/print.css" rel="stylesheet" media="print">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+  <!-- Chart.js, XLSX, Daum Postcode: 지연 로딩 (필요한 페이지에서만 동적 로드) -->
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
     .glass { background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); }
     .sidebar-item { transition: all 0.2s ease; }
@@ -370,6 +371,29 @@ function getIndexHtml(adsenseAccount: string = ''): string {
   })();
   </script>
   
+  <!-- CDN 라이브러리 지연 로딩 (v2.0 — 초기 로드 1.2MB 절감) -->
+  <script>
+    const _cdnCache = {};
+    function loadCDN(name) {
+      if (_cdnCache[name]) return _cdnCache[name];
+      const urls = {
+        'chart': 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js',
+        'xlsx': 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+        'postcode': '//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js',
+      };
+      const url = urls[name];
+      if (!url) return Promise.reject(new Error('Unknown CDN: ' + name));
+      _cdnCache[name] = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = url;
+        s.onload = resolve;
+        s.onerror = () => { delete _cdnCache[name]; reject(new Error('CDN load failed: ' + name)); };
+        document.head.appendChild(s);
+      });
+      return _cdnCache[name];
+    }
+  </script>
+
   <!-- Core modules (load order matters) -->
   <script src="/static/js/core/constants.js?v=${V}"></script>
   <script src="/static/js/core/api.js?v=${V}"></script>

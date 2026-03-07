@@ -367,10 +367,13 @@ function throttle(fn, limit = 200) {
   };
 }
 
-// ─── 엑셀(xlsx) 내보내기 유틸 ───
-function exportToExcel(data, columns, filename, sheetName = 'Sheet1') {
+// ─── 엑셀(xlsx) 내보내기 유틸 (XLSX 지연 로딩) ───
+async function exportToExcel(data, columns, filename, sheetName = 'Sheet1') {
   if (!data || data.length === 0) { showToast('내보낼 데이터가 없습니다.', 'warning'); return; }
-  if (typeof XLSX === 'undefined') { showToast('엑셀 라이브러리 로딩 중...', 'warning'); return; }
+  if (typeof XLSX === 'undefined') {
+    showToast('엑셀 라이브러리 로딩 중...', 'info');
+    try { await loadCDN('xlsx'); } catch(e) { showToast('엑셀 라이브러리 로드 실패', 'error'); return; }
+  }
 
   const headers = columns.map(c => c.label);
   const rows = data.map(row =>

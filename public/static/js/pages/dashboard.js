@@ -208,8 +208,10 @@ async function renderDashboard(el) {
       </div>` : ''}
     </div>`;
 
-  // ─── Chart.js 렌더링 ───
-  _renderDashCharts(funnelRes.funnel || [], dashRes.region_summary || []);
+  // ─── Chart.js 렌더링 (지연 로딩) ───
+  loadCDN('chart').then(() => {
+    _renderDashCharts(funnelRes.funnel || [], dashRes.region_summary || []);
+  }).catch(e => console.warn('Chart.js 로드 실패:', e));
 
   // ─── 히트맵 렌더링 (HQ/REGION만) ───
   if (!isTeam) {
@@ -222,8 +224,8 @@ async function renderDashboard(el) {
     extraContainer.id = 'dashboard-extra';
     el.querySelector('.fade-in')?.appendChild(extraContainer);
 
-    // 비동기로 추가 차트 로드 (메인 대시보드 블로킹 방지)
-    Promise.all([renderRevenueTrendSection(), renderSettlementSummarySection()]).then(([trendHtml, settleHtml]) => {
+    // 비동기로 추가 차트 로드 (Chart.js 지연 로딩 후 실행)
+    loadCDN('chart').then(() => Promise.all([renderRevenueTrendSection(), renderSettlementSummarySection()])).then(([trendHtml, settleHtml]) => {
       const extra = document.getElementById('dashboard-extra');
       if (extra) {
         extra.innerHTML = `

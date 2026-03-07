@@ -621,11 +621,11 @@ async function showNewOrderModal() {
   }
 }
 
-// ─── 카카오 주소 검색 ───
-function openAddressSearch() {
+// ─── 카카오 주소 검색 (Daum Postcode 지연 로딩) ───
+async function openAddressSearch() {
   if (typeof daum === 'undefined' || !daum.Postcode) {
-    showToast('주소 검색 서비스를 불러오는 중입니다. 잠시 후 다시 시도해주세요.', 'warning');
-    return;
+    showToast('주소 검색 서비스를 불러오는 중...', 'info');
+    try { await loadCDN('postcode'); } catch(e) { showToast('주소 검색 서비스 로드 실패', 'error'); return; }
   }
   new daum.Postcode({
     oncomplete: function(data) {
@@ -1014,11 +1014,11 @@ function getEditItemsFromForm() {
   return items;
 }
 
-// ─── 수정 모달용 주소 검색 ───
-function openEditAddressSearch() {
+// ─── 수정 모달용 주소 검색 (Daum Postcode 지연 로딩) ───
+async function openEditAddressSearch() {
   if (typeof daum === 'undefined' || !daum.Postcode) {
-    showToast('주소 검색 서비스를 불러오는 중입니다. 잠시 후 다시 시도해주세요.', 'warning');
-    return;
+    showToast('주소 검색 서비스를 불러오는 중...', 'info');
+    try { await loadCDN('postcode'); } catch(e) { showToast('주소 검색 서비스 로드 실패', 'error'); return; }
   }
   new daum.Postcode({
     oncomplete: function(data) {
