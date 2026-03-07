@@ -1,255 +1,448 @@
 -- ============================================================
--- SEED DATA: Airflow OMS 초기 데이터
+-- SEED DATA: Airflow OMS — REFACTOR-1 (시군구 + 서비스 단가표)
+-- 데이터 전체 리셋용. 로컬 개발 환경 전용.
 -- ============================================================
 
--- 역할 정의
+-- ============================================================
+-- 1. 역할 정의
+-- ============================================================
 INSERT OR IGNORE INTO roles (code, name, description) VALUES
   ('SUPER_ADMIN', '슈퍼관리자', '전권 - Airflow HQ'),
   ('HQ_OPERATOR', 'HQ 운영자', '본사 운영(수신/배분/대사/최종검수/정산/통계)'),
   ('REGION_ADMIN', '파트장', '총판 운영(배정/1차검수/지역정산/통계)'),
   ('TEAM_LEADER', '팀장', '현장 수행/보고서 제출/본인 통계 조회'),
-  ('AUDITOR', '감사/조회', '읽기 전용 + 대사/통계 열람');
+  ('AUDITOR', '감사/조회', '읽기 전용 + 대사/통계 열람'),
+  ('AGENCY_LEADER', '대리점장', '대리점 운영/소속 팀장 관리');
 
--- 조직: Airflow HQ
+-- ============================================================
+-- 2. 조직 (HQ + 총판 4개 + 팀 8개)
+-- ============================================================
 INSERT OR IGNORE INTO organizations (org_id, org_type, name, code, status) VALUES
   (1, 'HQ', 'Airflow 본사', 'DAHADA_HQ', 'ACTIVE');
 
--- 조직: 지역총판 4개
-INSERT OR IGNORE INTO organizations (org_id, org_type, name, code, status) VALUES
-  (2, 'REGION', '서울지역총판', 'REGION_SEOUL', 'ACTIVE'),
-  (3, 'REGION', '경기지역총판', 'REGION_GYEONGGI', 'ACTIVE'),
-  (4, 'REGION', '인천지역총판', 'REGION_INCHEON', 'ACTIVE'),
-  (5, 'REGION', '부산지역총판', 'REGION_BUSAN', 'ACTIVE');
+INSERT OR IGNORE INTO organizations (org_id, org_type, name, code, status, parent_org_id) VALUES
+  (2, 'REGION', '서울지역총판', 'REGION_SEOUL', 'ACTIVE', 1),
+  (3, 'REGION', '경기지역총판', 'REGION_GYEONGGI', 'ACTIVE', 1),
+  (4, 'REGION', '인천지역총판', 'REGION_INCHEON', 'ACTIVE', 1),
+  (5, 'REGION', '부산지역총판', 'REGION_BUSAN', 'ACTIVE', 1);
 
--- 사용자: HQ 관리자 (password: admin123 → SHA-256 해시)
+INSERT OR IGNORE INTO organizations (org_id, org_type, name, code, status, parent_org_id) VALUES
+  (6,  'TEAM', '강남1팀', 'TEAM_GN1', 'ACTIVE', 2),
+  (7,  'TEAM', '서초1팀', 'TEAM_SC1', 'ACTIVE', 2),
+  (8,  'TEAM', '분당1팀', 'TEAM_BD1', 'ACTIVE', 3),
+  (9,  'TEAM', '수원1팀', 'TEAM_SW1', 'ACTIVE', 3),
+  (10, 'TEAM', '남동1팀', 'TEAM_ND1', 'ACTIVE', 4),
+  (11, 'TEAM', '해운대1팀', 'TEAM_HD1', 'ACTIVE', 5);
+
+-- ============================================================
+-- 3. 사용자 (HQ 2 + 총판 4 + 팀장 6)
+-- password: admin123 → SHA-256
+-- ============================================================
 INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo) VALUES
   (1, 1, 'admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '시스템관리자', '01000000000', 'admin@yb.co.kr', 'ACTIVE', 1, '2024-01-01', '전권 관리자'),
   (2, 1, 'hq_operator', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'HQ운영자', '01000000001', 'operator@yb.co.kr', 'ACTIVE', 1, '2024-01-15', NULL);
 
--- 사용자: 지역총판 관리자
 INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo) VALUES
   (3, 2, 'seoul_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '서울관리자', '01011110001', 'seoul@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '서울지역총판 담당'),
   (4, 3, 'gyeonggi_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '경기관리자', '01022220001', 'gyeonggi@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '경기지역총판 담당'),
   (5, 4, 'incheon_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '인천관리자', '01033330001', 'incheon@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '인천지역총판 담당'),
   (6, 5, 'busan_admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '부산관리자', '01044440001', 'busan@yb.co.kr', 'ACTIVE', 1, '2024-02-01', '부산지역총판 담당');
 
--- 사용자: 팀장
 INSERT OR IGNORE INTO users (user_id, org_id, login_id, password_hash, name, phone, email, status, phone_verified, joined_at, memo) VALUES
-  (7,  2, 'leader_seoul_1',    '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '김팀장', '01011111001', NULL, 'ACTIVE', 1, '2024-03-01', '강남/서초 담당'),
-  (8,  2, 'leader_seoul_2',    '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '이팀장', '01011111002', NULL, 'ACTIVE', 1, '2024-03-15', '송파/마포 담당'),
-  (9,  3, 'leader_gyeonggi_1', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '박팀장', '01022221001', NULL, 'ACTIVE', 0, '2024-04-01', '분당/수원 담당'),
-  (10, 3, 'leader_gyeonggi_2', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '최팀장', '01022221002', NULL, 'ACTIVE', 0, '2024-04-15', '고양/용인 담당'),
-  (11, 4, 'leader_incheon_1',  '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '정팀장', '01033331001', NULL, 'ACTIVE', 1, '2024-05-01', '남동/연수 담당'),
-  (12, 5, 'leader_busan_1',    '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '한팀장', '01044441001', NULL, 'ACTIVE', 1, '2024-05-01', '해운대/부산진 담당');
-
--- 역할 매핑 (코드 기반 조회)
-INSERT OR IGNORE INTO user_roles (user_id, role_id) 
-  SELECT 1, role_id FROM roles WHERE code = 'SUPER_ADMIN';
-INSERT OR IGNORE INTO user_roles (user_id, role_id) 
-  SELECT 2, role_id FROM roles WHERE code = 'HQ_OPERATOR';
-INSERT OR IGNORE INTO user_roles (user_id, role_id) 
-  SELECT 3, role_id FROM roles WHERE code = 'REGION_ADMIN';
-INSERT OR IGNORE INTO user_roles (user_id, role_id) 
-  SELECT 4, role_id FROM roles WHERE code = 'REGION_ADMIN';
-INSERT OR IGNORE INTO user_roles (user_id, role_id) 
-  SELECT 5, role_id FROM roles WHERE code = 'REGION_ADMIN';
-INSERT OR IGNORE INTO user_roles (user_id, role_id) 
-  SELECT 6, role_id FROM roles WHERE code = 'REGION_ADMIN';
-INSERT OR IGNORE INTO user_roles (user_id, role_id) 
-  SELECT 7, role_id FROM roles WHERE code = 'TEAM_LEADER';
-INSERT OR IGNORE INTO user_roles (user_id, role_id) 
-  SELECT 8, role_id FROM roles WHERE code = 'TEAM_LEADER';
-INSERT OR IGNORE INTO user_roles (user_id, role_id) 
-  SELECT 9, role_id FROM roles WHERE code = 'TEAM_LEADER';
-INSERT OR IGNORE INTO user_roles (user_id, role_id) 
-  SELECT 10, role_id FROM roles WHERE code = 'TEAM_LEADER';
-INSERT OR IGNORE INTO user_roles (user_id, role_id) 
-  SELECT 11, role_id FROM roles WHERE code = 'TEAM_LEADER';
-INSERT OR IGNORE INTO user_roles (user_id, role_id) 
-  SELECT 12, role_id FROM roles WHERE code = 'TEAM_LEADER';
-
--- 지역권: 행정동 데이터 (서울)
-INSERT OR IGNORE INTO territories (territory_id, sido, sigungu, eupmyeondong, admin_dong_code, legal_dong_code) VALUES
-  (1,  '서울특별시', '강남구', '역삼동', '1168010100', '1168010100'),
-  (2,  '서울특별시', '강남구', '삼성동', '1168010200', '1168010200'),
-  (3,  '서울특별시', '서초구', '서초동', '1165010100', '1165010100'),
-  (4,  '서울특별시', '송파구', '잠실동', '1171010100', '1171010100'),
-  (5,  '서울특별시', '마포구', '합정동', '1144010100', '1144010100'),
-  (6,  '서울특별시', '강서구', '화곡동', '1150010100', '1150010100');
-
--- 지역권: 경기도
-INSERT OR IGNORE INTO territories (territory_id, sido, sigungu, eupmyeondong, admin_dong_code, legal_dong_code) VALUES
-  (7,  '경기도', '성남시', '분당구', '4113510100', '4113510100'),
-  (8,  '경기도', '수원시', '영통구', '4111510100', '4111510100'),
-  (9,  '경기도', '고양시', '일산서구', '4128510100', '4128510100'),
-  (10, '경기도', '용인시', '수지구', '4146310100', '4146310100');
-
--- 지역권: 인천
-INSERT OR IGNORE INTO territories (territory_id, sido, sigungu, eupmyeondong, admin_dong_code, legal_dong_code) VALUES
-  (11, '인천광역시', '남동구', '구월동', '2820010100', '2820010100'),
-  (12, '인천광역시', '연수구', '송도동', '2823710100', '2823710100');
-
--- 지역권: 부산
-INSERT OR IGNORE INTO territories (territory_id, sido, sigungu, eupmyeondong, admin_dong_code, legal_dong_code) VALUES
-  (13, '부산광역시', '해운대구', '우동', '2635010100', '2635010100'),
-  (14, '부산광역시', '부산진구', '부전동', '2623010100', '2623010100');
-
--- 조직-지역권 매핑 (서울→서울총판, 경기→경기총판, ...)
-INSERT OR IGNORE INTO org_territories (org_id, territory_id, effective_from) VALUES
-  (2, 1, '2024-01-01'), (2, 2, '2024-01-01'), (2, 3, '2024-01-01'),
-  (2, 4, '2024-01-01'), (2, 5, '2024-01-01'), (2, 6, '2024-01-01'),
-  (3, 7, '2024-01-01'), (3, 8, '2024-01-01'), (3, 9, '2024-01-01'), (3, 10, '2024-01-01'),
-  (4, 11, '2024-01-01'), (4, 12, '2024-01-01'),
-  (5, 13, '2024-01-01'), (5, 14, '2024-01-01');
+  (7,  6,  'leader_seoul_1',    '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '김팀장', '01011111001', 'kim@yb.co.kr', 'ACTIVE', 1, '2024-03-01', '강남구/서초구 담당'),
+  (8,  7,  'leader_seoul_2',    '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '이팀장', '01011111002', 'lee@yb.co.kr', 'ACTIVE', 1, '2024-03-15', '송파구/마포구 담당'),
+  (9,  8,  'leader_gyeonggi_1', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '박팀장', '01022221001', 'park@yb.co.kr', 'ACTIVE', 1, '2024-04-01', '분당구/수정구 담당'),
+  (10, 9,  'leader_gyeonggi_2', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '최팀장', '01022221002', 'choi@yb.co.kr', 'ACTIVE', 1, '2024-04-15', '수원 영통구/장안구 담당'),
+  (11, 10, 'leader_incheon_1',  '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '정팀장', '01033331001', 'jung@yb.co.kr', 'ACTIVE', 1, '2024-05-01', '남동구/연수구 담당'),
+  (12, 11, 'leader_busan_1',    '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', '한팀장', '01044441001', 'han@yb.co.kr', 'ACTIVE', 1, '2024-05-01', '해운대구/부산진구 담당');
 
 -- ============================================================
--- 행정구역 마스터 (가입 시스템용 — admin_regions)
--- territories는 배분 시스템용, admin_regions는 가입 위자드용
+-- 4. 역할 매핑
 -- ============================================================
+INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT 1, role_id FROM roles WHERE code = 'SUPER_ADMIN';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT 2, role_id FROM roles WHERE code = 'HQ_OPERATOR';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT 3, role_id FROM roles WHERE code = 'REGION_ADMIN';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT 4, role_id FROM roles WHERE code = 'REGION_ADMIN';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT 5, role_id FROM roles WHERE code = 'REGION_ADMIN';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT 6, role_id FROM roles WHERE code = 'REGION_ADMIN';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT 7, role_id FROM roles WHERE code = 'TEAM_LEADER';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT 8, role_id FROM roles WHERE code = 'TEAM_LEADER';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT 9, role_id FROM roles WHERE code = 'TEAM_LEADER';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT 10, role_id FROM roles WHERE code = 'TEAM_LEADER';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT 11, role_id FROM roles WHERE code = 'TEAM_LEADER';
+INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT 12, role_id FROM roles WHERE code = 'TEAM_LEADER';
 
--- 서울특별시
-INSERT OR IGNORE INTO admin_regions (region_id, sido, sigungu, eupmyeondong, admin_code, legal_code, full_name) VALUES
-  (1,  '서울특별시', '강남구', '역삼동', '1168010100', '1168010100', '서울특별시 강남구 역삼동'),
-  (2,  '서울특별시', '강남구', '삼성동', '1168010200', '1168010200', '서울특별시 강남구 삼성동'),
-  (3,  '서울특별시', '서초구', '서초동', '1165010100', '1165010100', '서울특별시 서초구 서초동'),
-  (4,  '서울특별시', '송파구', '잠실동', '1171010100', '1171010100', '서울특별시 송파구 잠실동'),
-  (5,  '서울특별시', '마포구', '합정동', '1144010100', '1144010100', '서울특별시 마포구 합정동'),
-  (6,  '서울특별시', '강서구', '화곡동', '1150010100', '1150010100', '서울특별시 강서구 화곡동'),
-  (7,  '서울특별시', '영등포구', '여의도동', '1156010100', '1156010100', '서울특별시 영등포구 여의도동'),
-  (8,  '서울특별시', '종로구', '종로동', '1111010100', '1111010100', '서울특별시 종로구 종로동');
-
--- 경기도
-INSERT OR IGNORE INTO admin_regions (region_id, sido, sigungu, eupmyeondong, admin_code, legal_code, full_name) VALUES
-  (9,  '경기도', '성남시', '분당구', '4113510100', '4113510100', '경기도 성남시 분당구'),
-  (10, '경기도', '수원시', '영통구', '4111510100', '4111510100', '경기도 수원시 영통구'),
-  (11, '경기도', '고양시', '일산서구', '4128510100', '4128510100', '경기도 고양시 일산서구'),
-  (12, '경기도', '용인시', '수지구', '4146310100', '4146310100', '경기도 용인시 수지구'),
-  (13, '경기도', '화성시', '동탄', '4159010100', '4159010100', '경기도 화성시 동탄'),
-  (14, '경기도', '안양시', '동안구', '4117310100', '4117310100', '경기도 안양시 동안구');
-
--- 인천광역시
-INSERT OR IGNORE INTO admin_regions (region_id, sido, sigungu, eupmyeondong, admin_code, legal_code, full_name) VALUES
-  (15, '인천광역시', '남동구', '구월동', '2820010100', '2820010100', '인천광역시 남동구 구월동'),
-  (16, '인천광역시', '연수구', '송도동', '2823710100', '2823710100', '인천광역시 연수구 송도동'),
-  (17, '인천광역시', '부평구', '부평동', '2823210100', '2823210100', '인천광역시 부평구 부평동');
-
--- 부산광역시
-INSERT OR IGNORE INTO admin_regions (region_id, sido, sigungu, eupmyeondong, admin_code, legal_code, full_name) VALUES
-  (18, '부산광역시', '해운대구', '우동', '2635010100', '2635010100', '부산광역시 해운대구 우동'),
-  (19, '부산광역시', '부산진구', '부전동', '2623010100', '2623010100', '부산광역시 부산진구 부전동'),
-  (20, '부산광역시', '수영구', '광안동', '2641010100', '2641010100', '부산광역시 수영구 광안동');
-
--- 조직-행정구역 매핑 (가입 시 총판 관할 구역 확인용)
-INSERT OR IGNORE INTO org_region_mappings (org_id, region_id) VALUES
-  -- 서울지역총판(org_id=2) → 서울 행정구역
-  (2, 1), (2, 2), (2, 3), (2, 4), (2, 5), (2, 6), (2, 7), (2, 8),
-  -- 경기지역총판(org_id=3) → 경기 행정구역
-  (3, 9), (3, 10), (3, 11), (3, 12), (3, 13), (3, 14),
-  -- 인천지역총판(org_id=4) → 인천 행정구역
-  (4, 15), (4, 16), (4, 17),
-  -- 부산지역총판(org_id=5) → 부산 행정구역
-  (5, 18), (5, 19), (5, 20);
-
--- 배분 정책 (v1)
-INSERT OR IGNORE INTO distribution_policies (policy_id, name, version, rule_json, effective_from, is_active) VALUES
-  (1, '행정동 기반 자동배분 v1', 1, '{"method":"admin_dong_code","fallback":"DISTRIBUTION_PENDING"}', '2024-01-01', 1);
-
--- 보고서 정책 (기본)
-INSERT OR IGNORE INTO report_policies (policy_id, name, version, service_type, required_photos_json, required_checklist_json, require_receipt) VALUES
-  (1, '기본 보고서 정책 v1', 1, 'DEFAULT', '{"BEFORE":1,"AFTER":1,"WASH":1,"RECEIPT":1}', '["작업완료확인","고객서명확인","현장정리확인"]', 1);
-
--- 수수료 정책: 지역총판별 기본(팀장 미지정 = 지역 기본)
-INSERT OR IGNORE INTO commission_policies (commission_policy_id, org_id, team_leader_id, mode, value, effective_from) VALUES
-  (1, 2, NULL, 'PERCENT', 7.5, '2024-01-01'),  -- 서울: 7.5%
-  (2, 3, NULL, 'PERCENT', 8.0, '2024-01-01'),  -- 경기: 8.0%
-  (3, 4, NULL, 'PERCENT', 7.0, '2024-01-01'),  -- 인천: 7.0%
-  (4, 5, NULL, 'PERCENT', 7.5, '2024-01-01');  -- 부산: 7.5%
-
--- 수수료 정책: 특정 팀장 개별
-INSERT OR IGNORE INTO commission_policies (commission_policy_id, org_id, team_leader_id, mode, value, effective_from) VALUES
-  (5, 2, 7, 'FIXED', 50000, '2024-01-01');  -- 김팀장 정액 50,000원
-
--- 통계 기준 정책
-INSERT OR IGNORE INTO metrics_policies (metrics_policy_id, completion_basis, region_intake_basis, effective_from) VALUES
-  (1, 'SUBMITTED_AT', 'DISTRIBUTED_AT', '2024-01-01');
-
--- 샘플 주문 데이터 (다양한 상태)
-INSERT OR IGNORE INTO orders (order_id, external_order_no, source_fingerprint, service_type, customer_name, customer_phone, address_text, admin_dong_code, requested_date, base_amount, status) VALUES
-  (1, 'AJD-2026-0001', 'fp_001', 'DEFAULT', '홍길동', '010-9999-0001', '서울특별시 강남구 역삼동 123-4', '1168010100', '2026-03-01', 150000, 'HQ_APPROVED'),
-  (2, 'AJD-2026-0002', 'fp_002', 'DEFAULT', '김철수', '010-9999-0002', '서울특별시 서초구 서초동 567-8', '1165010100', '2026-03-01', 200000, 'REGION_APPROVED'),
-  (3, 'AJD-2026-0003', 'fp_003', 'DEFAULT', '이영희', '010-9999-0003', '경기도 성남시 분당구 서현동 99', '4113510100', '2026-03-01', 180000, 'SUBMITTED'),
-  (4, 'AJD-2026-0004', 'fp_004', 'DEFAULT', '박민수', '010-9999-0004', '인천광역시 남동구 구월동 200', '2820010100', '2026-03-02', 120000, 'ASSIGNED'),
-  (5, 'AJD-2026-0005', 'fp_005', 'DEFAULT', '최지은', '010-9999-0005', '부산광역시 해운대구 우동 300', '2635010100', '2026-03-02', 250000, 'DISTRIBUTED'),
-  (6, NULL, 'fp_006', 'DEFAULT', '정하늘', '010-9999-0006', '서울특별시 마포구 합정동 55-2', '1144010100', '2026-03-02', 130000, 'VALIDATED'),
-  (7, 'AJD-2026-0007', 'fp_007', 'DEFAULT', '한바다', '010-9999-0007', '경기도 수원시 영통구 원천동 88', '4111510100', '2026-03-02', 170000, 'IN_PROGRESS'),
-  (8, 'AJD-2026-0008', 'fp_008', 'DEFAULT', '윤산들', '010-9999-0008', '서울특별시 송파구 잠실동 444', '1171010100', '2026-03-03', 160000, 'RECEIVED'),
-  (9, 'AJD-2026-0009', 'fp_009', 'DEFAULT', '강별빛', '010-9999-0009', '경기도 고양시 일산서구 탄현동 22', '4128510100', '2026-03-03', 190000, 'SETTLEMENT_CONFIRMED'),
-  (10, 'AJD-2026-0010', 'fp_010', 'DEFAULT', '송하늘', '010-9999-0010', '인천광역시 연수구 송도동 100', '2823710100', '2026-03-03', 140000, 'HQ_APPROVED');
-
--- 배분 데이터
-INSERT OR IGNORE INTO order_distributions (distribution_id, order_id, region_org_id, distributed_by, distributed_at, distribution_policy_version, status) VALUES
-  (1, 1, 2, 1, '2026-03-01 09:00:00', 1, 'ACTIVE'),
-  (2, 2, 2, 1, '2026-03-01 09:00:00', 1, 'ACTIVE'),
-  (3, 3, 3, 1, '2026-03-01 09:00:00', 1, 'ACTIVE'),
-  (4, 4, 4, 1, '2026-03-02 09:00:00', 1, 'ACTIVE'),
-  (5, 5, 5, 1, '2026-03-02 09:00:00', 1, 'ACTIVE'),
-  (6, 7, 3, 1, '2026-03-02 09:00:00', 1, 'ACTIVE'),
-  (7, 9, 3, 1, '2026-03-03 09:00:00', 1, 'ACTIVE'),
-  (8, 10, 4, 1, '2026-03-03 09:00:00', 1, 'ACTIVE');
-
--- 할당 데이터
-INSERT OR IGNORE INTO order_assignments (assignment_id, order_id, team_leader_id, assigned_by, assigned_at, status) VALUES
-  (1, 1, 7,  3, '2026-03-01 10:00:00', 'HQ_APPROVED'),
-  (2, 2, 8,  3, '2026-03-01 10:00:00', 'REGION_APPROVED'),
-  (3, 3, 9,  4, '2026-03-01 10:30:00', 'SUBMITTED'),
-  (4, 4, 11, 5, '2026-03-02 10:00:00', 'ASSIGNED'),
-  (5, 7, 10, 4, '2026-03-02 10:30:00', 'IN_PROGRESS'),
-  (6, 9, 9,  4, '2026-03-03 09:30:00', 'SETTLEMENT_CONFIRMED'),
-  (7, 10, 11, 5, '2026-03-03 09:30:00', 'HQ_APPROVED');
-
--- 보고서 데이터
-INSERT OR IGNORE INTO work_reports (report_id, order_id, team_leader_id, policy_id_snapshot, checklist_json, submitted_at, note) VALUES
-  (1, 1, 7, 1, '{"작업완료확인":true,"고객서명확인":true,"현장정리확인":true}', '2026-03-01 15:00:00', '작업 완료'),
-  (2, 2, 8, 1, '{"작업완료확인":true,"고객서명확인":true,"현장정리확인":true}', '2026-03-01 16:00:00', '정상 완료'),
-  (3, 3, 9, 1, '{"작업완료확인":true,"고객서명확인":false,"현장정리확인":true}', '2026-03-01 17:00:00', '고객 부재'),
-  (4, 9, 9, 1, '{"작업완료확인":true,"고객서명확인":true,"현장정리확인":true}', '2026-03-03 14:00:00', '완료'),
-  (5, 10, 11, 1, '{"작업완료확인":true,"고객서명확인":true,"현장정리확인":true}', '2026-03-03 15:00:00', '완료');
-
--- 검수 데이터
-INSERT OR IGNORE INTO reviews (review_id, report_id, order_id, stage, reviewer_id, result, comment, reviewed_at) VALUES
-  (1, 1, 1, 'REGION', 3, 'APPROVE', '양호', '2026-03-01 16:00:00'),
-  (2, 1, 1, 'HQ', 2, 'APPROVE', '최종 승인', '2026-03-01 17:00:00'),
-  (3, 2, 2, 'REGION', 3, 'APPROVE', '양호', '2026-03-01 17:30:00'),
-  (4, 4, 9, 'REGION', 4, 'APPROVE', '양호', '2026-03-03 15:00:00'),
-  (5, 4, 9, 'HQ', 2, 'APPROVE', '최종 승인', '2026-03-03 16:00:00'),
-  (6, 5, 10, 'REGION', 5, 'APPROVE', '양호', '2026-03-03 16:00:00'),
-  (7, 5, 10, 'HQ', 2, 'APPROVE', '최종 승인', '2026-03-03 17:00:00');
-
--- 상태 이력 (일부)
-INSERT OR IGNORE INTO order_status_history (order_id, from_status, to_status, actor_id, note, created_at) VALUES
-  (1, 'RECEIVED', 'VALIDATED', 1, '자동 유효성 통과', '2026-03-01 08:30:00'),
-  (1, 'VALIDATED', 'DISTRIBUTED', 1, '서울총판 배분', '2026-03-01 09:00:00'),
-  (1, 'DISTRIBUTED', 'ASSIGNED', 3, '김팀장 배정', '2026-03-01 10:00:00'),
-  (1, 'ASSIGNED', 'IN_PROGRESS', 7, '작업 시작', '2026-03-01 11:00:00'),
-  (1, 'IN_PROGRESS', 'SUBMITTED', 7, '보고서 제출', '2026-03-01 15:00:00'),
-  (1, 'SUBMITTED', 'REGION_APPROVED', 3, '1차 검수 승인', '2026-03-01 16:00:00'),
-  (1, 'REGION_APPROVED', 'HQ_APPROVED', 2, '최종 검수 승인', '2026-03-01 17:00:00');
-
--- ============================================================
--- 대리점(AGENCY) 테스트 데이터 (Phase 7.0)
--- ============================================================
-
--- 김팀장(user_id=7)을 서울지역 대리점장으로 지정
--- AGENCY_LEADER 역할 추가 (role_id는 roles 테이블에서 조회)
-INSERT OR IGNORE INTO user_roles (user_id, role_id)
-  SELECT 7, role_id FROM roles WHERE code = 'AGENCY_LEADER';
-
--- 김팀장(7) 대리점에 이팀장(8)을 소속시킴
+-- 김팀장(7) = 대리점장
+INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT 7, role_id FROM roles WHERE code = 'AGENCY_LEADER';
 INSERT OR IGNORE INTO agency_team_mappings (agency_user_id, team_user_id) VALUES (7, 8);
 
--- 주문 채널 등록 (에어컨 브랜드 기준 v19.1)
--- 채널 1(로컬)은 기본 마이그레이션으로 생성됨
+-- ============================================================
+-- 5. 주문 채널
+-- ============================================================
 INSERT OR IGNORE INTO order_channels (channel_id, name, code, description, is_active, priority) VALUES
-  (2, '삼성', 'SAMSUNG', '삼성전자 에어컨 주문 채널', 1, 90),
-  (3, '엘지', 'LG', 'LG전자 에어컨 주문 채널', 1, 80),
-  (4, '캐리어', 'CARRIER', '캐리어 에어컨 주문 채널', 1, 70);
+  (1, '아정당', 'AJD', '아정당 에어컨 세척 채널 (1호)', 1, 100),
+  (2, '삼성', 'SAMSUNG', '삼성전자 에어컨 세척', 1, 90),
+  (3, '엘지', 'LG', 'LG전자 에어컨 세척', 1, 80),
+  (4, '캐리어', 'CARRIER', '캐리어 에어컨 세척', 1, 70),
+  (5, 'CNC', 'CNC', 'CNC 협력 채널', 1, 60),
+  (6, '로컬', 'LOCAL', '직접 수주 / 자체 영업', 1, 10);
+
+-- ============================================================
+-- 6. 시군구 마스터 데이터 (주요 지역 ~60개)
+-- ============================================================
+INSERT OR IGNORE INTO sigungu (code, sido, sigungu, full_name) VALUES
+  -- 서울특별시 (25개 구)
+  ('11010', '서울특별시', '종로구', '서울특별시 종로구'),
+  ('11020', '서울특별시', '중구', '서울특별시 중구'),
+  ('11030', '서울특별시', '용산구', '서울특별시 용산구'),
+  ('11040', '서울특별시', '성동구', '서울특별시 성동구'),
+  ('11050', '서울특별시', '광진구', '서울특별시 광진구'),
+  ('11060', '서울특별시', '동대문구', '서울특별시 동대문구'),
+  ('11070', '서울특별시', '중랑구', '서울특별시 중랑구'),
+  ('11080', '서울특별시', '성북구', '서울특별시 성북구'),
+  ('11090', '서울특별시', '강북구', '서울특별시 강북구'),
+  ('11100', '서울특별시', '도봉구', '서울특별시 도봉구'),
+  ('11110', '서울특별시', '노원구', '서울특별시 노원구'),
+  ('11120', '서울특별시', '은평구', '서울특별시 은평구'),
+  ('11130', '서울특별시', '서대문구', '서울특별시 서대문구'),
+  ('11140', '서울특별시', '마포구', '서울특별시 마포구'),
+  ('11150', '서울특별시', '양천구', '서울특별시 양천구'),
+  ('11160', '서울특별시', '강서구', '서울특별시 강서구'),
+  ('11170', '서울특별시', '구로구', '서울특별시 구로구'),
+  ('11180', '서울특별시', '금천구', '서울특별시 금천구'),
+  ('11190', '서울특별시', '영등포구', '서울특별시 영등포구'),
+  ('11200', '서울특별시', '동작구', '서울특별시 동작구'),
+  ('11210', '서울특별시', '관악구', '서울특별시 관악구'),
+  ('11220', '서울특별시', '서초구', '서울특별시 서초구'),
+  ('11230', '서울특별시', '강남구', '서울특별시 강남구'),
+  ('11240', '서울특별시', '송파구', '서울특별시 송파구'),
+  ('11250', '서울특별시', '강동구', '서울특별시 강동구'),
+  -- 경기도 (주요 시군)
+  ('41110', '경기도', '수원시', '경기도 수원시'),
+  ('41130', '경기도', '성남시', '경기도 성남시'),
+  ('41150', '경기도', '의정부시', '경기도 의정부시'),
+  ('41170', '경기도', '안양시', '경기도 안양시'),
+  ('41190', '경기도', '부천시', '경기도 부천시'),
+  ('41210', '경기도', '광명시', '경기도 광명시'),
+  ('41220', '경기도', '평택시', '경기도 평택시'),
+  ('41250', '경기도', '동두천시', '경기도 동두천시'),
+  ('41270', '경기도', '안산시', '경기도 안산시'),
+  ('41280', '경기도', '고양시', '경기도 고양시'),
+  ('41290', '경기도', '과천시', '경기도 과천시'),
+  ('41310', '경기도', '구리시', '경기도 구리시'),
+  ('41360', '경기도', '남양주시', '경기도 남양주시'),
+  ('41370', '경기도', '오산시', '경기도 오산시'),
+  ('41390', '경기도', '시흥시', '경기도 시흥시'),
+  ('41410', '경기도', '군포시', '경기도 군포시'),
+  ('41430', '경기도', '의왕시', '경기도 의왕시'),
+  ('41450', '경기도', '하남시', '경기도 하남시'),
+  ('41460', '경기도', '용인시', '경기도 용인시'),
+  ('41480', '경기도', '파주시', '경기도 파주시'),
+  ('41500', '경기도', '이천시', '경기도 이천시'),
+  ('41550', '경기도', '안성시', '경기도 안성시'),
+  ('41570', '경기도', '김포시', '경기도 김포시'),
+  ('41590', '경기도', '화성시', '경기도 화성시'),
+  ('41610', '경기도', '광주시', '경기도 광주시'),
+  ('41630', '경기도', '양주시', '경기도 양주시'),
+  ('41670', '경기도', '포천시', '경기도 포천시'),
+  -- 인천광역시
+  ('21010', '인천광역시', '중구', '인천광역시 중구'),
+  ('21020', '인천광역시', '동구', '인천광역시 동구'),
+  ('21040', '인천광역시', '미추홀구', '인천광역시 미추홀구'),
+  ('21050', '인천광역시', '연수구', '인천광역시 연수구'),
+  ('21060', '인천광역시', '남동구', '인천광역시 남동구'),
+  ('21070', '인천광역시', '부평구', '인천광역시 부평구'),
+  ('21080', '인천광역시', '계양구', '인천광역시 계양구'),
+  ('21090', '인천광역시', '서구', '인천광역시 서구'),
+  -- 부산광역시
+  ('22010', '부산광역시', '중구', '부산광역시 중구'),
+  ('22020', '부산광역시', '서구', '부산광역시 서구'),
+  ('22030', '부산광역시', '동구', '부산광역시 동구'),
+  ('22040', '부산광역시', '영도구', '부산광역시 영도구'),
+  ('22050', '부산광역시', '부산진구', '부산광역시 부산진구'),
+  ('22060', '부산광역시', '동래구', '부산광역시 동래구'),
+  ('22070', '부산광역시', '남구', '부산광역시 남구'),
+  ('22080', '부산광역시', '북구', '부산광역시 북구'),
+  ('22090', '부산광역시', '해운대구', '부산광역시 해운대구'),
+  ('22100', '부산광역시', '사하구', '부산광역시 사하구'),
+  ('22110', '부산광역시', '금정구', '부산광역시 금정구'),
+  ('22120', '부산광역시', '강서구', '부산광역시 강서구'),
+  ('22130', '부산광역시', '연제구', '부산광역시 연제구'),
+  ('22140', '부산광역시', '수영구', '부산광역시 수영구'),
+  ('22150', '부산광역시', '사상구', '부산광역시 사상구'),
+  ('22160', '부산광역시', '기장군', '부산광역시 기장군');
+
+-- ============================================================
+-- 7. 총판 ↔ 시군구 매핑
+-- ============================================================
+
+-- 서울총판(2) → 서울 전체 25개 구
+INSERT OR IGNORE INTO region_sigungu_map (region_org_id, sigungu_code) VALUES
+  (2, '11010'), (2, '11020'), (2, '11030'), (2, '11040'), (2, '11050'),
+  (2, '11060'), (2, '11070'), (2, '11080'), (2, '11090'), (2, '11100'),
+  (2, '11110'), (2, '11120'), (2, '11130'), (2, '11140'), (2, '11150'),
+  (2, '11160'), (2, '11170'), (2, '11180'), (2, '11190'), (2, '11200'),
+  (2, '11210'), (2, '11220'), (2, '11230'), (2, '11240'), (2, '11250');
+
+-- 경기총판(3) → 경기 주요 시군
+INSERT OR IGNORE INTO region_sigungu_map (region_org_id, sigungu_code) VALUES
+  (3, '41110'), (3, '41130'), (3, '41150'), (3, '41170'), (3, '41190'),
+  (3, '41210'), (3, '41220'), (3, '41270'), (3, '41280'), (3, '41290'),
+  (3, '41310'), (3, '41360'), (3, '41370'), (3, '41390'), (3, '41410'),
+  (3, '41430'), (3, '41450'), (3, '41460'), (3, '41480'), (3, '41500'),
+  (3, '41550'), (3, '41570'), (3, '41590'), (3, '41610'), (3, '41630'),
+  (3, '41670');
+
+-- 인천총판(4) → 인천 전체
+INSERT OR IGNORE INTO region_sigungu_map (region_org_id, sigungu_code) VALUES
+  (4, '21010'), (4, '21020'), (4, '21040'), (4, '21050'),
+  (4, '21060'), (4, '21070'), (4, '21080'), (4, '21090');
+
+-- 부산총판(5) → 부산 전체
+INSERT OR IGNORE INTO region_sigungu_map (region_org_id, sigungu_code) VALUES
+  (5, '22010'), (5, '22020'), (5, '22030'), (5, '22040'), (5, '22050'),
+  (5, '22060'), (5, '22070'), (5, '22080'), (5, '22090'), (5, '22100'),
+  (5, '22110'), (5, '22120'), (5, '22130'), (5, '22140'), (5, '22150'),
+  (5, '22160');
+
+-- ============================================================
+-- 8. 팀장 ↔ 시군구 매핑
+-- ============================================================
+
+-- 김팀장(7, 서울): 강남구, 서초구, 송파구
+INSERT OR IGNORE INTO team_sigungu_map (user_id, sigungu_code, region_org_id) VALUES
+  (7, '11230', 2), (7, '11220', 2), (7, '11240', 2);
+
+-- 이팀장(8, 서울): 마포구, 강서구, 은평구
+INSERT OR IGNORE INTO team_sigungu_map (user_id, sigungu_code, region_org_id) VALUES
+  (8, '11140', 2), (8, '11160', 2), (8, '11120', 2);
+
+-- 박팀장(9, 경기): 성남시, 광주시, 하남시
+INSERT OR IGNORE INTO team_sigungu_map (user_id, sigungu_code, region_org_id) VALUES
+  (9, '41130', 3), (9, '41610', 3), (9, '41450', 3);
+
+-- 최팀장(10, 경기): 수원시, 용인시, 화성시
+INSERT OR IGNORE INTO team_sigungu_map (user_id, sigungu_code, region_org_id) VALUES
+  (10, '41110', 3), (10, '41460', 3), (10, '41590', 3);
+
+-- 정팀장(11, 인천): 남동구, 연수구
+INSERT OR IGNORE INTO team_sigungu_map (user_id, sigungu_code, region_org_id) VALUES
+  (11, '21060', 4), (11, '21050', 4);
+
+-- 한팀장(12, 부산): 해운대구, 부산진구
+INSERT OR IGNORE INTO team_sigungu_map (user_id, sigungu_code, region_org_id) VALUES
+  (12, '22090', 5), (12, '22050', 5);
+
+-- ============================================================
+-- 9. 서비스 카테고리 (에어컨 세척 항목 20개)
+-- ============================================================
+INSERT OR IGNORE INTO service_categories (category_id, code, group_name, name, description, sort_order) VALUES
+  (1,  'WALL_AC',           '벽걸이',    '벽걸이',                        '벽걸이 에어컨 세척', 10),
+  (2,  'SYS_1WAY_2WAY',     '시스템',    '시스템 1way/2way',              '천장형 1방향/2방향 에어컨', 20),
+  (3,  'SYS_4WAY',          '시스템',    '시스템 4way',                   '천장형 4방향 에어컨', 21),
+  (4,  'SYS_CIRCULAR',      '시스템',    '시스템 원형',                   '원형 천장형 에어컨', 22),
+  (5,  'STAND_HOME',        '스탠드',    '스탠드 가정용',                 '가정용 스탠드 에어컨', 30),
+  (6,  'STAND_COM_UNDER40', '스탠드',    '스탠드 상업용(40평이하)',        '상업용 스탠드 40평 이하', 31),
+  (7,  'STAND_40_NOFAN',    '스탠드',    '스탠드 40평이상 팬미분리',      '40평 이상 팬 미분리', 32),
+  (8,  'STAND_40_FAN',      '스탠드',    '스탠드 40평이상 팬분리',        '40평 이상 팬 분리', 33),
+  (9,  'STAND_80_NOFAN',    '스탠드',    '스탠드 80평이상 팬미분리',      '80평 이상 팬 미분리', 34),
+  (10, 'STAND_80_FAN',      '스탠드',    '스탠드 80평이상 팬분리',        '80평 이상 팬 분리', 35),
+  (11, 'TWO_IN_ONE',        '투인원',    '투인원',                        '투인원 에어컨', 40),
+  (12, 'OUTDOOR_NORMAL',    '실외기',    '실외기 일반(1구 싱글)',          '일반 실외기 완전분해 세척', 50),
+  (13, 'OUTDOOR_LARGE',     '실외기',    '실외기 대형(2구 멀티)',          '대형 실외기 세척', 51),
+  (14, 'OUTDOOR_TOWER',     '실외기',    '실외기 초대형 타워형',           '초대형 타워형 실외기', 52),
+  (15, 'CONVERTIBLE',       '컨버터블',  '컨버터블',                      '컨버터블 에어컨', 60),
+  (16, 'DUCT',              '매립덕트',  '매립덕트',                      '매립덕트 에어컨', 70),
+  (17, 'IRREG_GRILL_FILTER','비정기세척','비정기 그릴+필터',              '비정기 세척 - 그릴과 필터', 80),
+  (18, 'IRREG_GRILL_AIR',   '비정기세척','비정기 그릴+필터+공청필터',     '비정기 세척 - 공기청정 필터 포함', 81),
+  (19, 'REG_FILTER_ONLY',   '정기세척',  '정기 필터만',                   '정기 세척 - 필터만', 90),
+  (20, 'REG_GRILL_FILTER',  '정기세척',  '정기 그릴+필터',               '정기 세척 - 그릴과 필터', 91);
+
+-- ============================================================
+-- 10. 채널별 서비스 단가표 (AJD, CNC 기준)
+-- ============================================================
+
+-- AJD 채널 (channel_id=1) 단가표
+INSERT OR IGNORE INTO service_prices (category_id, channel_id, sell_price, work_price) VALUES
+  (1,  1, 110000, 77800),   -- 벽걸이
+  (2,  1, 121000, 80000),   -- 시스템 1way/2way
+  (3,  1, 165000, 115000),  -- 시스템 4way
+  (4,  1, 185000, 135000),  -- 시스템 원형
+  (5,  1, 171000, 119000),  -- 스탠드 가정용
+  (6,  1, 189000, 125000),  -- 스탠드 상업용 40평이하
+  (7,  1, 189000, 125000),  -- 스탠드 40평이상 팬미분리
+  (8,  1, 253000, 167000),  -- 스탠드 40평이상 팬분리
+  (9,  1, 280000, 185000),  -- 스탠드 80평이상 팬미분리 (추정)
+  (10, 1, 350000, 230000),  -- 스탠드 80평이상 팬분리 (추정)
+  (11, 1, 281000, 196800),  -- 투인원
+  (12, 1, 112000, 75600),   -- 실외기 일반
+  (13, 1, 132000, 90700),   -- 실외기 대형
+  (14, 1, 280000, 185000),  -- 실외기 초대형 타워형 (추정)
+  (15, 1, 176000, 129200),  -- 컨버터블
+  (16, 1, 274000, 190000),  -- 매립덕트
+  (17, 1, 26000,  14400),   -- 비정기 그릴+필터
+  (18, 1, 35000,  20900),   -- 비정기 그릴+필터+공청필터
+  (19, 1, 15000,  9000),    -- 정기 필터만 (추정)
+  (20, 1, 22000,  14000);   -- 정기 그릴+필터 (추정)
+
+-- CNC 채널 (channel_id=5) 단가표
+INSERT OR IGNORE INTO service_prices (category_id, channel_id, sell_price, work_price) VALUES
+  (1,  5, 64350,  57915),   -- 벽걸이
+  (2,  5, 82170,  73953),   -- 시스템 1way/2way
+  (3,  5, 111870, 100683),  -- 시스템 4way
+  (4,  5, 133650, 120285),  -- 시스템 원형
+  (5,  5, 106920, 96228),   -- 스탠드 가정용
+  (6,  5, 106920, 96228),   -- 스탠드 상업용 40평이하
+  (7,  5, 123750, 111375),  -- 스탠드 40평이상 팬미분리
+  (8,  5, 165330, 148797),  -- 스탠드 40평이상 팬분리
+  (9,  5, 159390, 143451),  -- 스탠드 80평이상 팬미분리
+  (10, 5, 252450, 227205),  -- 스탠드 80평이상 팬분리
+  (11, 5, 200000, 180000),  -- 투인원 (추정)
+  (12, 5, 56430,  50787),   -- 실외기 일반
+  (13, 5, 74250,  66825),   -- 실외기 대형
+  (14, 5, 198000, 178200),  -- 실외기 초대형 타워형
+  (15, 5, 130000, 117000),  -- 컨버터블 (추정)
+  (16, 5, 200000, 180000),  -- 매립덕트 (추정)
+  (17, 5, 15000,  13500),   -- 비정기 그릴+필터 (추정)
+  (18, 5, 25000,  22500),   -- 비정기 그릴+필터+공청필터 (추정)
+  (19, 5, 9900,   8910),    -- 정기 필터만
+  (20, 5, 15840,  14256);   -- 정기 그릴+필터
+
+-- 삼성 채널 (channel_id=2) — AJD 단가와 동일 (임시)
+INSERT OR IGNORE INTO service_prices (category_id, channel_id, sell_price, work_price)
+  SELECT category_id, 2, sell_price, work_price FROM service_prices WHERE channel_id = 1;
+
+-- LG 채널 (channel_id=3) — AJD 단가와 동일 (임시)
+INSERT OR IGNORE INTO service_prices (category_id, channel_id, sell_price, work_price)
+  SELECT category_id, 3, sell_price, work_price FROM service_prices WHERE channel_id = 1;
+
+-- 캐리어 채널 (channel_id=4) — AJD 단가와 동일 (임시)
+INSERT OR IGNORE INTO service_prices (category_id, channel_id, sell_price, work_price)
+  SELECT category_id, 4, sell_price, work_price FROM service_prices WHERE channel_id = 1;
+
+-- 로컬 채널 (channel_id=6) — AJD 단가와 동일 (임시)
+INSERT OR IGNORE INTO service_prices (category_id, channel_id, sell_price, work_price)
+  SELECT category_id, 6, sell_price, work_price FROM service_prices WHERE channel_id = 1;
+
+-- ============================================================
+-- 11. 서비스 옵션
+-- ============================================================
+INSERT OR IGNORE INTO service_options (code, name, additional_sell_price, additional_work_price, applicable_categories) VALUES
+  ('LG_OBJE', 'LG오브제 추가', 30000, 30000, '["STAND_HOME","STAND_COM_UNDER40","STAND_40_NOFAN","STAND_40_FAN"]'),
+  ('URGENT',  '긴급 출장',     20000, 10000, NULL),
+  ('WEEKEND', '주말/공휴일',   15000, 10000, NULL);
+
+-- ============================================================
+-- 12. 배분 정책 (시군구 기반)
+-- ============================================================
+INSERT OR IGNORE INTO distribution_policies (policy_id, name, version, rule_json, effective_from, is_active) VALUES
+  (1, '시군구 기반 자동 배분 v1', 1, 
+   '{"mode":"sigungu","description":"주문 주소의 시군구 코드를 기반으로 총판에 자동 배분. region_sigungu_map 참조.","fallback":"manual"}',
+   '2026-03-07', 1);
+
+-- ============================================================
+-- 13. 보고서 정책
+-- ============================================================
+INSERT OR IGNORE INTO report_policies (policy_id, name, required_photos_json, checklist_json, receipt_required, version, is_active) VALUES
+  (1, '에어컨 세척 표준 보고서 v1',
+   '{"exterior_photo":1,"interior_photo":1,"before_wash":1,"after_wash":1}',
+   '["작업완료확인","고객서명확인","현장정리확인","에어컨 정상가동 확인"]',
+   1, 1, 1);
+
+-- ============================================================
+-- 14. 수수료 정책 (총판별)
+-- ============================================================
+INSERT OR IGNORE INTO commission_policies (org_id, mode, value, effective_from, is_active) VALUES
+  (2, 'PERCENT', 10.0, '2026-01-01', 1),  -- 서울총판 10%
+  (3, 'PERCENT', 10.0, '2026-01-01', 1),  -- 경기총판 10%
+  (4, 'PERCENT', 10.0, '2026-01-01', 1),  -- 인천총판 10%
+  (5, 'PERCENT', 10.0, '2026-01-01', 1);  -- 부산총판 10%
+
+-- ============================================================
+-- 15. 테스트 주문 (시군구 기반, 다양한 상태)
+-- ============================================================
+INSERT OR IGNORE INTO orders (order_id, external_order_no, customer_name, customer_phone, address_text, address_detail, sigungu_code, requested_date, base_amount, status, channel_id, created_at) VALUES
+  -- 서울 주문 (강남구 = 11230, 서초구 = 11220, 마포구 = 11140)
+  (1,  'AJD-2026-001', '홍길동', '01012345678', '서울특별시 강남구 역삼동 123-4', '101동 201호', '11230', '2026-03-07', 110000, 'RECEIVED', 1, '2026-03-07 08:00:00'),
+  (2,  'AJD-2026-002', '김철수', '01098765432', '서울특별시 서초구 서초동 456-7', '201동 302호', '11220', '2026-03-07', 165000, 'RECEIVED', 1, '2026-03-07 08:10:00'),
+  (3,  'AJD-2026-003', '이영희', '01055556666', '서울특별시 마포구 합정동 88-1', '1층', '11140', '2026-03-07', 171000, 'DISTRIBUTED', 1, '2026-03-07 08:20:00'),
+  (4,  'AJD-2026-004', '박지성', '01077778888', '서울특별시 강남구 삼성동 567-8', '302호', '11230', '2026-03-07', 121000, 'ASSIGNED', 1, '2026-03-07 08:30:00'),
+  (5,  'AJD-2026-005', '손흥민', '01033334444', '서울특별시 송파구 잠실동 234-5', '잠실엘스 505호', '11240', '2026-03-07', 253000, 'CONFIRMED', 1, '2026-03-07 08:40:00'),
+  -- 경기 주문 (성남시 = 41130, 수원시 = 41110)
+  (6,  'CNC-2026-001', '최민수', '01011112222', '경기도 성남시 분당구 정자동 11-3', '아이파크 703호', '41130', '2026-03-07', 64350, 'RECEIVED', 5, '2026-03-07 09:00:00'),
+  (7,  'SAM-2026-001', '정우성', '01044443333', '경기도 수원시 영통구 매탄동 234', '매탄위브 1201호', '41110', '2026-03-07', 110000, 'DISTRIBUTED', 2, '2026-03-07 09:10:00'),
+  -- 인천 주문 (남동구 = 21060)
+  (8,  'AJD-2026-006', '유재석', '01066667777', '인천광역시 남동구 구월동 1234', '구월아시아드 801호', '21060', '2026-03-07', 185000, 'ASSIGNED', 1, '2026-03-07 09:20:00'),
+  -- 부산 주문 (해운대구 = 22090)
+  (9,  'LG-2026-001',  '강호동', '01088889999', '부산광역시 해운대구 우동 567', '마린시티 2차 1502호', '22090', '2026-03-07', 176000, 'IN_PROGRESS', 3, '2026-03-07 09:30:00'),
+  (10, 'AJD-2026-007', '이광수', '01022223333', '부산광역시 해운대구 중동 890', '센텀파크 302호', '22090', '2026-03-07', 112000, 'DONE', 1, '2026-03-07 09:40:00');
+
+-- ============================================================
+-- 16. 주문 배분 데이터
+-- ============================================================
+INSERT OR IGNORE INTO order_distributions (order_id, region_org_id, policy_version, distributed_at, status) VALUES
+  (3, 2, 1, '2026-03-07 08:25:00', 'ACTIVE'),   -- 이영희 → 서울총판
+  (4, 2, 1, '2026-03-07 08:35:00', 'ACTIVE'),   -- 박지성 → 서울총판
+  (5, 2, 1, '2026-03-07 08:45:00', 'ACTIVE'),   -- 손흥민 → 서울총판
+  (7, 3, 1, '2026-03-07 09:15:00', 'ACTIVE'),   -- 정우성 → 경기총판
+  (8, 4, 1, '2026-03-07 09:25:00', 'ACTIVE'),   -- 유재석 → 인천총판
+  (9, 5, 1, '2026-03-07 09:35:00', 'ACTIVE'),   -- 강호동 → 부산총판
+  (10,5, 1, '2026-03-07 09:45:00', 'ACTIVE');    -- 이광수 → 부산총판
+
+-- ============================================================
+-- 17. 주문 배정 데이터
+-- ============================================================
+INSERT OR IGNORE INTO order_assignments (order_id, team_leader_id, assigned_by, assigned_at, status) VALUES
+  (4, 7,  3, '2026-03-07 08:40:00', 'ASSIGNED'),       -- 박지성 → 김팀장
+  (5, 7,  3, '2026-03-07 08:50:00', 'CONFIRMED'),       -- 손흥민 → 김팀장 (가격확정)
+  (8, 11, 5, '2026-03-07 09:30:00', 'ASSIGNED'),       -- 유재석 → 정팀장
+  (9, 12, 6, '2026-03-07 09:40:00', 'IN_PROGRESS'),    -- 강호동 → 한팀장 (수행중)
+  (10,12, 6, '2026-03-07 09:50:00', 'DONE');            -- 이광수 → 한팀장 (완료)
+
+-- ============================================================
+-- 18. 주문 항목 (가격확정된 주문: order 5)
+-- ============================================================
+INSERT OR IGNORE INTO order_items (order_id, category_id, quantity, model_name, unit_sell_price, unit_work_price, total_sell_price, total_work_price, notes) VALUES
+  (5, 8, 1, 'LG 휘센 오브제', 253000, 167000, 283000, 197000, 'LG오브제 옵션 추가 (+30000/+30000)');
+
+-- order 5의 가격확정 상태 업데이트
+UPDATE orders SET 
+  price_confirmed = 1,
+  confirmed_total_sell = 283000,
+  confirmed_total_work = 197000,
+  confirmed_at = '2026-03-07 09:00:00',
+  confirmed_by = 7
+WHERE order_id = 5;
+
+-- ============================================================
+-- 19. 상태 이력
+-- ============================================================
+INSERT OR IGNORE INTO order_status_history (order_id, from_status, to_status, actor_id, note, created_at) VALUES
+  (3, 'RECEIVED', 'DISTRIBUTED', 1, '서울총판 자동배분', '2026-03-07 08:25:00'),
+  (4, 'RECEIVED', 'DISTRIBUTED', 1, '서울총판 자동배분', '2026-03-07 08:35:00'),
+  (4, 'DISTRIBUTED', 'ASSIGNED', 3, '김팀장 배정', '2026-03-07 08:40:00'),
+  (5, 'RECEIVED', 'DISTRIBUTED', 1, '서울총판 자동배분', '2026-03-07 08:45:00'),
+  (5, 'DISTRIBUTED', 'ASSIGNED', 3, '김팀장 배정', '2026-03-07 08:50:00'),
+  (5, 'ASSIGNED', 'CONFIRMED', 7, '가격확정: 벽걸이 1대 + LG오브제 옵션', '2026-03-07 09:00:00'),
+  (9, 'RECEIVED', 'DISTRIBUTED', 1, '부산총판 자동배분', '2026-03-07 09:35:00'),
+  (9, 'DISTRIBUTED', 'ASSIGNED', 6, '한팀장 배정', '2026-03-07 09:40:00'),
+  (9, 'ASSIGNED', 'IN_PROGRESS', 12, '작업 시작', '2026-03-07 10:00:00'),
+  (10, 'RECEIVED', 'DISTRIBUTED', 1, '부산총판 자동배분', '2026-03-07 09:45:00'),
+  (10, 'DISTRIBUTED', 'ASSIGNED', 6, '한팀장 배정', '2026-03-07 09:50:00'),
+  (10, 'ASSIGNED', 'CONFIRMED', 12, '가격확정', '2026-03-07 10:00:00'),
+  (10, 'CONFIRMED', 'IN_PROGRESS', 12, '작업 시작', '2026-03-07 10:30:00'),
+  (10, 'IN_PROGRESS', 'SUBMITTED', 12, '보고서 제출', '2026-03-07 14:00:00'),
+  (10, 'SUBMITTED', 'DONE', 12, '최종완료', '2026-03-07 14:30:00');
+
+-- ============================================================
+-- 20. 보고서 (완료된 주문)
+-- ============================================================
+INSERT OR IGNORE INTO work_reports (report_id, order_id, team_leader_id, policy_id_snapshot, checklist_json, submitted_at, note) VALUES
+  (1, 10, 12, 1, '{"작업완료확인":true,"고객서명확인":true,"현장정리확인":true,"에어컨 정상가동 확인":true}', '2026-03-07 14:00:00', '실외기 세척 완료. 정상 가동 확인.');
+
+-- ============================================================
+-- 완료: seed.sql REFACTOR-1
+-- 조직 12개, 사용자 12명, 시군구 76개, 총판매핑 75개, 팀장매핑 14개
+-- 서비스카테고리 20개, 채널별단가 120개, 옵션 3개
+-- 테스트주문 10건, 배분 7건, 배정 5건, 항목 1건
+-- ============================================================

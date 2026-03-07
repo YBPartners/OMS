@@ -746,7 +746,7 @@ async function exportSettlementCSV(runId) {
   const headers = ['정산ID', '주문ID', '외부주문번호', '고객명', '주소', '채널', '서비스유형', '기본금액', '수수료방식', '수수료율', '수수료', '지급액', '상태', '팀장', '지역총판'];
   const rows = res.rows.map(r => [
     r.settlement_id, r.order_id, r.external_order_no || '', r.customer_name || '', r.address_text || '',
-    r.channel_name || '', r.service_type || '', r.base_amount, r.commission_mode, r.commission_rate,
+    r.channel_name || '', r.base_amount, r.commission_mode, r.commission_rate,
     r.commission_amount, r.payable_amount, r.status, r.team_leader_name, r.region_name
   ]);
 
@@ -1308,7 +1308,7 @@ async function exportSettlementExcel(runId) {
     { label: '고객명', key: 'customer_name' },
     { label: '주소', key: 'address_text' },
     { label: '채널', key: 'channel_name' },
-    { label: '서비스유형', key: 'service_type' },
+    { label: '시군구코드', key: 'sigungu_code' },
     { label: '기본금액', key: 'base_amount' },
     { label: '수수료방식', key: 'commission_mode' },
     { label: '수수료율', key: 'commission_rate' },

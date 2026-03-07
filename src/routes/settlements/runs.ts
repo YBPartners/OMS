@@ -18,7 +18,7 @@ export function mountRuns(router: Hono<Env>) {
     const db = c.env.DB;
     const result = await db.prepare(`
       SELECT o.order_id, o.customer_name, o.address_text, o.base_amount, o.requested_date,
-             o.service_type, o.status, o.updated_at,
+             o.status, o.updated_at,
              od.region_org_id, org.name as region_name,
              oa.team_leader_id, tl.name as team_leader_name,
              ch.name as channel_name
@@ -122,7 +122,7 @@ export function mountRuns(router: Hono<Env>) {
 
     // ★ Scope 적용: REGION은 자기 지역, TEAM은 자기 명세만
     let detailQuery = `
-      SELECT s.*, o.external_order_no, o.customer_name, o.address_text, o.service_type,
+      SELECT s.*, o.external_order_no, o.customer_name, o.address_text,
              u.name as team_leader_name, org.name as region_name,
              team_org.name as team_name, ch.name as channel_name
       FROM settlements s

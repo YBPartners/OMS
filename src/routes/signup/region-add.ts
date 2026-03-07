@@ -1,6 +1,6 @@
 // ================================================================
-// Airflow OMS — 추가 지역 요청 API v5.0
-// 팀/총판 범위 밖 구역 승인/반려 + 충돌 관리
+// Airflow OMS — 추가 지역 요청 API v6.0
+// admin_regions → sigungu, org_region_mappings → region_sigungu_map
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -23,13 +23,13 @@ regionAdd.get('/region-add-requests', async (c) => {
 
   let query = `
     SELECT rar.*,
-           ar.sido, ar.sigungu, ar.eupmyeondong, ar.full_name as region_name, ar.admin_code,
+           sg.sido, sg.sigungu, sg.full_name as region_name,
            d.name as distributor_name, d.code as distributor_code,
            co.name as conflict_org_name,
            sr.name as applicant_name, sr.team_name,
            rv.name as reviewer_name
     FROM region_add_requests rar
-    JOIN admin_regions ar ON rar.region_id = ar.region_id
+    LEFT JOIN sigungu sg ON CAST(rar.region_id AS TEXT) = sg.code
     JOIN organizations d ON rar.distributor_org_id = d.org_id
     LEFT JOIN organizations co ON rar.conflict_org_id = co.org_id
     LEFT JOIN signup_requests sr ON rar.signup_request_id = sr.request_id
@@ -74,13 +74,13 @@ regionAdd.get('/region-add-requests/:request_id', async (c) => {
 
   const request = await db.prepare(`
     SELECT rar.*,
-           ar.sido, ar.sigungu, ar.eupmyeondong, ar.full_name as region_name, ar.admin_code,
+           sg.sido, sg.sigungu, sg.full_name as region_name, sg.code as sigungu_code,
            d.name as distributor_name,
            co.name as conflict_org_name,
            sr.name as applicant_name, sr.team_name, sr.phone as applicant_phone,
            sr.status as signup_status
     FROM region_add_requests rar
-    JOIN admin_regions ar ON rar.region_id = ar.region_id
+    LEFT JOIN sigungu sg ON CAST(rar.region_id AS TEXT) = sg.code
     JOIN organizations d ON rar.distributor_org_id = d.org_id
     LEFT JOIN organizations co ON rar.conflict_org_id = co.org_id
     LEFT JOIN signup_requests sr ON rar.signup_request_id = sr.request_id
@@ -94,12 +94,12 @@ regionAdd.get('/region-add-requests/:request_id', async (c) => {
     return c.json({ error: '권한이 없습니다.' }, 403);
   }
 
-  // 해당 구역을 현재 매핑한 조직 정보
+  // 해당 시군구를 현재 매핑한 조직 정보
   const currentMapping = await db.prepare(`
-    SELECT orm.org_id, o.name as org_name, o.org_type, o.code
-    FROM org_region_mappings orm
-    JOIN organizations o ON orm.org_id = o.org_id
-    WHERE orm.region_id = ?
+    SELECT rsm.org_id, o.name as org_name, o.org_type, o.code
+    FROM region_sigungu_map rsm
+    JOIN organizations o ON rsm.org_id = o.org_id
+    WHERE rsm.sigungu_code = CAST(? AS TEXT)
   `).bind(request.region_id).all();
 
   return c.json({
@@ -129,7 +129,7 @@ regionAdd.post('/region-add-requests/:request_id/approve', async (c) => {
   if (request.status === 'CONFLICT' && request.conflict_org_id && removeConflict) {
     // 기존 매핑 해제
     await db.prepare(
-      'DELETE FROM org_region_mappings WHERE org_id = ? AND region_id = ?'
+      'DELETE FROM region_sigungu_map WHERE org_id = ? AND sigungu_code = CAST(? AS TEXT)'
     ).bind(request.conflict_org_id, request.region_id).run();
 
     await writeAuditLog(db, {
@@ -142,15 +142,15 @@ regionAdd.post('/region-add-requests/:request_id/approve', async (c) => {
     });
   }
 
-  // 총판에 구역 매핑 추가
+  // 총판에 시군구 매핑 추가
   await db.prepare(
-    'INSERT OR IGNORE INTO org_region_mappings (org_id, region_id, mapped_by) VALUES (?, ?, ?)'
+    'INSERT OR IGNORE INTO region_sigungu_map (org_id, sigungu_code, mapped_by) VALUES (?, CAST(? AS TEXT), ?)'
   ).bind(request.distributor_org_id, request.region_id, user.user_id).run();
 
   // 팀이 있으면 팀에도 매핑
   if (request.team_org_id) {
     await db.prepare(
-      'INSERT OR IGNORE INTO org_region_mappings (org_id, region_id, mapped_by) VALUES (?, ?, ?)'
+      'INSERT OR IGNORE INTO team_sigungu_map (user_id, sigungu_code, assigned_by) VALUES (?, CAST(? AS TEXT), ?)'
     ).bind(request.team_org_id, request.region_id, user.user_id).run();
   }
 
@@ -174,12 +174,10 @@ regionAdd.post('/region-add-requests/:request_id/approve', async (c) => {
     `).bind(request.signup_request_id).first();
 
     if ((pendingCount as any)?.cnt === 0) {
-      // 모든 추가 지역 요청이 처리됨 → 알림
       const signupReq = await db.prepare(
         'SELECT name, phone FROM signup_requests WHERE request_id = ?'
       ).bind(request.signup_request_id).first();
 
-      // ★ Notification Service를 통한 알림 생성 (교차 도메인 분리)
       await notifyRegionAddComplete(db, request.distributor_org_id as number, {
         signupRequestId: request.signup_request_id as number,
         applicantName: (signupReq as any)?.name || '신청자',
@@ -201,7 +199,7 @@ regionAdd.post('/region-add-requests/:request_id/approve', async (c) => {
   return c.json({
     ok: true,
     request_id: requestId,
-    message: '추가 지역 요청이 승인되었습니다. 총판에 구역이 매핑되었습니다.',
+    message: '추가 지역 요청이 승인되었습니다. 총판에 시군구가 매핑되었습니다.',
   });
 });
 
@@ -275,18 +273,18 @@ regionAdd.post('/region-add-requests/bulk-approve', async (c) => {
       // 충돌 시 기존 매핑 해제
       if (request.status === 'CONFLICT' && request.conflict_org_id && remove_conflicts) {
         await db.prepare(
-          'DELETE FROM org_region_mappings WHERE org_id = ? AND region_id = ?'
+          'DELETE FROM region_sigungu_map WHERE org_id = ? AND sigungu_code = CAST(? AS TEXT)'
         ).bind(request.conflict_org_id, request.region_id).run();
       }
 
       // 매핑 추가
       await db.prepare(
-        'INSERT OR IGNORE INTO org_region_mappings (org_id, region_id, mapped_by) VALUES (?, ?, ?)'
+        'INSERT OR IGNORE INTO region_sigungu_map (org_id, sigungu_code, mapped_by) VALUES (?, CAST(? AS TEXT), ?)'
       ).bind(request.distributor_org_id, request.region_id, user.user_id).run();
 
       if (request.team_org_id) {
         await db.prepare(
-          'INSERT OR IGNORE INTO org_region_mappings (org_id, region_id, mapped_by) VALUES (?, ?, ?)'
+          'INSERT OR IGNORE INTO team_sigungu_map (user_id, sigungu_code, assigned_by) VALUES (?, CAST(? AS TEXT), ?)'
         ).bind(request.team_org_id, request.region_id, user.user_id).run();
       }
 
@@ -316,35 +314,35 @@ regionAdd.post('/region-add-requests/bulk-approve', async (c) => {
   });
 });
 
-// ─── 충돌 감지 (특정 구역이 다른 조직에 매핑되었는지 확인) ───
+// ─── 충돌 감지 (특정 시군구가 다른 조직에 매핑되었는지 확인) ───
 regionAdd.get('/region-add-requests/check-conflict', async (c) => {
   const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
   if (authErr) return authErr;
 
   const db = c.env.DB;
-  const regionId = Number(c.req.query('region_id'));
+  const sigunguCode = c.req.query('region_id') || c.req.query('sigungu_code');
   const excludeOrgId = Number(c.req.query('exclude_org_id') || '0');
 
-  if (!regionId) return c.json({ error: 'region_id를 입력하세요.' }, 400);
+  if (!sigunguCode) return c.json({ error: 'region_id 또는 sigungu_code를 입력하세요.' }, 400);
 
   let query = `
-    SELECT orm.org_id, o.name as org_name, o.org_type, o.code as org_code
-    FROM org_region_mappings orm
-    JOIN organizations o ON orm.org_id = o.org_id
-    WHERE orm.region_id = ?
+    SELECT rsm.org_id, o.name as org_name, o.org_type, o.code as org_code
+    FROM region_sigungu_map rsm
+    JOIN organizations o ON rsm.org_id = o.org_id
+    WHERE rsm.sigungu_code = ?
   `;
-  const params: any[] = [regionId];
+  const params: any[] = [String(sigunguCode)];
 
   if (excludeOrgId) {
-    query += ' AND orm.org_id != ?';
+    query += ' AND rsm.org_id != ?';
     params.push(excludeOrgId);
   }
 
   const result = await db.prepare(query).bind(...params).all();
 
   const region = await db.prepare(
-    'SELECT region_id, sido, sigungu, eupmyeondong, full_name FROM admin_regions WHERE region_id = ?'
-  ).bind(regionId).first();
+    'SELECT code, sido, sigungu, full_name FROM sigungu WHERE code = ?'
+  ).bind(String(sigunguCode)).first();
 
   return c.json({
     region,

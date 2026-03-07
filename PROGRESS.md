@@ -1,8 +1,8 @@
 # Airflow OMS — 개발 진척도 (Development Progress)
 
 > **최종 업데이트**: 2026-03-07
-> **현재 버전**: v22.0.0 (SCHEDULE-1 완료)
-> **총 코드량**: Backend ~12,500줄 (51 TS) + Frontend ~17,400줄 (32 JS) + SW 143줄 + CSS 1,063줄 + SQL 4,200줄 + E2E 1,900줄 = **~37,200줄**
+> **현재 버전**: v25.0.0 (수동배분 UI v2.0 + 온보딩 가이드 + PWA)
+> **총 코드량**: Backend ~13,000줄 (53 TS) + Frontend ~19,000줄 (34 JS) + SW 155줄 + CSS 1,100줄 + SQL 4,500줄 + E2E 1,900줄 = **~39,600줄**
 
 ---
 
@@ -55,6 +55,102 @@
 | **R15** | **프로덕션 보안 강화 + 운영 안정성** | **✅ 완료** | **2026-03-06** | **보안 헤더, CORS 제한, Body 크기 제한, 핵심 라우트 try-catch 30개, 인쇄 스타일** |
 | **AUDIT-1** | **예방 점검 — 크로스 스크립트 의존성** | **✅ 완료** | **2026-03-07** | **24페이지 9항목 감사, 12건 누락 수정, pageScripts 전면 재매핑** |
 | **SCHEDULE-1** | **일정/캘린더 기능** | **✅ 완료** | **2026-03-07** | **scheduled_time 컬럼, 캘린더 뷰(월/주/일), schedule API(GET/PATCH), 드래그 일정변경** |
+| **GUIDE-1** | **온보딩 가이드 + 수동배분 UI v2.0** | **✅ 완료** | **2026-03-07** | **24메뉴 가이드, 3탭 배분(수동/자동/현황), 드래그앤드롭, PWA** |
+| **REFACTOR-1** | **시군구 전환 + 서비스항목 단가표 + 가격확정 플로우** | **🔄 진행중** | **2026-03-07~** | **행정동→시군구, 채널별 단가표, order_items, 가격확정 워크플로우** |
+
+---
+
+---
+
+## Phase REFACTOR-1 — 시군구 전환 + 서비스항목 단가표 + 가격확정 플로우 🔄 (2026-03-07~)
+
+> **목적**: 행정동(3,042개) → 시군구(~250개) 전환, 채널별 서비스항목 단가표 도입, 주문 상세항목(order_items) 기반 가격확정 워크플로우 구현
+> **배경**: 실제 업무에서 행정동은 불필요하고, 시군구 기준으로 총판/팀장이 매핑됨. 서비스 항목별 판매가/수행가가 채널마다 다르며, 팀장 통화 후 가격이 확정되어야 함.
+
+### 설계 확정안 요약
+
+**핵심 변경 5가지:**
+1. 행정동 → 시군구 단위 전환 (admin_regions, org_territories, user_region_mappings 삭제)
+2. 총판/팀장 시군구 기준 매핑 (region_sigungu_map, team_sigungu_map)
+3. 주문채널별 서비스항목 단가표 (service_categories + service_prices)
+4. 주문 상세항목 (order_items) + 가격확정(CONFIRMED) 워크플로우
+5. 현장 변동 사유 기반 확정 + 정산 재설계 (order_item_changes)
+
+**주문 상태 플로우 변경:**
+```
+RECEIVED → DISTRIBUTED → ASSIGNED → CONFIRMED → IN_PROGRESS → SUBMITTED → DONE
+→ REGION_APPROVED → HQ_APPROVED → SETTLEMENT_CONFIRMED → PAID
+```
+- VALIDATED 상태 삭제
+- CONFIRMED (가격확정) 상태 추가
+
+**신규 테이블 7개:**
+| 테이블 | 용도 |
+|--------|------|
+| sigungu | 시군구 마스터 (~250개) |
+| region_sigungu_map | 총판↔시군구 매핑 |
+| team_sigungu_map | 팀장↔시군구 매핑 |
+| service_categories | 서비스 항목 마스터 (20개) |
+| service_prices | 채널별 단가표 (판매가/수행가) |
+| order_items | 주문 상세 항목 (수량, 모델명, 단가) |
+| order_item_changes | 현장 변동 이력 (사유 필수) |
+
+**삭제 대상:**
+- admin_regions 테이블 (3,042개)
+- org_territories 테이블
+- user_region_mappings 테이블
+- orders.admin_dong_code, orders.legal_dong_code 컬럼
+- orders.service_type 컬럼 (order_items로 대체)
+- VALIDATED 상태
+
+### 구현 Phase
+
+| 단계 | 범위 | 상태 |
+|------|------|------|
+| Phase 1-1 | 마이그레이션 0023: 신규 테이블 + orders 재생성 | 🔄 진행중 |
+| Phase 1-2 | seed.sql: 시군구 + 서비스항목 + 가격표 + 테스트 주문 | ⏳ 대기 |
+| Phase 1-3 | constants.js 상태/서비스유형 재정의 | ⏳ 대기 |
+| Phase 1-4 | 배분 로직 시군구 기반 재작성 (distribute.ts) | ⏳ 대기 |
+| Phase 1-5 | 주문 CRUD 백엔드 시군구 기반 재작성 (crud.ts) | ⏳ 대기 |
+| Phase 1-6 | 프론트엔드 orders.js 시군구 기반 수정 | ⏳ 대기 |
+| Phase 1-7 | HR/시스템 라우트 시군구 기반 수정 | ⏳ 대기 |
+| Phase 1-8 | 빌드 + 로컬 테스트 + 배포 | ⏳ 대기 |
+| Phase 2 | 가격확정 플로우 (팀장 UI + 자동산출 + 현장변동) | ⏳ 대기 |
+| Phase 3 | 정산 재작성 (order_items 기반) | ⏳ 대기 |
+| Phase 4 | 대시보드/HR/가이드/가격표 관리 UI | ⏳ 대기 |
+
+---
+
+## Phase GUIDE-1 — 온보딩 가이드 + 수동배분 UI v2.0 ✅ (2026-03-07)
+
+> **목적**: 24개 메뉴 페이지별 온보딩 가이드 + 수동배분 화면 전면 리뉴얼 (3탭 레이아웃)
+> **배경**: 시스템 첫 사용자를 위한 가이드 필요, 기존 배분 UI가 단순하여 실무 활용 어려움
+
+### GUIDE-1-1: 온보딩 가이드 컴포넌트 ✅
+- `public/static/js/shared/guide.js` (524줄, ~15k 문자)
+- 24개 메뉴 페이지별 친절한 설명
+- 닫기 버튼, localStorage 기반 영구 기억
+- 리셋 링크 (프로필 페이지)
+- SW v19에 프리캐시 등록
+
+### GUIDE-1-2: 수동배분 UI v2.0 ✅
+- 3탭 레이아웃: 수동 배분 / 자동 배분 / 배분 현황
+- 수동 탭: 좌측 미배분 목록 + 우측 총판 드롭존, 드래그앤드롭/멀티셀렉트
+- 자동 탭: 자동배분 실행 시각화
+- 현황 탭: 총판별 배분 통계 + 프로그레스바
+- 배분 취소 (DISTRIBUTED → DISTRIBUTION_PENDING)
+- 검색 필터 (고객명/주소/주문번호)
+
+### GUIDE-1-3: PWA 지원 ✅
+- `public/manifest.json` (72~512px 아이콘)
+- `<link rel="manifest">` 삽입
+- 안드로이드/iOS 설치 가능
+
+### 변경 통계
+- 신규 파일 1개: guide.js (524줄)
+- 수정 파일 5개: orders.js (+466/-233), sw.js, index.tsx, tailwind.css, manifest.json
+- 배포: dahada-oms.pages.dev
+- asset v31, SW cache v21
 
 ---
 

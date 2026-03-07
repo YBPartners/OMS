@@ -1,12 +1,12 @@
 // ================================================================
-// Airflow OMS 타입 정의 v6.0
-// v6.0: READY_DONE, DONE 상태 추가 (팀장 수행 플로우 정규화)
+// Airflow OMS 타입 정의 v7.0
+// v7.0: VALIDATED 삭제, CONFIRMED 추가 (시군구/서비스카테고리 리팩터링)
 // ================================================================
 
 // ─── 기본 Enum 타입 ───
 export type OrgType = 'HQ' | 'REGION' | 'TEAM';
 export type RoleCode = 'SUPER_ADMIN' | 'HQ_OPERATOR' | 'REGION_ADMIN' | 'AGENCY_LEADER' | 'TEAM_LEADER' | 'AUDITOR';
-export type OrderStatus = 'RECEIVED' | 'VALIDATED' | 'DISTRIBUTION_PENDING' | 'DISTRIBUTED' | 'ASSIGNED' | 'READY_DONE' | 'IN_PROGRESS' | 'SUBMITTED' | 'DONE' | 'REGION_APPROVED' | 'REGION_REJECTED' | 'HQ_APPROVED' | 'HQ_REJECTED' | 'SETTLEMENT_CONFIRMED' | 'PAID';
+export type OrderStatus = 'RECEIVED' | 'DISTRIBUTION_PENDING' | 'DISTRIBUTED' | 'ASSIGNED' | 'READY_DONE' | 'CONFIRMED' | 'IN_PROGRESS' | 'SUBMITTED' | 'DONE' | 'REGION_APPROVED' | 'REGION_REJECTED' | 'HQ_APPROVED' | 'HQ_REJECTED' | 'SETTLEMENT_CONFIRMED' | 'PAID';
 export type ReviewStage = 'REGION' | 'HQ';
 export type ReviewResult = 'APPROVE' | 'REJECT';
 export type CommissionMode = 'FIXED' | 'PERCENT';
@@ -68,14 +68,13 @@ export interface TransitionRule {
 }
 
 export const STATUS_TRANSITIONS: Record<string, TransitionRule> = {
-  'RECEIVED':             { next: ['VALIDATED'],                         requiredRoles: ['SUPER_ADMIN', 'HQ_OPERATOR'] },
-  'VALIDATED':            { next: ['DISTRIBUTED', 'DISTRIBUTION_PENDING'], requiredRoles: ['SUPER_ADMIN', 'HQ_OPERATOR'] },
+  'RECEIVED':             { next: ['DISTRIBUTION_PENDING'],              requiredRoles: ['SUPER_ADMIN', 'HQ_OPERATOR'] },
   'DISTRIBUTION_PENDING': { next: ['DISTRIBUTED'],                       requiredRoles: ['SUPER_ADMIN', 'HQ_OPERATOR'] },
   'DISTRIBUTED':          { next: ['ASSIGNED'],                          requiredRoles: ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN', 'AGENCY_LEADER'] },
-  // ★ v6.0: ASSIGNED(준비) → READY_DONE(준비완료: 고객통화+일정확정) → IN_PROGRESS(수행중)
+  // ★ v7.0: ASSIGNED → READY_DONE → CONFIRMED(가격확정) → IN_PROGRESS
   'ASSIGNED':             { next: ['READY_DONE'],                        requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
-  'READY_DONE':           { next: ['IN_PROGRESS'],                       requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
-  // ★ v6.0: IN_PROGRESS → SUBMITTED(완료전송) → DONE(최종완료: 영수증) → 검수
+  'READY_DONE':           { next: ['CONFIRMED', 'IN_PROGRESS'],          requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER', 'REGION_ADMIN'] },
+  'CONFIRMED':            { next: ['IN_PROGRESS'],                       requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
   'IN_PROGRESS':          { next: ['SUBMITTED'],                         requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
   'SUBMITTED':            { next: ['DONE'],                              requiredRoles: ['SUPER_ADMIN', 'TEAM_LEADER'] },
   'DONE':                 { next: ['REGION_APPROVED', 'REGION_REJECTED'], requiredRoles: ['SUPER_ADMIN', 'REGION_ADMIN', 'AGENCY_LEADER'] },
@@ -88,7 +87,7 @@ export const STATUS_TRANSITIONS: Record<string, TransitionRule> = {
 
 // ─── 상태 한글명 ───
 export const STATUS_LABELS: Record<string, string> = {
-  'RECEIVED': '수신', 'VALIDATED': '유효성통과', 'DISTRIBUTION_PENDING': '배분대기',
+  'RECEIVED': '수신', 'DISTRIBUTION_PENDING': '배분대기',
   'DISTRIBUTED': '배분완료', 'ASSIGNED': '준비(배정됨)', 'READY_DONE': '준비완료',
   'IN_PROGRESS': '수행중', 'SUBMITTED': '완료전송', 'DONE': '최종완료',
   'REGION_APPROVED': '지역승인', 'REGION_REJECTED': '지역반려',

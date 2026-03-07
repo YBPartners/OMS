@@ -89,11 +89,11 @@ function renderTerritoryTab(territories) {
 
         <!-- 테이블 -->
         ${renderDataTable({ columns: [
-          { key: 'territory_id', label: 'ID', render: t => `<span class="font-mono text-xs text-gray-500">#${t.territory_id}</span>` },
+          { key: 'code', label: 'ID', render: t => `<span class="font-mono text-xs text-gray-500">${t.code}</span>` },
           { key: 'sido', label: '시도', render: t => `<button onclick="window._terrFilterSido='${t.sido}';renderContent()" class="text-xs text-blue-600 hover:underline">${t.sido||'-'}</button>` },
           { key: 'sigungu', label: '시군구', render: t => `<span class="text-xs">${t.sigungu||'-'}</span>` },
           { key: 'eupmyeondong', label: '읍면동', render: t => `<span class="text-xs">${t.eupmyeondong||'-'}</span>` },
-          { key: 'admin_dong_code', label: '행정코드', render: t => `<span class="font-mono text-[10px] text-gray-400">${t.admin_dong_code||'-'}</span>` },
+          { key: 'code', label: '시군구코드', render: t => `<span class="font-mono text-[10px] text-gray-400">${t.code||'-'}</span>` },
           { key: 'org_name', label: '매핑 조직', render: t => t.org_name ? `<span class="status-badge bg-green-100 text-green-700">${escapeHtml(t.org_name)}</span>` : `<span class="status-badge bg-red-100 text-red-700">미매핑</span>` },
           { key: '_actions', label: '관리', align: 'center', show: canEditPolicy, render: t => `
             <button onclick="showTerritoryMappingModal(${t.territory_id})" class="px-2 py-1 ${t.org_name ? 'bg-gray-100 text-gray-700' : 'bg-blue-100 text-blue-700'} rounded text-xs hover:opacity-80">${t.org_name ? '<i class="fas fa-edit"></i>' : '<i class="fas fa-link"></i> 매핑'}</button>
@@ -139,9 +139,8 @@ async function _terrSearchFilter() {
     el.innerHTML = `<div class="text-xs text-gray-400 mb-2">${list.length}건</div><div class="space-y-1">${list.map(t => `
       <div class="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
         <div class="flex-1 min-w-0">
-          <span class="font-mono text-[10px] text-gray-400 mr-1">#${t.territory_id}</span>
-          <span class="text-sm font-medium">${escapeHtml(t.sido||'')} ${escapeHtml(t.sigungu||'')} ${escapeHtml(t.eupmyeondong||'')}</span>
-          <span class="font-mono text-[10px] text-gray-400 ml-1">${t.admin_dong_code||''}</span>
+          <span class="font-mono text-[10px] text-gray-400 mr-1">${t.code}</span>
+          <span class="text-sm font-medium">${escapeHtml(t.sido||'')} ${escapeHtml(t.sigungu||'')}</span>
         </div>
         <div class="shrink-0 ml-2">${t.org_name ? `<span class="status-badge bg-green-100 text-green-700 text-[10px]">${escapeHtml(t.org_name)}</span>` : `<button onclick="showTerritoryMappingModal(${t.territory_id})" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200"><i class="fas fa-link mr-1"></i>매핑</button>`}</div>
       </div>`).join('')}</div>`;
@@ -157,8 +156,8 @@ async function showTerritoryMappingModal(territoryId) {
 
   const content = `<div class="space-y-4">
     <div class="bg-gray-50 rounded-lg p-3 text-sm">
-      <div><strong>${escapeHtml(t.sido||'')} ${escapeHtml(t.sigungu||'')} ${escapeHtml(t.eupmyeondong||'')}</strong></div>
-      <div class="text-xs text-gray-400 mt-1">행정코드: ${t.admin_dong_code||'-'} · 법정코드: ${t.legal_dong_code||'-'}</div>
+      <div><strong>${escapeHtml(t.sido||'')} ${escapeHtml(t.sigungu||'')}</strong></div>
+      <div class="text-xs text-gray-400 mt-1">시군구코드: ${t.code||'-'}</div>
       ${t.org_name ? `<div class="mt-2 text-xs">현재 매핑: <span class="status-badge bg-green-100 text-green-700">${escapeHtml(t.org_name)}</span></div>` : '<div class="mt-2 text-xs text-red-500"><i class="fas fa-exclamation-triangle mr-1"></i>현재 미매핑 상태</div>'}
     </div>
     <div><label class="block text-xs text-gray-600 mb-1 font-semibold">매핑할 조직 (지역총판) *</label>
@@ -294,7 +293,7 @@ function exportTerritoryCSV() {
   const data = window._cachedTerritories || [];
   if (!data.length) { showToast('데이터가 없습니다.', 'warning'); return; }
   const rows = [['ID', '시도', '시군구', '읍면동', '행정코드', '법정코드', '매핑조직', '상태']];
-  data.forEach(t => rows.push([t.territory_id, t.sido, t.sigungu, t.eupmyeondong, t.admin_dong_code, t.legal_dong_code, t.org_name || '', t.org_name ? '매핑' : '미매핑']));
+  data.forEach(t => rows.push([t.code, t.sido, t.sigungu, t.full_name, t.org_name || '', t.org_name ? '매핑' : '미매핑']));
   if (typeof exportToCSV === 'function') exportToCSV(rows, '지역권매핑현황');
   else {
     const csv = rows.map(r => r.map(c => `"${(c+'').replace(/"/g, '""')}"`).join(',')).join('\n');

@@ -311,7 +311,7 @@ async function renderSystemAdmin(el) {
                 <div id="import-guide">
                   <p class="text-xs text-gray-600 mb-2"><strong>orders</strong> 허용 컬럼:</p>
                   <div class="flex flex-wrap gap-1 mb-3">
-                    ${['external_order_no','customer_name','customer_phone','address_text','service_type','base_amount','requested_date','memo'].map(c => 
+                    ${['external_order_no','customer_name','customer_phone','address_text','sigungu_code','base_amount','requested_date','memo'].map(c => 
                       `<span class="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-mono">${c}</span>`
                     ).join('')}
                   </div>

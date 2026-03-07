@@ -27,10 +27,8 @@ const INTERNAL_FIELDS = [
   { key: 'requested_date', label: '요청일', required: false },
   { key: 'scheduled_date', label: '예정일', required: false },
   { key: 'base_amount', label: '금액', required: false },
-  { key: 'service_type', label: '서비스유형', required: false },
+  { key: 'sigungu_code', label: '시군구코드', required: false },
   { key: 'memo', label: '메모', required: false },
-  { key: 'admin_dong_code', label: '행정동코드', required: false },
-  { key: 'legal_dong_code', label: '법정동코드', required: false },
 ];
 
 async function renderChannels(el) {

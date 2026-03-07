@@ -169,8 +169,8 @@ export function mountReport(router: Hono<Env>) {
     // 참고: 정책 기반 필수사진 검증 (report_policies 테이블 참조)
     // 활성 보고서 정책이 있으면 required_photos_json에 따라 강제 검증
     const reportPolicy = await db.prepare(`
-      SELECT * FROM report_policies WHERE service_type = ? AND is_active = 1 ORDER BY version DESC LIMIT 1
-    `).bind(order.service_type || 'DEFAULT').first() as any;
+      SELECT * FROM report_policies WHERE is_active = 1 ORDER BY version DESC LIMIT 1
+    `).first() as any;
 
     if (reportPolicy) {
       try {

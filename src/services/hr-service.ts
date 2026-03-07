@@ -40,7 +40,7 @@ export interface CreateTeamWithLeaderResult {
  * 2. 팀-총판 매핑 (team_distributor_mappings)
  * 3. 사용자 생성 (users)
  * 4. TEAM_LEADER 역할 부여 (user_roles)
- * 5. 조직-구역 매핑 (org_region_mappings)
+ * 5. 조직-시군구 매핑 (region_sigungu_map)
  * 6. 수수료 정책 (commission_policies) — 선택
  */
 export async function createTeamWithLeader(
@@ -73,11 +73,11 @@ export async function createTeamWithLeader(
     await db.prepare('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)').bind(newUserId, roleRow.role_id).run();
   }
 
-  // 5. 조직-구역 매핑
-  for (const regionId of params.regionIds) {
+  // 5. 조직-시군구 매핑
+  for (const code of params.regionIds) {
     await db.prepare(
-      'INSERT OR IGNORE INTO org_region_mappings (org_id, region_id) VALUES (?, ?)'
-    ).bind(newOrgId, regionId).run();
+      'INSERT OR IGNORE INTO region_sigungu_map (org_id, sigungu_code, mapped_by) VALUES (?, ?, 0)'
+    ).bind(newOrgId, String(code)).run();
   }
 
   // 6. 수수료 정책 (옵션)

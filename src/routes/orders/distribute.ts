@@ -1,6 +1,7 @@
 // ================================================================
-// Airflow OMS — 주문 배분 (자동배분/수동배분/재배분) v2.0
-// try-catch 강화: 배치 연산 부분실패 방어 + 비즈니스 컨텍스트 에러 로깅
+// Airflow OMS — 주문 배분 (자동배분/수동배분/재배분) v3.0 (REFACTOR-1)
+// 시군구 기반 자동배분: region_sigungu_map 참조
+// admin_dong_code → sigungu_code 전환
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -10,7 +11,7 @@ import { upsertRegionDailyStats } from '../../lib/db-helpers';
 
 export function mountDistribute(router: Hono<Env>) {
 
-  // ─── 자동 배분 실행 ───
+  // ─── 자동 배분 실행 (시군구 기반) ───
   router.post('/distribute', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
     if (authErr) return authErr;
@@ -22,24 +23,23 @@ export function mountDistribute(router: Hono<Env>) {
       const policy = await db.prepare('SELECT * FROM distribution_policies WHERE is_active = 1 ORDER BY version DESC LIMIT 1').first();
       if (!policy) return c.json({ error: '활성 배분 정책이 없습니다.' }, 400);
 
-      await db.prepare(`UPDATE orders SET status = 'VALIDATED', updated_at = datetime('now') WHERE status = 'RECEIVED' AND address_text IS NOT NULL AND admin_dong_code IS NOT NULL`).run();
-
+      // 배분 대기 주문 조회 (sigungu_code 기반)
       const pendingOrders = await db.prepare(`
-        SELECT o.order_id, o.admin_dong_code, o.address_text, o.customer_name, o.base_amount
+        SELECT o.order_id, o.sigungu_code, o.address_text, o.customer_name, o.base_amount
         FROM orders o
         LEFT JOIN order_distributions od ON o.order_id = od.order_id AND od.status = 'ACTIVE'
-        WHERE o.status IN ('VALIDATED', 'DISTRIBUTION_PENDING') AND od.distribution_id IS NULL
+        WHERE o.status IN ('RECEIVED', 'DISTRIBUTION_PENDING') AND od.distribution_id IS NULL
         ORDER BY o.created_at ASC
       `).all();
 
+      // 시군구 → 총판 매핑 (region_sigungu_map)
       const mappings = await db.prepare(`
-        SELECT ot.org_id, t.admin_dong_code FROM org_territories ot
-        JOIN territories t ON ot.territory_id = t.territory_id
-        WHERE (ot.effective_to IS NULL OR ot.effective_to > datetime('now'))
+        SELECT region_org_id, sigungu_code FROM region_sigungu_map
+        WHERE effective_to IS NULL OR effective_to > datetime('now')
       `).all();
 
-      const dongToOrg: Record<string, number> = {};
-      for (const m of mappings.results as any[]) { dongToOrg[m.admin_dong_code] = m.org_id; }
+      const sigunguToOrg: Record<string, number> = {};
+      for (const m of mappings.results as any[]) { sigunguToOrg[m.sigungu_code] = m.region_org_id; }
 
       const orgNames: Record<number, string> = {};
       const orgsResult = await db.prepare("SELECT org_id, name FROM organizations WHERE org_type = 'REGION'").all();
@@ -52,7 +52,7 @@ export function mountDistribute(router: Hono<Env>) {
       const regionSummary: Record<number, { name: string, count: number, amount: number, orders: any[] }> = {};
 
       for (const order of pendingOrders.results as any[]) {
-        const regionOrgId = dongToOrg[order.admin_dong_code];
+        const regionOrgId = order.sigungu_code ? sigunguToOrg[order.sigungu_code] : undefined;
         
         if (regionOrgId) {
           try {
@@ -62,11 +62,11 @@ export function mountDistribute(router: Hono<Env>) {
             `).bind(order.order_id, regionOrgId, user.user_id, policy.version).run();
             
             await db.prepare(`UPDATE orders SET status = 'DISTRIBUTED', updated_at = datetime('now') WHERE order_id = ?`).bind(order.order_id).run();
-            await writeStatusHistory(db, { order_id: order.order_id, from_status: 'VALIDATED', to_status: 'DISTRIBUTED', actor_id: user.user_id, note: `자동배분 → ${orgNames[regionOrgId] || 'org_id:' + regionOrgId}` });
+            await writeStatusHistory(db, { order_id: order.order_id, from_status: order.status || 'RECEIVED', to_status: 'DISTRIBUTED', actor_id: user.user_id, note: `자동배분 → ${orgNames[regionOrgId] || 'org_id:' + regionOrgId} (시군구: ${order.sigungu_code})` });
             
             distributed++;
             const regionName = orgNames[regionOrgId] || `org_id:${regionOrgId}`;
-            results.push({ order_id: order.order_id, region_org_id: regionOrgId, region_name: regionName, result: 'DISTRIBUTED', customer_name: order.customer_name, address_text: order.address_text });
+            results.push({ order_id: order.order_id, region_org_id: regionOrgId, region_name: regionName, result: 'DISTRIBUTED', customer_name: order.customer_name, address_text: order.address_text, sigungu_code: order.sigungu_code });
             
             if (!regionSummary[regionOrgId]) regionSummary[regionOrgId] = { name: regionName, count: 0, amount: 0, orders: [] };
             regionSummary[regionOrgId].count++;
@@ -80,9 +80,9 @@ export function mountDistribute(router: Hono<Env>) {
           }
         } else {
           await db.prepare(`UPDATE orders SET status = 'DISTRIBUTION_PENDING', updated_at = datetime('now') WHERE order_id = ?`).bind(order.order_id).run();
-          await writeStatusHistory(db, { order_id: order.order_id, from_status: 'VALIDATED', to_status: 'DISTRIBUTION_PENDING', actor_id: user.user_id, note: '행정동 매칭 실패' });
+          await writeStatusHistory(db, { order_id: order.order_id, from_status: order.status || 'RECEIVED', to_status: 'DISTRIBUTION_PENDING', actor_id: user.user_id, note: `시군구 매칭 실패 (sigungu_code: ${order.sigungu_code || 'NULL'})` });
           pending++;
-          results.push({ order_id: order.order_id, result: 'DISTRIBUTION_PENDING', reason: '행정동 매칭 실패', customer_name: order.customer_name, address_text: order.address_text });
+          results.push({ order_id: order.order_id, result: 'DISTRIBUTION_PENDING', reason: '시군구 매칭 실패', customer_name: order.customer_name, address_text: order.address_text, sigungu_code: order.sigungu_code });
         }
       }
 
@@ -146,7 +146,6 @@ export function mountDistribute(router: Hono<Env>) {
     if (order_ids.length > 100) return c.json({ error: '한 번에 최대 100건까지 배분 가능합니다.' }, 400);
 
     try {
-      // 지역총판 확인
       const org = await db.prepare("SELECT org_id, name FROM organizations WHERE org_id = ? AND org_type = 'REGION'").bind(region_org_id).first();
       if (!org) return c.json({ error: '유효한 지역총판이 아닙니다.' }, 400);
 
@@ -160,19 +159,13 @@ export function mountDistribute(router: Hono<Env>) {
       for (const orderId of order_ids) {
         try {
           const order = await db.prepare(
-            "SELECT order_id, status, customer_name FROM orders WHERE order_id = ? AND status IN ('RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING')"
+            "SELECT order_id, status, customer_name FROM orders WHERE order_id = ? AND status IN ('RECEIVED', 'DISTRIBUTION_PENDING')"
           ).bind(orderId).first();
 
           if (!order) {
             fail++;
             results.push({ order_id: orderId, result: 'FAIL', reason: '배분 불가 상태' });
             continue;
-          }
-
-          // RECEIVED → VALIDATED 자동 전환
-          if (order.status === 'RECEIVED') {
-            await db.prepare("UPDATE orders SET status = 'VALIDATED', updated_at = datetime('now') WHERE order_id = ?").bind(orderId).run();
-            await writeStatusHistory(db, { order_id: orderId, from_status: 'RECEIVED', to_status: 'VALIDATED', actor_id: user.user_id, note: '일괄배분 시 자동 검증' });
           }
 
           // 기존 배분 해제
@@ -186,7 +179,7 @@ export function mountDistribute(router: Hono<Env>) {
 
           await db.prepare("UPDATE orders SET status = 'DISTRIBUTED', updated_at = datetime('now') WHERE order_id = ?").bind(orderId).run();
           const fromStatus = order.status as string;
-          await writeStatusHistory(db, { order_id: orderId, from_status: fromStatus === 'RECEIVED' ? 'VALIDATED' : fromStatus, to_status: 'DISTRIBUTED', actor_id: user.user_id, note: `일괄 수동배분 → ${org.name}` });
+          await writeStatusHistory(db, { order_id: orderId, from_status: fromStatus, to_status: 'DISTRIBUTED', actor_id: user.user_id, note: `일괄 수동배분 → ${org.name}` });
 
           await upsertRegionDailyStats(db, region_org_id, 'intake_count');
           success++;
@@ -220,7 +213,6 @@ export function mountDistribute(router: Hono<Env>) {
       ).bind(orderId).first();
       if (!order) return c.json({ error: '배분 취소 가능한 주문이 아닙니다. (DISTRIBUTED 상태만 가능)' }, 400);
 
-      // 이미 배정(ASSIGNED 이상)된 주문은 취소 불가
       await db.prepare("UPDATE order_distributions SET status = 'CANCELLED' WHERE order_id = ? AND status = 'ACTIVE'").bind(orderId).run();
       await db.prepare("UPDATE orders SET status = 'DISTRIBUTION_PENDING', updated_at = datetime('now') WHERE order_id = ?").bind(orderId).run();
       await writeStatusHistory(db, { order_id: orderId, from_status: 'DISTRIBUTED', to_status: 'DISTRIBUTION_PENDING', actor_id: user.user_id, note: '배분 취소 (수동)' });
@@ -277,13 +269,13 @@ export function mountDistribute(router: Hono<Env>) {
     const db = c.env.DB;
 
     try {
-      // 총판별 배분 건수 + 금액
       const summary = await db.prepare(`
         SELECT od.region_org_id, o.name as region_name, o.code as region_code,
           COUNT(*) as order_count,
           COALESCE(SUM(ord.base_amount), 0) as total_amount,
           COUNT(CASE WHEN ord.status = 'DISTRIBUTED' THEN 1 END) as distributed_count,
           COUNT(CASE WHEN ord.status = 'ASSIGNED' THEN 1 END) as assigned_count,
+          COUNT(CASE WHEN ord.status = 'CONFIRMED' THEN 1 END) as confirmed_count,
           COUNT(CASE WHEN ord.status IN ('IN_PROGRESS', 'READY_DONE') THEN 1 END) as in_progress_count
         FROM order_distributions od
         JOIN organizations o ON od.region_org_id = o.org_id
@@ -293,11 +285,11 @@ export function mountDistribute(router: Hono<Env>) {
         ORDER BY order_count DESC
       `).all();
 
-      // 미배분 건수
+      // 미배분 건수 — VALIDATED 삭제됨
       const undistributed = await db.prepare(`
         SELECT COUNT(*) as count, COALESCE(SUM(base_amount), 0) as amount
         FROM orders
-        WHERE status IN ('RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING')
+        WHERE status IN ('RECEIVED', 'DISTRIBUTION_PENDING')
       `).first();
 
       return c.json({

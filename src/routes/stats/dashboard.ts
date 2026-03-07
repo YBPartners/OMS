@@ -24,9 +24,10 @@ export function mountDashboard(router: Hono<Env>) {
     const todayStats = await db.prepare(`
       SELECT
         COUNT(CASE WHEN status = 'RECEIVED' THEN 1 END) as received,
-        COUNT(CASE WHEN status = 'VALIDATED' THEN 1 END) as validated,
+        COUNT(CASE WHEN status = 'DISTRIBUTION_PENDING' THEN 1 END) as distribution_pending,
         COUNT(CASE WHEN status = 'DISTRIBUTED' THEN 1 END) as distributed,
         COUNT(CASE WHEN status = 'ASSIGNED' THEN 1 END) as assigned,
+        COUNT(CASE WHEN status = 'CONFIRMED' THEN 1 END) as confirmed,
         COUNT(CASE WHEN status = 'IN_PROGRESS' THEN 1 END) as in_progress,
         COUNT(CASE WHEN status = 'SUBMITTED' THEN 1 END) as submitted,
         COUNT(CASE WHEN status = 'REGION_APPROVED' THEN 1 END) as region_approved,

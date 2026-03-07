@@ -1,6 +1,7 @@
 // ================================================================
-// Airflow OMS — 주문 CRUD v5.0 (Scope Engine 적용)
-// 기존: 개별 role/org 필터 코드 → Scope Engine으로 통합
+// Airflow OMS — 주문 CRUD v6.0 (REFACTOR-1: 시군구 전환)
+// admin_dong_code → sigungu_code, service_type 삭제 (order_items로 대체)
+// VALIDATED 상태 삭제, CONFIRMED 상태 추가
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -19,10 +20,9 @@ export function mountCrud(router: Hono<Env>) {
 
     const user = c.get('user')!;
     const db = c.env.DB;
-    const { status, page, limit, from, to, search, region_org_id, team_leader_id, channel_id } = c.req.query();
+    const { status, page, limit, from, to, search, region_org_id, team_leader_id, channel_id, sigungu_code } = c.req.query();
     const pg = normalizePagination(page, limit);
 
-    // ★ Scope Engine 적용 — 역할/조직 기반 자동 필터
     const scope = await getOrderScope(user, db, { tableAlias: 'o' });
 
     const conditions: string[] = [scope.where];
@@ -35,10 +35,10 @@ export function mountCrud(router: Hono<Env>) {
       conditions.push("(o.customer_name LIKE ? OR o.address_text LIKE ? OR o.external_order_no LIKE ?)");
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
-    // HQ/REGION만 추가 필터 사용 가능
     if (region_org_id && scope.isGlobal) { conditions.push('od.region_org_id = ?'); params.push(Number(region_org_id)); }
     if (team_leader_id && (scope.isGlobal || user.org_type === 'REGION')) { conditions.push('oa.team_leader_id = ?'); params.push(Number(team_leader_id)); }
     if (channel_id) { conditions.push('o.channel_id = ?'); params.push(Number(channel_id)); }
+    if (sigungu_code) { conditions.push('o.sigungu_code = ?'); params.push(sigungu_code); }
 
     const where = 'WHERE ' + conditions.join(' AND ');
 
@@ -54,13 +54,15 @@ export function mountCrud(router: Hono<Env>) {
       SELECT o.*, od.region_org_id, org.name as region_name,
              oa.team_leader_id, tl.name as team_leader_name,
              oa.status as assignment_status, oa.assigned_at,
-             ch.name as channel_name, ch.code as channel_code
+             ch.name as channel_name, ch.code as channel_code,
+             sg.sido, sg.sigungu as sigungu_name, sg.full_name as sigungu_full_name
       FROM orders o
       LEFT JOIN order_channels ch ON o.channel_id = ch.channel_id
       LEFT JOIN order_distributions od ON o.order_id = od.order_id AND od.status = 'ACTIVE'
       LEFT JOIN organizations org ON od.region_org_id = org.org_id
       LEFT JOIN order_assignments oa ON o.order_id = oa.order_id AND oa.status != 'REASSIGNED'
       LEFT JOIN users tl ON oa.team_leader_id = tl.user_id
+      LEFT JOIN sigungu sg ON o.sigungu_code = sg.code
       ${where}
       ORDER BY o.created_at DESC
       LIMIT ? OFFSET ?
@@ -82,7 +84,9 @@ export function mountCrud(router: Hono<Env>) {
       SELECT o.*, od.region_org_id, org.name as region_name, od.distributed_at, od.distribution_policy_version,
              oa.team_leader_id, tl.name as team_leader_name, oa.assigned_at, oa.status as assignment_status,
              team_org.name as team_name, team_org.org_id as team_org_id,
-             ch.name as channel_name, ch.code as channel_code
+             ch.name as channel_name, ch.code as channel_code,
+             sg.sido, sg.sigungu as sigungu_name, sg.full_name as sigungu_full_name,
+             confirmer.name as confirmed_by_name
       FROM orders o
       LEFT JOIN order_channels ch ON o.channel_id = ch.channel_id
       LEFT JOIN order_distributions od ON o.order_id = od.order_id AND od.status = 'ACTIVE'
@@ -90,12 +94,14 @@ export function mountCrud(router: Hono<Env>) {
       LEFT JOIN order_assignments oa ON o.order_id = oa.order_id AND oa.status != 'REASSIGNED'
       LEFT JOIN users tl ON oa.team_leader_id = tl.user_id
       LEFT JOIN organizations team_org ON tl.org_id = team_org.org_id
+      LEFT JOIN sigungu sg ON o.sigungu_code = sg.code
+      LEFT JOIN users confirmer ON o.confirmed_by = confirmer.user_id
       WHERE o.order_id = ?
     `).bind(orderId).first();
 
     if (!order) return c.json({ error: '주문을 찾을 수 없습니다.' }, 404);
 
-    // ★ Scope 검증: TEAM/REGION은 자기 주문만 조회 가능
+    // Scope 검증
     if (user.org_type === 'TEAM' && order.team_leader_id !== user.user_id) {
       return c.json({ error: '해당 주문에 대한 접근 권한이 없습니다.' }, 403);
     }
@@ -118,7 +124,25 @@ export function mountCrud(router: Hono<Env>) {
       JOIN users u ON rv.reviewer_id = u.user_id WHERE rv.order_id = ? ORDER BY rv.reviewed_at DESC
     `).bind(orderId).all();
 
-    // ★ R2: 각 보고서별 사진 포함 + 전체 사진도 최상위에 유지 (하위호환)
+    // 주문 항목 (order_items) — REFACTOR-1 신규
+    const orderItems = await db.prepare(`
+      SELECT oi.*, sc.code as category_code, sc.name as category_name, sc.group_name
+      FROM order_items oi
+      JOIN service_categories sc ON oi.category_id = sc.category_id
+      WHERE oi.order_id = ?
+      ORDER BY oi.item_id ASC
+    `).bind(orderId).all();
+
+    // 주문 항목 변동 이력
+    const itemChanges = await db.prepare(`
+      SELECT oic.*, u.name as changed_by_name
+      FROM order_item_changes oic
+      LEFT JOIN users u ON oic.changed_by = u.user_id
+      WHERE oic.order_id = ?
+      ORDER BY oic.changed_at DESC
+    `).bind(orderId).all();
+
+    // 보고서별 사진
     let photos: any[] = [];
     const enrichedReports = [];
     for (const report of reports.results as any[]) {
@@ -126,15 +150,20 @@ export function mountCrud(router: Hono<Env>) {
         'SELECT * FROM work_report_photos WHERE report_id = ? ORDER BY photo_id ASC'
       ).bind(report.report_id).all();
       enrichedReports.push({ ...report, photos: photoResult.results });
-      if (report.report_id === (reports.results[0] as any).report_id) {
-        photos = photoResult.results;  // 최신 보고서 사진 = 최상위 photos
+      if (report.report_id === (reports.results[0] as any)?.report_id) {
+        photos = photoResult.results;
       }
     }
 
-    return c.json({ order, history: history.results, reports: enrichedReports, reviews: reviews.results, photos });
+    return c.json({
+      order, history: history.results, reports: enrichedReports,
+      reviews: reviews.results, photos,
+      order_items: orderItems.results,
+      item_changes: itemChanges.results,
+    });
   });
 
-  // ─── 주문 수동 등록 ───
+  // ─── 주문 수동 등록 (시군구 기반) ───
   router.post('/', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
     if (authErr) return authErr;
@@ -144,33 +173,36 @@ export function mountCrud(router: Hono<Env>) {
     let body: any;
     try { body = await c.req.json(); } catch { return c.json({ error: '잘못된 요청 형식입니다.' }, 400); }
 
-    // ★ 필수 필드 검증 강화
     if (!body.customer_name?.trim()) return c.json({ error: '고객명(customer_name)은 필수입니다.' }, 400);
     if (!body.address_text?.trim()) return c.json({ error: '주소(address_text)는 필수입니다.' }, 400);
     if (!body.customer_phone?.trim()) return c.json({ error: '연락처(customer_phone)는 필수입니다.' }, 400);
-    // ★ R1 고도화: 전화번호 형식 검증
     const phoneClean = body.customer_phone.replace(/[\s-]/g, '');
     if (!/^0\d{8,10}$/.test(phoneClean)) {
       return c.json({ error: '올바른 전화번호 형식이 아닙니다. (예: 010-1234-5678)' }, 400);
     }
-    if (body.base_amount === undefined || body.base_amount === null || isNaN(Number(body.base_amount)) || Number(body.base_amount) < 10000) {
-      return c.json({ error: '금액은 10,000원 이상의 숫자여야 합니다.' }, 400);
+    if (body.base_amount !== undefined && body.base_amount !== null && body.base_amount !== '') {
+      if (isNaN(Number(body.base_amount)) || Number(body.base_amount) < 0) {
+        return c.json({ error: '금액은 0원 이상의 숫자여야 합니다.' }, 400);
+      }
     }
 
-    // ★ 채널 유효성 검증
+    // 채널 유효성 검증
     const channelId = Number(body.channel_id) || null;
     if (channelId) {
       const ch = await db.prepare('SELECT channel_id, is_active FROM order_channels WHERE channel_id = ?').bind(channelId).first();
       if (!ch) return c.json({ error: '유효하지 않은 채널입니다.' }, 400);
-      if (!(ch as any).is_active) return c.json({ error: '비활성화된 채널입니다. 활성 채널을 선택하세요.' }, 400);
+      if (!(ch as any).is_active) return c.json({ error: '비활성화된 채널입니다.' }, 400);
     }
 
-    // ★ 서비스유형 유효성 검증
-    const validServiceTypes = ['WALL_AC', 'STAND_AC', 'CEILING_AC', 'SYSTEM_AC', 'WINDOW_AC', 'MULTI_AC', 'DEFAULT'];
-    const serviceType = validServiceTypes.includes(body.service_type) ? body.service_type : 'DEFAULT';
+    // 시군구 코드 검증
+    const sigunguCode = body.sigungu_code || null;
+    if (sigunguCode) {
+      const sg = await db.prepare('SELECT code FROM sigungu WHERE code = ?').bind(sigunguCode).first();
+      if (!sg) return c.json({ error: '유효하지 않은 시군구 코드입니다.' }, 400);
+    }
 
     const requestedDate = body.requested_date || new Date().toISOString().split('T')[0];
-    const fpData = `${body.address_text}|${requestedDate}|${body.service_type || 'DEFAULT'}|${body.base_amount || 0}`;
+    const fpData = `${body.address_text}|${requestedDate}|${body.base_amount || 0}`;
     const fingerprint = await generateFingerprint(fpData);
 
     const dup = await db.prepare(`
@@ -182,14 +214,14 @@ export function mountCrud(router: Hono<Env>) {
     }
 
     const result = await db.prepare(`
-      INSERT INTO orders (external_order_no, source_fingerprint, service_type, customer_name, customer_phone,
-        address_text, address_detail, admin_dong_code, legal_dong_code, requested_date, scheduled_date, base_amount, memo, channel_id, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
+      INSERT INTO orders (external_order_no, source_fingerprint, customer_name, customer_phone,
+        address_text, address_detail, sigungu_code, requested_date, scheduled_date, base_amount, memo, channel_id, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
     `).bind(
-      body.external_order_no ?? null, fingerprint, serviceType,
+      body.external_order_no ?? null, fingerprint,
       body.customer_name ?? null, body.customer_phone ?? null,
       body.address_text ?? '', body.address_detail ?? null,
-      body.admin_dong_code ?? null, body.legal_dong_code ?? null,
+      sigunguCode,
       requestedDate,
       body.scheduled_date ?? null, Number(body.base_amount) || 0, body.memo ?? null,
       Number(body.channel_id) || 1
@@ -224,23 +256,19 @@ export function mountCrud(router: Hono<Env>) {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       try {
-        const fpData = `${row.address_text}|${row.requested_date}|${row.service_type || 'DEFAULT'}|${row.base_amount || 0}`;
+        const fpData = `${row.address_text}|${row.requested_date}|${row.base_amount || 0}`;
         const fingerprint = await generateFingerprint(fpData);
-
-        // ★ 배치 임포트: channel_id, service_type 유효성 검증 추가
-        const validServiceTypes = ['WALL_AC', 'STAND_AC', 'CEILING_AC', 'SYSTEM_AC', 'WINDOW_AC', 'MULTI_AC', 'DEFAULT'];
-        const rowServiceType = validServiceTypes.includes(row.service_type) ? row.service_type : 'DEFAULT';
         const rowChannelId = row.channel_id ? Number(row.channel_id) : null;
 
         await db.prepare(`
-          INSERT INTO orders (batch_id, external_order_no, source_fingerprint, service_type, customer_name, customer_phone,
-            address_text, address_detail, admin_dong_code, requested_date, base_amount, channel_id, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
+          INSERT INTO orders (batch_id, external_order_no, source_fingerprint, customer_name, customer_phone,
+            address_text, address_detail, sigungu_code, requested_date, base_amount, channel_id, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
         `).bind(
-          batchId, row.external_order_no ?? null, fingerprint, rowServiceType,
+          batchId, row.external_order_no ?? null, fingerprint,
           row.customer_name ?? null, row.customer_phone ?? null,
           row.address_text ?? '', row.address_detail ?? null,
-          row.admin_dong_code ?? null, row.requested_date || new Date().toISOString().split('T')[0],
+          row.sigungu_code ?? null, row.requested_date || new Date().toISOString().split('T')[0],
           Number(row.base_amount) || 0, rowChannelId
         ).run();
         successCount++;
@@ -271,18 +299,17 @@ export function mountCrud(router: Hono<Env>) {
     const order = await db.prepare('SELECT * FROM orders WHERE order_id = ?').bind(orderId).first();
     if (!order) return c.json({ error: '주문을 찾을 수 없습니다.' }, 404);
 
-    // 수정 가능 상태 체크
-    const editableStatuses = ['RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING', 'DISTRIBUTED'];
+    const editableStatuses = ['RECEIVED', 'DISTRIBUTION_PENDING', 'DISTRIBUTED'];
     if (!editableStatuses.includes(order.status as string)) {
       return c.json({ error: `현재 상태(${order.status})에서는 수정할 수 없습니다. 수신~배분완료 상태에서만 수정 가능합니다.` }, 400);
     }
 
-    // 수정 가능 필드 목록
+    // 수정 가능 필드 (service_type, admin_dong_code, legal_dong_code 삭제 → sigungu_code 추가)
     const allowedFields: Record<string, string> = {
       customer_name: 'TEXT', customer_phone: 'TEXT', address_text: 'TEXT',
-      address_detail: 'TEXT', admin_dong_code: 'TEXT', legal_dong_code: 'TEXT',
+      address_detail: 'TEXT', sigungu_code: 'TEXT',
       base_amount: 'NUMBER', requested_date: 'TEXT', scheduled_date: 'TEXT', scheduled_time: 'TEXT',
-      memo: 'TEXT', channel_id: 'NUMBER', service_type: 'TEXT',
+      memo: 'TEXT', channel_id: 'NUMBER',
       external_order_no: 'TEXT',
     };
 
@@ -301,12 +328,10 @@ export function mountCrud(router: Hono<Env>) {
 
     if (updates.length === 0) return c.json({ error: '수정할 항목이 없습니다.' }, 400);
 
-    // service_type 유효성 검증
-    if (body.service_type !== undefined) {
-      const validTypes = ['WALL_AC', 'STAND_AC', 'CEILING_AC', 'SYSTEM_AC', 'WINDOW_AC', 'MULTI_AC', 'DEFAULT'];
-      if (!validTypes.includes(body.service_type)) {
-        return c.json({ error: '유효하지 않은 서비스 유형입니다.' }, 400);
-      }
+    // sigungu_code 유효성 검증
+    if (body.sigungu_code !== undefined && body.sigungu_code !== null && body.sigungu_code !== '') {
+      const sg = await db.prepare('SELECT code FROM sigungu WHERE code = ?').bind(body.sigungu_code).first();
+      if (!sg) return c.json({ error: '유효하지 않은 시군구 코드입니다.' }, 400);
     }
 
     // channel_id 유효성 검증
@@ -317,8 +342,8 @@ export function mountCrud(router: Hono<Env>) {
     }
 
     // base_amount 검증
-    if (body.base_amount !== undefined && (isNaN(Number(body.base_amount)) || Number(body.base_amount) < 10000)) {
-      return c.json({ error: '금액은 10,000원 이상이어야 합니다.' }, 400);
+    if (body.base_amount !== undefined && (isNaN(Number(body.base_amount)) || Number(body.base_amount) < 0)) {
+      return c.json({ error: '금액은 0원 이상이어야 합니다.' }, 400);
     }
 
     updates.push("updated_at = datetime('now')");
@@ -326,7 +351,6 @@ export function mountCrud(router: Hono<Env>) {
 
     await db.prepare(`UPDATE orders SET ${updates.join(', ')} WHERE order_id = ?`).bind(...params).run();
 
-    // 감사 로그
     await writeStatusHistory(db, {
       order_id: orderId, from_status: order.status as string, to_status: order.status as string,
       actor_id: user.user_id, note: `주문 정보 수정 (${Object.keys(allowedFields).filter(k => body[k] !== undefined).join(', ')})`
@@ -347,16 +371,13 @@ export function mountCrud(router: Hono<Env>) {
     const order = await db.prepare('SELECT * FROM orders WHERE order_id = ?').bind(orderId).first();
     if (!order) return c.json({ error: '주문을 찾을 수 없습니다.' }, 404);
 
-    // RECEIVED 상태에서만 삭제 가능
     if (order.status !== 'RECEIVED') {
       return c.json({ error: `현재 상태(${order.status})에서는 삭제할 수 없습니다. 수신(RECEIVED) 상태에서만 삭제 가능합니다.` }, 400);
     }
 
-    // 연관 데이터 정리
     await db.prepare('DELETE FROM order_status_history WHERE order_id = ?').bind(orderId).run();
     await db.prepare('DELETE FROM orders WHERE order_id = ? AND status = ?').bind(orderId, 'RECEIVED').run();
 
-    // 감사 로그 (audit_logs 테이블)
     await db.prepare(`
       INSERT INTO audit_logs (entity_type, entity_id, action, actor_id, detail_json)
       VALUES ('ORDER', ?, 'ORDER_DELETED', ?, ?)
@@ -375,7 +396,6 @@ export function mountCrud(router: Hono<Env>) {
     const user = c.get('user')!;
     const db = c.env.DB;
 
-    // ★ Scope Engine 적용
     const scope = await getOrderScope(user, db, { tableAlias: 'o' });
 
     const result = await db.prepare(`
@@ -383,13 +403,46 @@ export function mountCrud(router: Hono<Env>) {
       FROM orders o WHERE ${scope.where}
       GROUP BY status
       ORDER BY CASE status
-        WHEN 'RECEIVED' THEN 1 WHEN 'VALIDATED' THEN 2 WHEN 'DISTRIBUTION_PENDING' THEN 3
-        WHEN 'DISTRIBUTED' THEN 4 WHEN 'ASSIGNED' THEN 5 WHEN 'IN_PROGRESS' THEN 6
-        WHEN 'SUBMITTED' THEN 7 WHEN 'REGION_APPROVED' THEN 8 WHEN 'REGION_REJECTED' THEN 9
-        WHEN 'HQ_APPROVED' THEN 10 WHEN 'HQ_REJECTED' THEN 11 WHEN 'SETTLEMENT_CONFIRMED' THEN 12
-        WHEN 'PAID' THEN 13 ELSE 99 END
+        WHEN 'RECEIVED' THEN 1 WHEN 'DISTRIBUTION_PENDING' THEN 2
+        WHEN 'DISTRIBUTED' THEN 3 WHEN 'ASSIGNED' THEN 4 WHEN 'READY_DONE' THEN 5
+        WHEN 'CONFIRMED' THEN 6 WHEN 'IN_PROGRESS' THEN 7
+        WHEN 'SUBMITTED' THEN 8 WHEN 'DONE' THEN 9
+        WHEN 'REGION_APPROVED' THEN 10 WHEN 'REGION_REJECTED' THEN 11
+        WHEN 'HQ_APPROVED' THEN 12 WHEN 'HQ_REJECTED' THEN 13
+        WHEN 'SETTLEMENT_CONFIRMED' THEN 14
+        WHEN 'PAID' THEN 15 ELSE 99 END
     `).bind(...scope.binds).all();
 
     return c.json({ funnel: result.results });
+  });
+
+  // ─── 서비스 카테고리 + 채널별 단가 조회 (프론트엔드 가격확정 UI용) ───
+  router.get('/service-prices', async (c) => {
+    const authErr = requireAuth(c);
+    if (authErr) return authErr;
+
+    const db = c.env.DB;
+    const { channel_id } = c.req.query();
+
+    let query = `
+      SELECT sc.category_id, sc.code, sc.group_name, sc.name, sc.sort_order,
+             sp.sell_price, sp.work_price, sp.channel_id,
+             ch.name as channel_name
+      FROM service_categories sc
+      LEFT JOIN service_prices sp ON sc.category_id = sp.category_id AND sp.is_active = 1
+        AND (sp.effective_to IS NULL OR sp.effective_to > datetime('now'))
+      LEFT JOIN order_channels ch ON sp.channel_id = ch.channel_id
+      WHERE sc.is_active = 1
+    `;
+    const binds: any[] = [];
+    if (channel_id) { query += ' AND (sp.channel_id = ? OR sp.channel_id IS NULL)'; binds.push(Number(channel_id)); }
+    query += ' ORDER BY sc.sort_order, sc.category_id';
+
+    const result = await db.prepare(query).bind(...binds).all();
+
+    // 서비스 옵션도 함께 반환
+    const options = await db.prepare('SELECT * FROM service_options WHERE is_active = 1').all();
+
+    return c.json({ prices: result.results, options: options.results });
   });
 }

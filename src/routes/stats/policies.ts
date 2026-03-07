@@ -118,36 +118,33 @@ export function mountPolicies(router: Hono<Env>) {
     const policy = await db.prepare('SELECT * FROM distribution_policies WHERE policy_id = ?').bind(id).first() as any;
     if (!policy) return c.json({ error: '정책을 찾을 수 없습니다.' }, 404);
 
-    const [pendingOrders, totalTerritories, mappedTerritories, unmappedTerritories, totalRegions, recentDistributed] = await Promise.all([
-      db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status IN ('NEW','DISTRIBUTION_PENDING')").first(),
-      db.prepare("SELECT COUNT(*) as cnt FROM territories WHERE status='ACTIVE'").first(),
-      db.prepare("SELECT COUNT(DISTINCT t.territory_id) as cnt FROM territories t JOIN org_territories ot ON t.territory_id=ot.territory_id WHERE t.status='ACTIVE' AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now'))").first(),
-      db.prepare("SELECT COUNT(*) as cnt FROM territories t LEFT JOIN org_territories ot ON t.territory_id=ot.territory_id AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now')) WHERE t.status='ACTIVE' AND ot.org_id IS NULL").first(),
-      db.prepare("SELECT COUNT(DISTINCT sido) as sido_cnt, COUNT(*) as total FROM admin_regions WHERE is_active=1").first(),
+    const [pendingOrders, totalSigungu, mappedSigungu, unmappedSigungu, recentDistributed] = await Promise.all([
+      db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status IN ('RECEIVED','DISTRIBUTION_PENDING')").first(),
+      db.prepare("SELECT COUNT(*) as cnt FROM sigungu WHERE is_active=1").first(),
+      db.prepare("SELECT COUNT(DISTINCT sg.code) as cnt FROM sigungu sg JOIN region_sigungu_map rsm ON sg.code=rsm.sigungu_code WHERE sg.is_active=1").first(),
+      db.prepare("SELECT COUNT(*) as cnt FROM sigungu sg LEFT JOIN region_sigungu_map rsm ON sg.code=rsm.sigungu_code WHERE sg.is_active=1 AND rsm.org_id IS NULL").first(),
       db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status='DISTRIBUTED' AND updated_at > datetime('now','-7 days')").first(),
     ]);
 
     // 시도별 매핑 현황
     const sidoMapping = await db.prepare(`
-      SELECT t.sido, COUNT(*) as total,
-        SUM(CASE WHEN ot.org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped
-      FROM territories t
-      LEFT JOIN org_territories ot ON t.territory_id=ot.territory_id AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now'))
-      WHERE t.status='ACTIVE'
-      GROUP BY t.sido ORDER BY t.sido
+      SELECT sg.sido, COUNT(*) as total,
+        SUM(CASE WHEN rsm.org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped
+      FROM sigungu sg
+      LEFT JOIN region_sigungu_map rsm ON sg.code=rsm.sigungu_code
+      WHERE sg.is_active=1
+      GROUP BY sg.sido ORDER BY sg.sido
     `).all();
 
     return c.json({
       policy,
       impact: {
         pending_orders: (pendingOrders as any)?.cnt || 0,
-        total_territories: (totalTerritories as any)?.cnt || 0,
-        mapped_territories: (mappedTerritories as any)?.cnt || 0,
-        unmapped_territories: (unmappedTerritories as any)?.cnt || 0,
-        total_admin_regions: (totalRegions as any)?.total || 0,
-        sido_count: (totalRegions as any)?.sido_cnt || 0,
+        total_sigungu: (totalSigungu as any)?.cnt || 0,
+        mapped_sigungu: (mappedSigungu as any)?.cnt || 0,
+        unmapped_sigungu: (unmappedSigungu as any)?.cnt || 0,
         recent_distributed_7d: (recentDistributed as any)?.cnt || 0,
-        mapping_rate: (totalTerritories as any)?.cnt ? Math.round(((mappedTerritories as any)?.cnt / (totalTerritories as any)?.cnt) * 100) : 0,
+        mapping_rate: (totalSigungu as any)?.cnt ? Math.round(((mappedSigungu as any)?.cnt / (totalSigungu as any)?.cnt) * 100) : 0,
         sido_mapping: sidoMapping.results,
       },
     });
@@ -496,22 +493,21 @@ export function mountPolicies(router: Hono<Env>) {
     if (authErr) return authErr;
     const db = c.env.DB;
 
-    const [dist, report, comm, metrics, terr, regions, mappings] = await Promise.all([
+    const [dist, report, comm, metrics, sigunguStats, regionMappings] = await Promise.all([
       db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active FROM distribution_policies').first(),
       db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active FROM report_policies').first(),
       db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active FROM commission_policies').first(),
       db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active FROM metrics_policies').first(),
-      db.prepare("SELECT COUNT(*) as total, COUNT(DISTINCT sido) as sido_cnt FROM territories WHERE status='ACTIVE'").first(),
-      db.prepare("SELECT COUNT(*) as total, COUNT(DISTINCT sido) as sido_cnt, COUNT(DISTINCT sigungu) as sigungu_cnt FROM admin_regions WHERE is_active=1").first(),
-      db.prepare("SELECT COUNT(*) as total FROM org_region_mappings").first(),
+      db.prepare("SELECT COUNT(*) as total, COUNT(DISTINCT sido) as sido_cnt FROM sigungu WHERE is_active=1").first(),
+      db.prepare("SELECT COUNT(*) as total FROM region_sigungu_map").first(),
     ]);
 
-    const ordersDist = await db.prepare("SELECT COUNT(*) as total FROM orders WHERE status IN ('NEW','DISTRIBUTION_PENDING','DISTRIBUTED','ASSIGNED')").first();
+    const ordersDist = await db.prepare("SELECT COUNT(*) as total FROM orders WHERE status IN ('RECEIVED','DISTRIBUTION_PENDING','DISTRIBUTED','ASSIGNED')").first();
 
     const recentAudit = await db.prepare(`
       SELECT al.*, u.name as actor_name FROM audit_logs al
       LEFT JOIN users u ON al.actor_id = u.user_id
-      WHERE al.entity_type IN ('DISTRIBUTION_POLICY','REPORT_POLICY','COMMISSION_POLICY','METRICS_POLICY','TERRITORY','ORG_REGION_MAPPING')
+      WHERE al.entity_type IN ('DISTRIBUTION_POLICY','REPORT_POLICY','COMMISSION_POLICY','METRICS_POLICY','REGION_MAPPING','SIGUNGU_MAPPING')
       ORDER BY al.created_at DESC LIMIT 10
     `).all();
 
@@ -520,9 +516,8 @@ export function mountPolicies(router: Hono<Env>) {
       report: report,
       commission: comm,
       metrics: metrics,
-      territories: terr,
-      admin_regions: regions,
-      org_region_mappings: mappings,
+      sigungu: sigunguStats,
+      region_mappings: regionMappings,
       active_orders: (ordersDist as any)?.total || 0,
       recent_audit: recentAudit.results,
     });
@@ -539,7 +534,7 @@ export function mountPolicies(router: Hono<Env>) {
     let query = `
       SELECT al.*, u.name as actor_name FROM audit_logs al
       LEFT JOIN users u ON al.actor_id = u.user_id
-      WHERE al.entity_type IN ('DISTRIBUTION_POLICY','REPORT_POLICY','COMMISSION_POLICY','METRICS_POLICY','TERRITORY','ORG_REGION_MAPPING')
+      WHERE al.entity_type IN ('DISTRIBUTION_POLICY','REPORT_POLICY','COMMISSION_POLICY','METRICS_POLICY','REGION_MAPPING','SIGUNGU_MAPPING')
     `;
     const params: any[] = [];
     if (entityType) { query += ' AND al.entity_type = ?'; params.push(entityType); }
@@ -550,7 +545,7 @@ export function mountPolicies(router: Hono<Env>) {
     return c.json({ audit_logs: result.results, total: result.results.length });
   });
 
-  // ━━━━━━━━━━ 지역권(territory) 검색 ━━━━━━━━━━
+  // ━━━━━━━━━━ 시군구 검색 ━━━━━━━━━━
 
   router.get('/territories/search', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
@@ -563,88 +558,89 @@ export function mountPolicies(router: Hono<Env>) {
     const db = c.env.DB;
 
     let query = `
-      SELECT t.*, ot.org_id, o.name as org_name
-      FROM territories t
-      LEFT JOIN org_territories ot ON t.territory_id = ot.territory_id AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now'))
-      LEFT JOIN organizations o ON ot.org_id = o.org_id
-      WHERE t.status = 'ACTIVE'
+      SELECT sg.code, sg.sido, sg.sigungu, sg.full_name, sg.is_active,
+             rsm.org_id, o.name as org_name
+      FROM sigungu sg
+      LEFT JOIN region_sigungu_map rsm ON sg.code = rsm.sigungu_code
+      LEFT JOIN organizations o ON rsm.org_id = o.org_id
+      WHERE sg.is_active = 1
     `;
     const params: any[] = [];
-    if (sido) { query += ' AND t.sido = ?'; params.push(sido); }
-    if (sigungu) { query += ' AND t.sigungu = ?'; params.push(sigungu); }
+    if (sido) { query += ' AND sg.sido = ?'; params.push(sido); }
+    if (sigungu) { query += ' AND sg.sigungu = ?'; params.push(sigungu); }
     if (q && q.length >= 1) {
-      query += ' AND (t.sido LIKE ? OR t.sigungu LIKE ? OR t.eupmyeondong LIKE ?)';
+      query += ' AND (sg.sido LIKE ? OR sg.sigungu LIKE ? OR sg.full_name LIKE ?)';
       params.push(`%${q}%`, `%${q}%`, `%${q}%`);
     }
-    if (unmapped_only === '1') { query += ' AND ot.org_id IS NULL'; }
-    query += ' ORDER BY t.sido, t.sigungu, t.eupmyeondong LIMIT 200';
+    if (unmapped_only === '1') { query += ' AND rsm.org_id IS NULL'; }
+    query += ' ORDER BY sg.sido, sg.sigungu LIMIT 200';
 
     const result = await db.prepare(query).bind(...params).all();
     return c.json({ territories: result.results, total: result.results.length });
   });
 
-  // ★ 지역권 일괄 매핑 (여러 territory를 한 org에 한꺼번에 매핑)
+  // ★ 시군구 일괄 매핑 (여러 시군구를 한 org에 한꺼번에 매핑)
   router.post('/territories/bulk-mapping', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
     if (authErr) return authErr;
     const db = c.env.DB;
-    const { org_id, territory_ids } = await c.req.json();
+    const { org_id, territory_ids, sigungu_codes } = await c.req.json();
+    const codes = sigungu_codes || territory_ids; // 호환성
 
     if (!org_id) return c.json({ error: '총판 ID는 필수입니다.' }, 400);
-    if (!territory_ids || !Array.isArray(territory_ids) || territory_ids.length === 0) {
-      return c.json({ error: '지역권 ID 목록이 필요합니다.' }, 400);
+    if (!codes || !Array.isArray(codes) || codes.length === 0) {
+      return c.json({ error: '시군구 코드 목록이 필요합니다.' }, 400);
     }
-    if (territory_ids.length > 100) return c.json({ error: '한 번에 최대 100건까지 매핑할 수 있습니다.' }, 400);
+    if (codes.length > 100) return c.json({ error: '한 번에 최대 100건까지 매핑할 수 있습니다.' }, 400);
 
     let mapped = 0;
     let skipped = 0;
     const errors: string[] = [];
 
-    for (const tid of territory_ids) {
+    for (const code of codes) {
       try {
-        // 기존 매핑 종료
-        await db.prepare(`
-          UPDATE org_territories SET effective_to = datetime('now')
-          WHERE territory_id = ? AND (effective_to IS NULL OR effective_to > datetime('now'))
-        `).bind(tid).run();
+        // 기존 매핑 해제
+        await db.prepare(
+          'DELETE FROM region_sigungu_map WHERE sigungu_code = ?'
+        ).bind(String(code)).run();
 
         // 새 매핑 생성
-        await db.prepare(`
-          INSERT INTO org_territories (org_id, territory_id, effective_from) VALUES (?, ?, datetime('now'))
-        `).bind(org_id, tid).run();
+        await db.prepare(
+          'INSERT INTO region_sigungu_map (org_id, sigungu_code, mapped_by) VALUES (?, ?, ?)'
+        ).bind(org_id, String(code), c.get('user')!.user_id).run();
         mapped++;
       } catch (e: any) {
-        errors.push(`ID ${tid}: ${e.message}`);
+        errors.push(`Code ${code}: ${e.message}`);
         skipped++;
       }
     }
 
-    await writeAuditLog(db, { entity_type: 'TERRITORY', action: 'BULK_MAPPING', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ org_id, count: mapped, skipped, total: territory_ids.length }) });
+    await writeAuditLog(db, { entity_type: 'SIGUNGU_MAPPING', action: 'BULK_MAPPING', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ org_id, count: mapped, skipped, total: codes.length }) });
 
-    return c.json({ ok: true, mapped, skipped, total: territory_ids.length, errors: errors.length ? errors : undefined });
+    return c.json({ ok: true, mapped, skipped, total: codes.length, errors: errors.length ? errors : undefined });
   });
 
-  // ★ 지역권 시도별 통계 (매핑 현황)
+  // ★ 시군구 시도별 통계 (매핑 현황)
   router.get('/territories/sido-stats', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
     if (authErr) return authErr;
     const db = c.env.DB;
 
     const result = await db.prepare(`
-      SELECT t.sido,
+      SELECT sg.sido,
         COUNT(*) as total,
-        SUM(CASE WHEN ot.org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped,
-        COUNT(DISTINCT ot.org_id) as org_count
-      FROM territories t
-      LEFT JOIN org_territories ot ON t.territory_id=ot.territory_id AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now'))
-      WHERE t.status='ACTIVE'
-      GROUP BY t.sido ORDER BY t.sido
+        SUM(CASE WHEN rsm.org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped,
+        COUNT(DISTINCT rsm.org_id) as org_count
+      FROM sigungu sg
+      LEFT JOIN region_sigungu_map rsm ON sg.code=rsm.sigungu_code
+      WHERE sg.is_active=1
+      GROUP BY sg.sido ORDER BY sg.sido
     `).all();
 
     return c.json({ sido_stats: result.results });
   });
 
-  // ★ 지역권의 시군구 목록 (2단계 드릴다운)
+  // ★ 시군구 목록 (2단계 드릴다운)
   router.get('/territories/sigungu', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
     if (authErr) return authErr;
@@ -653,21 +649,20 @@ export function mountPolicies(router: Hono<Env>) {
     const db = c.env.DB;
 
     const result = await db.prepare(`
-      SELECT t.sigungu,
-        COUNT(*) as total,
-        SUM(CASE WHEN ot.org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped
-      FROM territories t
-      LEFT JOIN org_territories ot ON t.territory_id=ot.territory_id AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now'))
-      WHERE t.status='ACTIVE' AND t.sido=?
-      GROUP BY t.sigungu ORDER BY t.sigungu
+      SELECT sg.sigungu, sg.code,
+        SUM(CASE WHEN rsm.org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped
+      FROM sigungu sg
+      LEFT JOIN region_sigungu_map rsm ON sg.code=rsm.sigungu_code
+      WHERE sg.is_active=1 AND sg.sido=?
+      GROUP BY sg.sigungu, sg.code ORDER BY sg.sigungu
     `).bind(sido).all();
 
     return c.json({ sigungu_list: result.results });
   });
 
-  // ━━━━━━━━━━ 지역권 매핑 ━━━━━━━━━━
+  // ━━━━━━━━━━ 시군구 매핑 ━━━━━━━━━━
 
-  // 조회 (기존 territories + 신규 admin_regions 통합)
+  // 조회 (시군구 기반 통합)
   router.get('/territories', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
     if (authErr) return authErr;
@@ -676,83 +671,65 @@ export function mountPolicies(router: Hono<Env>) {
     const db = c.env.DB;
 
     let query = `
-      SELECT t.*, ot.org_id, o.name as org_name, o.org_type
-      FROM territories t
-      LEFT JOIN org_territories ot ON t.territory_id = ot.territory_id AND (ot.effective_to IS NULL OR ot.effective_to > datetime('now'))
-      LEFT JOIN organizations o ON ot.org_id = o.org_id
-      WHERE t.status = 'ACTIVE'
+      SELECT sg.code, sg.sido, sg.sigungu, sg.full_name, sg.is_active,
+             rsm.org_id, o.name as org_name, o.org_type
+      FROM sigungu sg
+      LEFT JOIN region_sigungu_map rsm ON sg.code = rsm.sigungu_code
+      LEFT JOIN organizations o ON rsm.org_id = o.org_id
+      WHERE sg.is_active = 1
     `;
     const params: any[] = [];
 
     if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
-      query += ' AND (ot.org_id = ? OR ot.org_id IN (SELECT org_id FROM organizations WHERE parent_org_id = ?))';
+      query += ' AND (rsm.org_id = ? OR rsm.org_id IN (SELECT org_id FROM organizations WHERE parent_org_id = ?))';
       params.push(user.org_id, user.org_id);
     }
-    query += ' ORDER BY t.sido, t.sigungu, t.eupmyeondong';
+    query += ' ORDER BY sg.sido, sg.sigungu';
 
     const result = await db.prepare(query).bind(...params).all();
 
-    let regionMappingQuery = `
-      SELECT ar.region_id, ar.sido, ar.sigungu, ar.eupmyeondong, ar.full_name, ar.admin_code,
-             orm.org_id, o.name as org_name, o.org_type
-      FROM org_region_mappings orm
-      JOIN admin_regions ar ON orm.region_id = ar.region_id
-      JOIN organizations o ON orm.org_id = o.org_id
-      WHERE 1=1
-    `;
-    const regionParams: any[] = [];
-
-    if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
-      regionMappingQuery += ' AND (orm.org_id = ? OR orm.org_id IN (SELECT org_id FROM organizations WHERE parent_org_id = ?))';
-      regionParams.push(user.org_id, user.org_id);
-    }
-    regionMappingQuery += ' ORDER BY ar.sido, ar.sigungu, ar.eupmyeondong';
-
-    const regionMappings = await db.prepare(regionMappingQuery).bind(...regionParams).all();
-
     return c.json({
       territories: result.results,
-      admin_region_mappings: regionMappings.results,
     });
   });
 
-  // 지역권 매핑 변경 (territory <-> org)
+  // 시군구 매핑 변경 (sigungu_code <-> org)
   router.put('/territories/:territory_id/mapping', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
     if (authErr) return authErr;
     const db = c.env.DB;
-    const territoryId = Number(c.req.param('territory_id'));
+    const sigunguCode = c.req.param('territory_id'); // 호환성: territory_id 파라미터로 sigungu code 수용
     const { org_id } = await c.req.json();
 
     if (!org_id) return c.json({ error: '총판 ID는 필수입니다.' }, 400);
 
-    await db.prepare(`
-      UPDATE org_territories SET effective_to = datetime('now')
-      WHERE territory_id = ? AND (effective_to IS NULL OR effective_to > datetime('now'))
-    `).bind(territoryId).run();
+    // 기존 매핑 삭제
+    await db.prepare(
+      'DELETE FROM region_sigungu_map WHERE sigungu_code = ?'
+    ).bind(String(sigunguCode)).run();
 
-    await db.prepare(`
-      INSERT INTO org_territories (org_id, territory_id, effective_from) VALUES (?, ?, datetime('now'))
-    `).bind(org_id, territoryId).run();
+    // 새 매핑 생성
+    await db.prepare(
+      'INSERT INTO region_sigungu_map (org_id, sigungu_code, mapped_by) VALUES (?, ?, ?)'
+    ).bind(org_id, String(sigunguCode), c.get('user')!.user_id).run();
 
-    await writeAuditLog(db, { entity_type: 'TERRITORY', entity_id: territoryId, action: 'REGION.MAPPED', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ territory_id: territoryId, org_id }) });
-    return c.json({ ok: true, territory_id: territoryId, org_id });
+    await writeAuditLog(db, { entity_type: 'SIGUNGU_MAPPING', entity_id: 0, action: 'REGION.MAPPED', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ sigungu_code: sigunguCode, org_id }) });
+    return c.json({ ok: true, sigungu_code: sigunguCode, org_id });
   });
 
-  // ★ 매핑 해제 (territory의 org 매핑 제거)
+  // ★ 매핑 해제 (시군구의 org 매핑 제거)
   router.delete('/territories/:territory_id/mapping', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
     if (authErr) return authErr;
     const db = c.env.DB;
-    const territoryId = Number(c.req.param('territory_id'));
+    const sigunguCode = c.req.param('territory_id');
 
-    await db.prepare(`
-      UPDATE org_territories SET effective_to = datetime('now')
-      WHERE territory_id = ? AND (effective_to IS NULL OR effective_to > datetime('now'))
-    `).bind(territoryId).run();
+    await db.prepare(
+      'DELETE FROM region_sigungu_map WHERE sigungu_code = ?'
+    ).bind(String(sigunguCode)).run();
 
-    await writeAuditLog(db, { entity_type: 'TERRITORY', entity_id: territoryId, action: 'REGION.UNMAPPED', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ territory_id: territoryId }) });
-    return c.json({ ok: true, territory_id: territoryId });
+    await writeAuditLog(db, { entity_type: 'SIGUNGU_MAPPING', entity_id: 0, action: 'REGION.UNMAPPED', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ sigungu_code: sigunguCode }) });
+    return c.json({ ok: true, sigungu_code: sigunguCode });
   });
 
   // ━━━━━━━━━━ 지표(Metrics) 정책 ━━━━━━━━━━

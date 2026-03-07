@@ -42,7 +42,7 @@ export function mountDistributors(router: Hono<Env>) {
         (SELECT COUNT(*) FROM users u2
          JOIN organizations c2 ON u2.org_id = c2.org_id
          WHERE c2.parent_org_id = o.org_id AND c2.org_type = 'TEAM' AND u2.status = 'ACTIVE') as team_members,
-        (SELECT COUNT(*) FROM org_region_mappings orm WHERE orm.org_id = o.org_id) as region_mapping_count
+        (SELECT COUNT(*) FROM region_sigungu_map rsm WHERE rsm.org_id = o.org_id) as region_mapping_count
       FROM organizations o
       ${where}
       ORDER BY o.name
@@ -84,14 +84,14 @@ export function mountDistributors(router: Hono<Env>) {
       ORDER BY t.name
     `).bind(orgId).all();
 
-    // 관할 행정구역 목록
+    // 관할 시군구 목록
     const regions = await db.prepare(`
-      SELECT ar.region_id, ar.sido, ar.sigungu, ar.eupmyeondong, ar.full_name, ar.admin_code,
-             orm.mapping_id, orm.created_at as mapped_at
-      FROM org_region_mappings orm
-      JOIN admin_regions ar ON orm.region_id = ar.region_id
-      WHERE orm.org_id = ?
-      ORDER BY ar.sido, ar.sigungu, ar.eupmyeondong
+      SELECT sg.code, sg.sido, sg.sigungu, sg.full_name,
+             rsm.id as mapping_id, rsm.created_at as mapped_at
+      FROM region_sigungu_map rsm
+      JOIN sigungu sg ON rsm.sigungu_code = sg.code
+      WHERE rsm.org_id = ?
+      ORDER BY sg.sido, sg.sigungu
     `).bind(orgId).all();
 
     // 직속 인원 목록
@@ -154,11 +154,11 @@ export function mountDistributors(router: Hono<Env>) {
     `).bind(body.name, body.code || null).run();
     const newOrgId = result.meta.last_row_id as number;
 
-    // 관할 행정구역 즉시 매핑 (옵션)
+    // 관할 시군구 즉시 매핑 (옵션)
     if (body.region_ids && Array.isArray(body.region_ids)) {
-      for (const regionId of body.region_ids) {
+      for (const code of body.region_ids) {
         try {
-          await db.prepare('INSERT INTO org_region_mappings (org_id, region_id) VALUES (?, ?)').bind(newOrgId, regionId).run();
+          await db.prepare('INSERT OR IGNORE INTO region_sigungu_map (org_id, sigungu_code, mapped_by) VALUES (?, ?, ?)').bind(newOrgId, String(code), user.user_id).run();
         } catch { /* 중복 무시 */ }
       }
     }

@@ -1,7 +1,6 @@
 // ================================================================
-// Airflow OMS — 행정구역(admin_regions) API v2.0
-// 시도·시군구·읍면동 계층 검색 + 조직-행정구역 매핑 관리
-// try-catch 강화: DB 오류 방어
+// Airflow OMS — 시군구 기반 지역 관리 API v3.0 (REFACTOR-1)
+// admin_regions → sigungu, org_region_mappings → region_sigungu_map
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -19,7 +18,7 @@ export function mountAdminRegions(router: Hono<Env>) {
     const db = c.env.DB;
     const result = await db.prepare(`
       SELECT DISTINCT sido, COUNT(*) as district_count
-      FROM admin_regions WHERE is_active = 1
+      FROM sigungu WHERE is_active = 1
       GROUP BY sido ORDER BY sido
     `).all();
 
@@ -36,60 +35,42 @@ export function mountAdminRegions(router: Hono<Env>) {
 
     const db = c.env.DB;
     const result = await db.prepare(`
-      SELECT DISTINCT sigungu, COUNT(*) as dong_count
-      FROM admin_regions WHERE sido = ? AND is_active = 1
-      GROUP BY sigungu ORDER BY sigungu
+      SELECT code, sido, sigungu, full_name
+      FROM sigungu WHERE sido = ? AND is_active = 1
+      ORDER BY sigungu
     `).bind(sido).all();
 
     return c.json({ sigungu_list: result.results });
   });
 
-  // ─── 읍면동 목록 (3단계: sigungu 선택 후) ───
-  router.get('/regions/eupmyeondong', async (c) => {
-    const authErr = requireAuth(c);
-    if (authErr) return authErr;
-
-    const { sido, sigungu } = c.req.query();
-    if (!sido || !sigungu) return c.json({ error: '시도와 시군구를 선택해주세요.' }, 400);
-
-    const db = c.env.DB;
-    const result = await db.prepare(`
-      SELECT region_id, sido, sigungu, eupmyeondong, admin_code, legal_code, full_name
-      FROM admin_regions WHERE sido = ? AND sigungu = ? AND is_active = 1
-      ORDER BY eupmyeondong
-    `).bind(sido, sigungu).all();
-
-    return c.json({ regions: result.results });
-  });
-
-  // ─── 행정구역 통합 검색 (자동완성용) ───
+  // ─── 시군구 통합 검색 (자동완성용) ───
   router.get('/regions/search', async (c) => {
     const authErr = requireAuth(c);
     if (authErr) return authErr;
 
     const q = c.req.query('q');
-    if (!q || q.length < 2) return c.json({ error: '검색어는 2글자 이상 입력하세요.' }, 400);
+    if (!q || q.length < 1) return c.json({ error: '검색어를 입력하세요.' }, 400);
 
     const db = c.env.DB;
     const result = await db.prepare(`
-      SELECT region_id, sido, sigungu, eupmyeondong, admin_code, legal_code, full_name
-      FROM admin_regions
+      SELECT code, sido, sigungu, full_name
+      FROM sigungu
       WHERE is_active = 1 AND (
-        full_name LIKE ? OR sido LIKE ? OR sigungu LIKE ? OR eupmyeondong LIKE ?
+        full_name LIKE ? OR sido LIKE ? OR sigungu LIKE ?
       )
       ORDER BY full_name
       LIMIT 50
-    `).bind(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`).all();
+    `).bind(`%${q}%`, `%${q}%`, `%${q}%`).all();
 
     return c.json({ regions: result.results, total: result.results.length });
   });
 
-  // ─── 행정구역 전체 목록 (페이지네이션) ───
+  // ─── 시군구 전체 목록 (페이지네이션) ───
   router.get('/regions', async (c) => {
     const authErr = requireAuth(c);
     if (authErr) return authErr;
 
-    const { sido, sigungu, page, limit } = c.req.query();
+    const { sido, page, limit } = c.req.query();
     const pg = normalizePagination(page, limit);
     const db = c.env.DB;
 
@@ -97,18 +78,17 @@ export function mountAdminRegions(router: Hono<Env>) {
     const params: any[] = [];
 
     if (sido) { conditions.push('sido = ?'); params.push(sido); }
-    if (sigungu) { conditions.push('sigungu = ?'); params.push(sigungu); }
 
     const where = conditions.join(' AND ');
 
     const countResult = await db.prepare(
-      `SELECT COUNT(*) as total FROM admin_regions WHERE ${where}`
+      `SELECT COUNT(*) as total FROM sigungu WHERE ${where}`
     ).bind(...params).first();
 
     const result = await db.prepare(`
-      SELECT region_id, sido, sigungu, eupmyeondong, admin_code, legal_code, full_name
-      FROM admin_regions WHERE ${where}
-      ORDER BY sido, sigungu, eupmyeondong
+      SELECT code, sido, sigungu, full_name
+      FROM sigungu WHERE ${where}
+      ORDER BY sido, sigungu
       LIMIT ? OFFSET ?
     `).bind(...params, pg.limit, pg.offset).all();
 
@@ -120,7 +100,7 @@ export function mountAdminRegions(router: Hono<Env>) {
     });
   });
 
-  // ─── 조직-행정구역 매핑 조회 ───
+  // ─── 총판-시군구 매핑 조회 ───
   router.get('/regions/mappings', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
     if (authErr) return authErr;
@@ -130,155 +110,213 @@ export function mountAdminRegions(router: Hono<Env>) {
     const { org_id } = c.req.query();
 
     let query = `
-      SELECT orm.mapping_id, orm.org_id, orm.region_id,
+      SELECT rsm.map_id, rsm.region_org_id, rsm.sigungu_code,
              o.name as org_name, o.org_type, o.code as org_code,
-             ar.sido, ar.sigungu, ar.eupmyeondong, ar.full_name, ar.admin_code
-      FROM org_region_mappings orm
-      JOIN organizations o ON orm.org_id = o.org_id
-      JOIN admin_regions ar ON orm.region_id = ar.region_id
-      WHERE 1=1
+             sg.sido, sg.sigungu, sg.full_name
+      FROM region_sigungu_map rsm
+      JOIN organizations o ON rsm.region_org_id = o.org_id
+      JOIN sigungu sg ON rsm.sigungu_code = sg.code
+      WHERE (rsm.effective_to IS NULL OR rsm.effective_to > datetime('now'))
     `;
     const params: any[] = [];
 
-    // REGION 관리자는 자기 조직의 매핑만 조회
     if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
-      // 자기 총판 + 하위 TEAM 조직의 매핑 조회
-      query += ` AND (orm.org_id = ? OR orm.org_id IN (SELECT org_id FROM organizations WHERE parent_org_id = ?))`;
-      params.push(user.org_id, user.org_id);
+      query += ` AND rsm.region_org_id = ?`;
+      params.push(user.org_id);
     } else if (org_id) {
-      query += ' AND orm.org_id = ?';
+      query += ' AND rsm.region_org_id = ?';
       params.push(Number(org_id));
     }
 
-    query += ' ORDER BY o.name, ar.full_name';
+    query += ' ORDER BY o.name, sg.full_name';
 
     const result = await db.prepare(query).bind(...params).all();
     return c.json({ mappings: result.results });
   });
 
-  // ─── 조직-행정구역 매핑 추가 (다건) ───
+  // ─── 총판-시군구 매핑 추가 (다건) ───
   router.post('/regions/mappings', async (c) => {
-    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
     if (authErr) return authErr;
 
     const user = c.get('user')!;
     const db = c.env.DB;
     const body = await c.req.json();
 
-    const { org_id, region_ids } = body;
-    if (!org_id) return c.json({ error: '조직 ID는 필수입니다.' }, 400);
-    if (!region_ids || !Array.isArray(region_ids) || region_ids.length === 0) {
-      return c.json({ error: '행정구역 목록이 필요합니다.' }, 400);
-    }
-
-    // 권한 체크: REGION_ADMIN은 자기 조직에만 매핑 추가 가능
-    if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
-      // 자기 총판이거나 하위 TEAM이어야 함
-      const targetOrg = await db.prepare(
-        'SELECT org_id, parent_org_id FROM organizations WHERE org_id = ?'
-      ).bind(org_id).first();
-      if (!targetOrg) return c.json({ error: '조직을 찾을 수 없습니다.' }, 404);
-      if (Number(targetOrg.org_id) !== user.org_id && targetOrg.parent_org_id !== user.org_id) {
-        return c.json({ error: '자기 조직의 행정구역만 매핑할 수 있습니다.' }, 403);
-      }
+    const { org_id, sigungu_codes } = body;
+    if (!org_id) return c.json({ error: '총판 조직 ID는 필수입니다.' }, 400);
+    if (!sigungu_codes || !Array.isArray(sigungu_codes) || sigungu_codes.length === 0) {
+      return c.json({ error: '시군구 코드 목록이 필요합니다.' }, 400);
     }
 
     try {
-      // 충돌 체크: 이미 다른 조직에 매핑된 행정구역 확인
-      const conflicts: any[] = [];
       let created = 0;
+      const conflicts: any[] = [];
 
-      for (const regionId of region_ids) {
+      for (const code of sigungu_codes) {
+        // 이미 다른 총판에 매핑되었는지 확인
         const existing = await db.prepare(`
-          SELECT orm.org_id, o.name as org_name
-          FROM org_region_mappings orm
-          JOIN organizations o ON orm.org_id = o.org_id
-          WHERE orm.region_id = ? AND orm.org_id != ?
-        `).bind(regionId, org_id).first();
+          SELECT rsm.region_org_id, o.name as org_name
+          FROM region_sigungu_map rsm
+          JOIN organizations o ON rsm.region_org_id = o.org_id
+          WHERE rsm.sigungu_code = ? AND rsm.region_org_id != ?
+            AND (rsm.effective_to IS NULL OR rsm.effective_to > datetime('now'))
+        `).bind(code, org_id).first();
 
         if (existing) {
-          const regionInfo = await db.prepare(
-            'SELECT full_name FROM admin_regions WHERE region_id = ?'
-          ).bind(regionId).first();
+          const sgInfo = await db.prepare('SELECT full_name FROM sigungu WHERE code = ?').bind(code).first();
           conflicts.push({
-            region_id: regionId,
-            region_name: regionInfo?.full_name,
-            existing_org_id: existing.org_id,
-            existing_org_name: existing.org_name,
+            sigungu_code: code, sigungu_name: sgInfo?.full_name,
+            existing_org_id: existing.region_org_id, existing_org_name: existing.org_name,
           });
           continue;
         }
 
-        // 이미 같은 조직에 매핑된 경우 스킵
+        // 같은 총판에 이미 매핑된 경우 스킵
         const selfExisting = await db.prepare(
-          'SELECT mapping_id FROM org_region_mappings WHERE org_id = ? AND region_id = ?'
-        ).bind(org_id, regionId).first();
+          "SELECT map_id FROM region_sigungu_map WHERE region_org_id = ? AND sigungu_code = ? AND (effective_to IS NULL OR effective_to > datetime('now'))"
+        ).bind(org_id, code).first();
         if (selfExisting) continue;
 
         await db.prepare(
-          'INSERT INTO org_region_mappings (org_id, region_id) VALUES (?, ?)'
-        ).bind(org_id, regionId).run();
+          'INSERT INTO region_sigungu_map (region_org_id, sigungu_code) VALUES (?, ?)'
+        ).bind(org_id, code).run();
         created++;
       }
 
       await writeAuditLog(db, {
-        entity_type: 'ORG_REGION_MAPPING',
-        action: 'BULK_CREATE',
-        actor_id: user.user_id,
-        detail_json: JSON.stringify({ org_id, region_ids, created, conflicts: conflicts.length }),
+        entity_type: 'REGION_SIGUNGU_MAP', action: 'BULK_CREATE', actor_id: user.user_id,
+        detail_json: JSON.stringify({ org_id, sigungu_codes, created, conflicts: conflicts.length }),
       });
 
-      const result: any = { created, total_requested: region_ids.length };
+      const result: any = { created, total_requested: sigungu_codes.length };
       if (conflicts.length > 0) {
         result.conflicts = conflicts;
-        result.warning = `${conflicts.length}건의 충돌이 발견되었습니다.`;
+        result.warning = `${conflicts.length}건의 충돌(이미 다른 총판에 매핑됨)이 발견되었습니다.`;
       }
 
       return c.json(result, created > 0 ? 201 : 200);
     } catch (err: any) {
-      console.error('[admin-regions] 매핑 추가 실패:', err.message);
-      return c.json({ error: '행정구역 매핑 중 오류가 발생했습니다.', code: 'REGION_ERROR' }, 500);
+      console.error('[admin-regions] 시군구 매핑 추가 실패:', err.message);
+      return c.json({ error: '시군구 매핑 중 오류가 발생했습니다.', code: 'REGION_ERROR' }, 500);
     }
   });
 
-  // ─── 조직-행정구역 매핑 삭제 ───
-  router.delete('/regions/mappings/:mapping_id', async (c) => {
+  // ─── 총판-시군구 매핑 삭제 ───
+  router.delete('/regions/mappings/:map_id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const mapId = Number(c.req.param('map_id'));
+
+    try {
+      const existing = await db.prepare(
+        'SELECT * FROM region_sigungu_map WHERE map_id = ?'
+      ).bind(mapId).first();
+      if (!existing) return c.json({ error: '매핑을 찾을 수 없습니다.' }, 404);
+
+      // soft-delete: effective_to 설정
+      await db.prepare(
+        "UPDATE region_sigungu_map SET effective_to = datetime('now') WHERE map_id = ?"
+      ).bind(mapId).run();
+
+      await writeAuditLog(db, {
+        entity_type: 'REGION_SIGUNGU_MAP', entity_id: mapId, action: 'DELETE', actor_id: user.user_id,
+        detail_json: JSON.stringify({ region_org_id: existing.region_org_id, sigungu_code: existing.sigungu_code }),
+      });
+
+      return c.json({ ok: true });
+    } catch (err: any) {
+      console.error(`[admin-regions] 시군구 매핑 삭제 실패 map_id=${mapId}:`, err.message);
+      return c.json({ error: '시군구 매핑 삭제 중 오류가 발생했습니다.', code: 'REGION_ERROR' }, 500);
+    }
+  });
+
+  // ─── 팀장-시군구 매핑 조회 ───
+  router.get('/regions/team-mappings', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
     if (authErr) return authErr;
 
     const user = c.get('user')!;
     const db = c.env.DB;
-    const mappingId = Number(c.req.param('mapping_id'));
+    const { user_id, region_org_id } = c.req.query();
+
+    let query = `
+      SELECT tsm.map_id, tsm.user_id, tsm.sigungu_code, tsm.region_org_id,
+             u.name as user_name, u.login_id,
+             o.name as region_name,
+             sg.sido, sg.sigungu, sg.full_name
+      FROM team_sigungu_map tsm
+      JOIN users u ON tsm.user_id = u.user_id
+      JOIN organizations o ON tsm.region_org_id = o.org_id
+      JOIN sigungu sg ON tsm.sigungu_code = sg.code
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
+      query += ` AND tsm.region_org_id = ?`;
+      params.push(user.org_id);
+    }
+    if (user_id) { query += ' AND tsm.user_id = ?'; params.push(Number(user_id)); }
+    if (region_org_id) { query += ' AND tsm.region_org_id = ?'; params.push(Number(region_org_id)); }
+
+    query += ' ORDER BY u.name, sg.full_name';
+
+    const result = await db.prepare(query).bind(...params).all();
+    return c.json({ mappings: result.results });
+  });
+
+  // ─── 팀장-시군구 매핑 추가 ───
+  router.post('/regions/team-mappings', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const user = c.get('user')!;
+    const db = c.env.DB;
+    const { user_id, sigungu_codes, region_org_id } = await c.req.json();
+
+    if (!user_id) return c.json({ error: '팀장 ID는 필수입니다.' }, 400);
+    if (!sigungu_codes?.length) return c.json({ error: '시군구 코드 목록이 필요합니다.' }, 400);
+
+    const regionId = region_org_id || (user.org_type === 'REGION' ? user.org_id : null);
+    if (!regionId) return c.json({ error: '총판 org_id가 필요합니다.' }, 400);
 
     try {
-      const existing = await db.prepare(`
-        SELECT orm.*, o.parent_org_id FROM org_region_mappings orm
-        JOIN organizations o ON orm.org_id = o.org_id
-        WHERE orm.mapping_id = ?
-      `).bind(mappingId).first();
-      if (!existing) return c.json({ error: '매핑을 찾을 수 없습니다.' }, 404);
+      let created = 0;
+      for (const code of sigungu_codes) {
+        const existing = await db.prepare(
+          'SELECT map_id FROM team_sigungu_map WHERE user_id = ? AND sigungu_code = ?'
+        ).bind(user_id, code).first();
+        if (existing) continue;
 
-      // 권한 체크
-      if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
-        if (Number(existing.org_id) !== user.org_id && existing.parent_org_id !== user.org_id) {
-          return c.json({ error: '자기 조직의 매핑만 삭제할 수 있습니다.' }, 403);
-        }
+        await db.prepare(
+          'INSERT INTO team_sigungu_map (user_id, sigungu_code, region_org_id, assigned_by) VALUES (?, ?, ?, ?)'
+        ).bind(user_id, code, regionId, user.user_id).run();
+        created++;
       }
 
-      await db.prepare('DELETE FROM org_region_mappings WHERE mapping_id = ?').bind(mappingId).run();
-
-      await writeAuditLog(db, {
-        entity_type: 'ORG_REGION_MAPPING',
-        entity_id: mappingId,
-        action: 'DELETE',
-        actor_id: user.user_id,
-        detail_json: JSON.stringify({ org_id: existing.org_id, region_id: existing.region_id }),
-      });
-
-      return c.json({ ok: true });
+      return c.json({ created, total_requested: sigungu_codes.length }, created > 0 ? 201 : 200);
     } catch (err: any) {
-      console.error(`[admin-regions] 매핑 삭제 실패 mapping_id=${mappingId}:`, err.message);
-      return c.json({ error: '행정구역 매핑 삭제 중 오류가 발생했습니다.', code: 'REGION_ERROR' }, 500);
+      console.error('[team-mappings] 매핑 추가 실패:', err.message);
+      return c.json({ error: '팀장 시군구 매핑 중 오류가 발생했습니다.' }, 500);
     }
+  });
+
+  // ─── 팀장-시군구 매핑 삭제 ───
+  router.delete('/regions/team-mappings/:map_id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+
+    const db = c.env.DB;
+    const mapId = Number(c.req.param('map_id'));
+
+    const existing = await db.prepare('SELECT * FROM team_sigungu_map WHERE map_id = ?').bind(mapId).first();
+    if (!existing) return c.json({ error: '매핑을 찾을 수 없습니다.' }, 404);
+
+    await db.prepare('DELETE FROM team_sigungu_map WHERE map_id = ?').bind(mapId).run();
+    return c.json({ ok: true });
   });
 }

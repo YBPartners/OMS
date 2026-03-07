@@ -330,7 +330,7 @@ function _schDayEventList(dateStr, events, title) {
         <div class="text-sm text-gray-500 truncate mb-1.5">${escapeHtml(e.address_text || '-')}</div>
         <div class="flex items-center gap-2 text-[10px] text-gray-400 flex-wrap">
           ${e.channel_name ? `<span class="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600"><i class="fas fa-satellite-dish mr-0.5"></i>${escapeHtml(e.channel_name)}</span>` : ''}
-          ${e.service_type && e.service_type !== 'DEFAULT' ? `<span class="px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-600">${e.service_type}</span>` : ''}
+          ${''}
           ${e.team_leader_name ? `<span><i class="fas fa-user mr-0.5"></i>${escapeHtml(e.team_leader_name)}</span>` : ''}
           ${e.region_name ? `<span><i class="fas fa-map-marker-alt mr-0.5"></i>${escapeHtml(e.region_name)}</span>` : ''}
           <span class="ml-auto text-gray-300">#${e.order_id}</span>

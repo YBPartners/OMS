@@ -1,18 +1,19 @@
 // ============================================================
-// Airflow OMS — Core Constants v7.0
+// Airflow OMS — Core Constants v8.0 (REFACTOR-1)
 // 전역 상수, 상태 매핑, 권한 정의
-// v7.0: AGENCY_LEADER 추가, 주문 채널 지원
+// v8.0: 시군구 전환, VALIDATED→삭제, CONFIRMED(가격확정) 추가
+//       서비스 카테고리 20개 + 옵션, 레거시 SERVICE_TYPES 폐지
 // ============================================================
 
 window.OMS = window.OMS || {};
 
 OMS.STATUS = {
   RECEIVED: { label: '수신', color: 'bg-gray-100 text-gray-700', icon: 'fa-inbox', step: 1 },
-  VALIDATED: { label: '유효성통과', color: 'bg-blue-100 text-blue-700', icon: 'fa-check-circle', step: 2 },
-  DISTRIBUTION_PENDING: { label: '배분대기', color: 'bg-yellow-100 text-yellow-700', icon: 'fa-clock', step: 3 },
-  DISTRIBUTED: { label: '배분완료', color: 'bg-indigo-100 text-indigo-700', icon: 'fa-share-nodes', step: 4 },
-  ASSIGNED: { label: '준비(배정됨)', color: 'bg-purple-100 text-purple-700', icon: 'fa-user-check', step: 5 },
-  READY_DONE: { label: '준비완료', color: 'bg-violet-100 text-violet-700', icon: 'fa-phone-volume', step: 5.5 },
+  DISTRIBUTION_PENDING: { label: '배분대기', color: 'bg-yellow-100 text-yellow-700', icon: 'fa-clock', step: 2 },
+  DISTRIBUTED: { label: '배분완료', color: 'bg-indigo-100 text-indigo-700', icon: 'fa-share-nodes', step: 3 },
+  ASSIGNED: { label: '배정완료', color: 'bg-purple-100 text-purple-700', icon: 'fa-user-check', step: 4 },
+  READY_DONE: { label: '준비완료', color: 'bg-violet-100 text-violet-700', icon: 'fa-phone-volume', step: 4.5 },
+  CONFIRMED: { label: '가격확정', color: 'bg-blue-100 text-blue-700', icon: 'fa-won-sign', step: 5 },
   IN_PROGRESS: { label: '수행중', color: 'bg-orange-100 text-orange-700', icon: 'fa-wrench', step: 6 },
   SUBMITTED: { label: '완료전송', color: 'bg-cyan-100 text-cyan-700', icon: 'fa-file-lines', step: 7 },
   DONE: { label: '최종완료', color: 'bg-sky-100 text-sky-700', icon: 'fa-check-double', step: 7.5 },
@@ -137,13 +138,41 @@ OMS.SEVERITY = {
   LOW: { label: '낮음', color: 'bg-gray-100 text-gray-600 border-gray-300' },
 };
 
-// 서비스 유형 (에어컨 세척 도메인) — 글로벌 상수
-OMS.SERVICE_TYPES = {
-  WALL_AC: { label: '벽걸이 에어컨', icon: 'fa-wind' },
-  STAND_AC: { label: '스탠드 에어컨', icon: 'fa-tower-broadcast' },
-  CEILING_AC: { label: '천장형 에어컨', icon: 'fa-up-long' },
-  SYSTEM_AC: { label: '시스템 에어컨', icon: 'fa-building' },
-  WINDOW_AC: { label: '창문형 에어컨', icon: 'fa-window-maximize' },
-  MULTI_AC: { label: '멀티 에어컨', icon: 'fa-layer-group' },
-  DEFAULT: { label: '기타/미분류', icon: 'fa-question' },
+// ─── 서비스 카테고리 (REFACTOR-1: 20개 항목) ───
+OMS.SERVICE_CATEGORIES = {
+  WALL_AC:           { label: '벽걸이',                  group: '벽걸이',    icon: 'fa-wind' },
+  SYS_1WAY_2WAY:     { label: '시스템 1way/2way',        group: '시스템',    icon: 'fa-building' },
+  SYS_4WAY:          { label: '시스템 4way',              group: '시스템',    icon: 'fa-building' },
+  SYS_CIRCULAR:      { label: '시스템 원형',              group: '시스템',    icon: 'fa-circle' },
+  STAND_HOME:        { label: '스탠드 가정용',            group: '스탠드',    icon: 'fa-tower-broadcast' },
+  STAND_COM_UNDER40: { label: '스탠드 상업용(40평이하)',   group: '스탠드',    icon: 'fa-tower-broadcast' },
+  STAND_40_NOFAN:    { label: '스탠드 40평↑ 팬미분리',    group: '스탠드',    icon: 'fa-tower-broadcast' },
+  STAND_40_FAN:      { label: '스탠드 40평↑ 팬분리',      group: '스탠드',    icon: 'fa-tower-broadcast' },
+  STAND_80_NOFAN:    { label: '스탠드 80평↑ 팬미분리',    group: '스탠드',    icon: 'fa-tower-broadcast' },
+  STAND_80_FAN:      { label: '스탠드 80평↑ 팬분리',      group: '스탠드',    icon: 'fa-tower-broadcast' },
+  TWO_IN_ONE:        { label: '투인원',                  group: '투인원',    icon: 'fa-arrows-rotate' },
+  OUTDOOR_NORMAL:    { label: '실외기 일반(1구)',          group: '실외기',    icon: 'fa-fan' },
+  OUTDOOR_LARGE:     { label: '실외기 대형(2구)',          group: '실외기',    icon: 'fa-fan' },
+  OUTDOOR_TOWER:     { label: '실외기 초대형 타워',        group: '실외기',    icon: 'fa-fan' },
+  CONVERTIBLE:       { label: '컨버터블',                 group: '컨버터블',  icon: 'fa-arrows-left-right' },
+  DUCT:              { label: '매립덕트',                 group: '매립덕트',  icon: 'fa-arrow-right-from-bracket' },
+  IRREG_GRILL_FILTER:{ label: '비정기 그릴+필터',         group: '비정기세척', icon: 'fa-broom' },
+  IRREG_GRILL_AIR:   { label: '비정기 그릴+필터+공청',    group: '비정기세척', icon: 'fa-broom' },
+  REG_FILTER_ONLY:   { label: '정기 필터만',              group: '정기세척',  icon: 'fa-calendar-check' },
+  REG_GRILL_FILTER:  { label: '정기 그릴+필터',           group: '정기세척',  icon: 'fa-calendar-check' },
 };
+
+// 하위호환: 레거시 SERVICE_TYPES → SERVICE_CATEGORIES 매핑
+OMS.SERVICE_TYPES = OMS.SERVICE_CATEGORIES;
+
+// ─── 서비스 옵션 (추가 금액) ───
+OMS.SERVICE_OPTIONS = {
+  LG_OBJE: { label: 'LG오브제 추가', icon: 'fa-star' },
+  URGENT:  { label: '긴급 출장',     icon: 'fa-bolt' },
+  WEEKEND: { label: '주말/공휴일',   icon: 'fa-calendar-week' },
+};
+
+// ─── 가격확정 관련 상수 ───
+OMS.PRICE_CONFIRM_STATUSES = ['ASSIGNED', 'READY_DONE'];  // 가격확정 가능 상태
+OMS.POST_CONFIRM_STATUSES = ['CONFIRMED', 'IN_PROGRESS', 'SUBMITTED', 'DONE',
+  'REGION_APPROVED', 'HQ_APPROVED', 'SETTLEMENT_CONFIRMED', 'PAID'];  // 가격확정 이후 상태

@@ -51,14 +51,17 @@ system.get('/backup-info', async (c) => {
   const db = c.env.DB;
   // D1 local에서 sqlite_master 접근 불가하므로 알려진 테이블 목록 사용
   const knownTables = [
-    'organizations','users','roles','user_roles','territories','org_territories',
+    'organizations','users','roles','user_roles',
+    'sigungu','region_sigungu_map','team_sigungu_map',
+    'service_categories','service_prices','service_options',
     'distribution_policies','report_policies','commission_policies','metrics_policies',
     'order_import_batches','orders','order_distributions','order_assignments',
+    'order_items','order_item_changes',
     'order_status_history','work_reports','work_report_photos','reviews',
     'settlement_runs','settlements','team_leader_ledger_daily',
     'reconciliation_runs','reconciliation_issues','region_daily_stats',
     'team_leader_daily_stats','audit_logs','sessions','phone_verifications',
-    'admin_regions','org_region_mappings','signup_requests','signup_request_regions',
+    'signup_requests','signup_request_regions',
     'region_add_requests','team_distributor_mappings','notifications',
     'notification_preferences','order_channels','agency_team_mappings','agency_onboarding',
   ];
@@ -378,10 +381,10 @@ system.post('/import/:table', async (c) => {
 
   // 안전한 테이블명 검증 (화이트리스트)
   const importableTables: Record<string, string[]> = {
-    orders: ['external_order_no', 'customer_name', 'customer_phone', 'address_text', 'service_type', 'base_amount', 'requested_date', 'memo'],
+    orders: ['external_order_no', 'customer_name', 'customer_phone', 'address_text', 'sigungu_code', 'base_amount', 'requested_date', 'memo'],
     users: ['login_id', 'name', 'phone', 'email', 'org_id'],
     organizations: ['name', 'org_type', 'code', 'parent_org_id'],
-    commission_policies: ['org_id', 'service_type', 'commission_mode', 'commission_rate'],
+    commission_policies: ['org_id', 'commission_mode', 'commission_rate'],
   };
 
   if (!importableTables[table]) return c.json({ error: '임포트 불가능한 테이블입니다.' }, 400);
@@ -614,33 +617,18 @@ system.get('/address-lookup', async (c) => {
     sigungu = '화성시';  // DB에서는 '화성시'로 조회
   }
 
-  let query = 'SELECT region_id, admin_code, sido, sigungu, eupmyeondong, full_name FROM admin_regions WHERE sido LIKE ? AND sigungu LIKE ?';
+  let query = 'SELECT code, sido, sigungu, full_name FROM sigungu WHERE sido LIKE ? AND sigungu LIKE ?';
   const params: string[] = [`%${sido}%`, `%${sigungu}%`];
 
-  // 화성시 분구인 경우: 해당 구의 행정동만 필터링
-  if (hwaseongGu && HWASEONG_GU_TO_DONG[hwaseongGu]) {
-    const dongList = HWASEONG_GU_TO_DONG[hwaseongGu];
-    // dong 파라미터가 있으면 그 동만, 없으면 구 소속 전체 동
-    if (dong) {
-      query += ' AND eupmyeondong LIKE ?';
-      params.push(`%${dong}%`);
-    } else {
-      const placeholders = dongList.map(() => 'eupmyeondong LIKE ?').join(' OR ');
-      query += ` AND (${placeholders})`;
-      params.push(...dongList.map(d => `%${d}%`));
-    }
-  } else if (dong) {
-    query += ' AND eupmyeondong LIKE ?';
-    params.push(`%${dong}%`);
-  }
-
+  // 시군구 테이블은 동 단위가 없으므로 dong 파라미터는 필터 참고용
+  // 화성시 분구 → 화성시로 이미 변환됨
   query += ' ORDER BY full_name LIMIT 20';
 
   const results = await db.prepare(query).bind(...params).all();
   return c.json({ regions: results.results || [] });
 });
 
-// ─── 행정동 전체 목록 (시도/시군구 기준) ───
+// ─── 시군구 목록 (시도 기준) ───
 system.get('/admin-regions', async (c) => {
   const user = c.get('user');
   if (!user) return c.json({ error: '인증 필요' }, 401);
@@ -650,14 +638,14 @@ system.get('/admin-regions', async (c) => {
 
   if (sido) {
     const results = await db.prepare(
-      'SELECT region_id, admin_code, sido, sigungu, eupmyeondong, full_name FROM admin_regions WHERE sido LIKE ? AND is_active = 1 ORDER BY full_name'
+      'SELECT code, sido, sigungu, full_name FROM sigungu WHERE sido LIKE ? AND is_active = 1 ORDER BY full_name'
     ).bind(`%${sido}%`).all();
     return c.json({ regions: results.results || [] });
   }
 
   // 시도 목록 반환
   const sidos = await db.prepare(
-    'SELECT DISTINCT sido FROM admin_regions WHERE is_active = 1 ORDER BY sido'
+    'SELECT DISTINCT sido FROM sigungu WHERE is_active = 1 ORDER BY sido'
   ).all();
   return c.json({ sidos: (sidos.results || []).map((r: any) => r.sido) });
 });

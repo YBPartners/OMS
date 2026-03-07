@@ -153,7 +153,7 @@ signup.get('/distributors', async (c) => {
   const db = c.env.DB;
   const result = await db.prepare(`
     SELECT o.org_id, o.name, o.code,
-      (SELECT COUNT(*) FROM org_region_mappings orm WHERE orm.org_id = o.org_id) as region_count,
+      (SELECT COUNT(*) FROM region_sigungu_map rsm WHERE rsm.region_org_id = o.org_id AND (rsm.effective_to IS NULL OR rsm.effective_to > datetime('now'))) as region_count,
       (SELECT COUNT(*) FROM organizations c WHERE c.parent_org_id = o.org_id AND c.org_type = 'TEAM' AND c.status = 'ACTIVE') as team_count
     FROM organizations o
     WHERE o.org_type = 'REGION' AND o.status = 'ACTIVE'
@@ -174,11 +174,12 @@ signup.get('/distributors/:org_id/regions', async (c) => {
   if (!org) return c.json({ error: '총판을 찾을 수 없습니다.' }, 404);
 
   const regions = await db.prepare(`
-    SELECT ar.region_id, ar.sido, ar.sigungu, ar.eupmyeondong, ar.full_name, ar.admin_code
-    FROM org_region_mappings orm
-    JOIN admin_regions ar ON orm.region_id = ar.region_id
-    WHERE orm.org_id = ? AND ar.is_active = 1
-    ORDER BY ar.sido, ar.sigungu, ar.eupmyeondong
+    SELECT sg.code as sigungu_code, sg.sido, sg.sigungu, sg.full_name
+    FROM region_sigungu_map rsm
+    JOIN sigungu sg ON rsm.sigungu_code = sg.code
+    WHERE rsm.region_org_id = ? AND sg.is_active = 1
+      AND (rsm.effective_to IS NULL OR rsm.effective_to > datetime('now'))
+    ORDER BY sg.sido, sg.sigungu
   `).bind(orgId).all();
 
   return c.json({
@@ -196,12 +197,12 @@ signup.get('/regions/search', async (c) => {
 
   const db = c.env.DB;
   const result = await db.prepare(`
-    SELECT region_id, sido, sigungu, eupmyeondong, admin_code, full_name
-    FROM admin_regions
+    SELECT code as sigungu_code, sido, sigungu, full_name
+    FROM sigungu
     WHERE is_active = 1 AND (
-      sido LIKE ? OR sigungu LIKE ? OR eupmyeondong LIKE ?
+      sido LIKE ? OR sigungu LIKE ? OR full_name LIKE ?
     )
-    ORDER BY sido, sigungu, eupmyeondong
+    ORDER BY sido, sigungu
     LIMIT ?
   `).bind(`%${q}%`, `%${q}%`, `%${q}%`, limit).all();
 
@@ -276,11 +277,11 @@ signup.post('/submit', async (c) => {
   // 비밀번호 해시
   const passwordHash = await hashPassword(password);
 
-  // 총판 관할 구역과 매칭 확인
+  // 총판 관할 시군구와 매칭 확인 (REFACTOR-1: sigungu 기반)
   const distRegions = await db.prepare(
-    'SELECT region_id FROM org_region_mappings WHERE org_id = ?'
+    "SELECT sigungu_code FROM region_sigungu_map WHERE region_org_id = ? AND (effective_to IS NULL OR effective_to > datetime('now'))"
   ).bind(distributor_org_id).all();
-  const distRegionSet = new Set((distRegions.results as any[]).map(r => r.region_id));
+  const distRegionSet = new Set((distRegions.results as any[]).map(r => r.sigungu_code));
 
   const withinDist: number[] = [];
   const outsideDist: number[] = [];
@@ -320,12 +321,12 @@ signup.post('/submit', async (c) => {
   // 총판 관할 외 구역이 있으면 region_add_requests 자동 생성
   if (outsideDist.length > 0) {
     for (const rid of outsideDist) {
-      // 충돌 체크: 다른 조직이 이미 매핑한 구역?
+      // 충돌 체크: 다른 총판이 이미 매핑한 시군구?
       const conflict = await db.prepare(`
-        SELECT orm.org_id, o.name as org_name
-        FROM org_region_mappings orm
-        JOIN organizations o ON orm.org_id = o.org_id
-        WHERE orm.region_id = ?
+        SELECT rsm.region_org_id as org_id, o.name as org_name
+        FROM region_sigungu_map rsm
+        JOIN organizations o ON rsm.region_org_id = o.org_id
+        WHERE rsm.sigungu_code = ? AND (rsm.effective_to IS NULL OR rsm.effective_to > datetime('now'))
       `).bind(rid).first();
 
       await db.prepare(`
@@ -482,24 +483,24 @@ signup.get('/requests/:request_id', async (c) => {
     return c.json({ error: '권한이 없습니다.' }, 403);
   }
 
-  // 선택 구역 상세
+  // 선택 구역 상세 (REFACTOR-1: sigungu 기반 — signup_request_regions.region_id를 sigungu_code로 해석)
   const regions = await db.prepare(`
-    SELECT srr.*, ar.sido, ar.sigungu, ar.eupmyeondong, ar.full_name, ar.admin_code
+    SELECT srr.*, sg.sido, sg.sigungu, sg.full_name
     FROM signup_request_regions srr
-    JOIN admin_regions ar ON srr.region_id = ar.region_id
+    LEFT JOIN sigungu sg ON CAST(srr.region_id AS TEXT) = sg.code
     WHERE srr.request_id = ?
-    ORDER BY ar.sido, ar.sigungu, ar.eupmyeondong
+    ORDER BY sg.sido, sg.sigungu
   `).bind(requestId).all();
 
   // 구역 추가 요청
   const regionAddRequests = await db.prepare(`
-    SELECT rar.*, ar.full_name as region_name,
+    SELECT rar.*, sg.full_name as region_name,
            co.name as conflict_org_name
     FROM region_add_requests rar
-    JOIN admin_regions ar ON rar.region_id = ar.region_id
+    LEFT JOIN sigungu sg ON CAST(rar.region_id AS TEXT) = sg.code
     LEFT JOIN organizations co ON rar.conflict_org_id = co.org_id
     WHERE rar.signup_request_id = ?
-    ORDER BY rar.status, ar.full_name
+    ORDER BY rar.status, sg.full_name
   `).bind(requestId).all();
 
   return c.json({
@@ -699,9 +700,9 @@ signup.post('/requests/:request_id/reapply', async (c) => {
 
     const distId = body.distributor_org_id || request.distributor_org_id;
     const distRegions = await db.prepare(
-      'SELECT region_id FROM org_region_mappings WHERE org_id = ?'
+      "SELECT sigungu_code FROM region_sigungu_map WHERE region_org_id = ? AND (effective_to IS NULL OR effective_to > datetime('now'))"
     ).bind(distId).all();
-    const distRegionSet = new Set((distRegions.results as any[]).map(r => r.region_id));
+    const distRegionSet = new Set((distRegions.results as any[]).map(r => r.sigungu_code));
 
     for (const rid of body.region_ids) {
       const isWithin = distRegionSet.has(rid) ? 1 : 0;
@@ -711,9 +712,9 @@ signup.post('/requests/:request_id/reapply', async (c) => {
 
       if (!distRegionSet.has(rid)) {
         const conflict = await db.prepare(`
-          SELECT orm.org_id, o.name as org_name
-          FROM org_region_mappings orm JOIN organizations o ON orm.org_id = o.org_id
-          WHERE orm.region_id = ?
+          SELECT rsm.region_org_id as org_id, o.name as org_name
+          FROM region_sigungu_map rsm JOIN organizations o ON rsm.region_org_id = o.org_id
+          WHERE rsm.sigungu_code = ? AND (rsm.effective_to IS NULL OR rsm.effective_to > datetime('now'))
         `).bind(rid).first();
 
         await db.prepare(`

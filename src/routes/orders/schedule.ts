@@ -31,7 +31,7 @@ export function mountSchedule(router: Hono<Env>) {
     const sql = `
       SELECT o.order_id, o.external_order_no, o.customer_name, o.customer_phone,
              o.address_text, o.scheduled_date, o.scheduled_time,
-             o.status, o.base_amount, o.requested_date, o.service_type, o.memo,
+             o.status, o.base_amount, o.requested_date, o.memo,
              ch.name as channel_name,
              tl.name as team_leader_name, tl.user_id as team_leader_id,
              org.name as region_name

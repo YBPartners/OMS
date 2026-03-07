@@ -456,10 +456,11 @@ function _renderStatusProgress(currentStatus) {
 function renderStatusFlowLarge(currentStatus, history = []) {
   const flow = [
     { key: 'RECEIVED', label: '수신', icon: 'fa-inbox' },
-    { key: 'VALIDATED', label: '유효성통과', icon: 'fa-check-circle' },
+    { key: 'DISTRIBUTION_PENDING', label: '배분대기', icon: 'fa-clock' },
     { key: 'DISTRIBUTED', label: '배분완료', icon: 'fa-share-nodes' },
     { key: 'ASSIGNED', label: '준비(배정)', icon: 'fa-user-check' },
     { key: 'READY_DONE', label: '준비완료', icon: 'fa-phone-volume' },
+    { key: 'CONFIRMED', label: '가격확정', icon: 'fa-won-sign' },
     { key: 'IN_PROGRESS', label: '수행중', icon: 'fa-wrench' },
     { key: 'SUBMITTED', label: '완료전송', icon: 'fa-file-lines' },
     { key: 'DONE', label: '최종완료', icon: 'fa-check-double' },
@@ -560,7 +561,7 @@ function showOrderContextMenu(e, order) {
   const statusActions = getStatusActions(order);
 
   // 수정/삭제 가능 여부 판단
-  const editableStatuses = ['RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING', 'DISTRIBUTED'];
+  const editableStatuses = ['RECEIVED', 'DISTRIBUTION_PENDING', 'DISTRIBUTED'];
   const canEdit = editableStatuses.includes(order.status);
   const canDelete = order.status === 'RECEIVED';
 

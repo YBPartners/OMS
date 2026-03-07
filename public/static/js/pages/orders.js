@@ -160,7 +160,7 @@ async function showOrderDetailDrawer(orderId) {
         </div>
         <div class="bg-gray-50 rounded-lg p-3">
           <div class="text-[10px] text-gray-400 uppercase">서비스 유형</div>
-          <div class="text-sm mt-1">${getServiceTypeBadge(o.service_type)}</div>
+          <div class="text-sm mt-1">${getServiceTypeBadge(o)}</div>
         </div>
         <div class="bg-gray-50 rounded-lg p-3">
           <div class="text-[10px] text-gray-400 uppercase">주소</div>
@@ -179,8 +179,8 @@ async function showOrderDetailDrawer(orderId) {
           <div class="text-sm mt-1">${o.team_leader_name || '-'}</div>
         </div>
         <div class="bg-gray-50 rounded-lg p-3">
-          <div class="text-[10px] text-gray-400 uppercase">행정동코드</div>
-          <div class="text-sm font-mono mt-1">${o.admin_dong_code || '-'}</div>
+          <div class="text-[10px] text-gray-400 uppercase">시군구</div>
+          <div class="text-sm font-mono mt-1">${o.sigungu_code || '-'}</div>
         </div>
         <div class="bg-gray-50 rounded-lg p-3">
           <div class="text-[10px] text-gray-400 uppercase">요청일</div>
@@ -280,7 +280,7 @@ function _getQuickActions(order) {
   const s = order.status;
 
   // ★ 수정/삭제 버튼 (수정 가능 상태에서만)
-  const editableStatuses = ['RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING', 'DISTRIBUTED'];
+  const editableStatuses = ['RECEIVED', 'DISTRIBUTION_PENDING', 'DISTRIBUTED'];
   if (editableStatuses.includes(s)) {
     actions.push(`<button onclick="closeDrawer();showEditOrderModal(${order.order_id})" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition"><i class="fas fa-pen-to-square mr-1"></i>수정</button>`);
   }
@@ -292,7 +292,7 @@ function _getQuickActions(order) {
   actions.push(`<button onclick="closeDrawer();showOrderAuditDrawer(${order.order_id})" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200 transition"><i class="fas fa-scroll mr-1"></i>감사 로그</button>`);
 
   // 미배분 상태 → 수동 배분 버튼
-  if (['RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING'].includes(s)) {
+  if (['RECEIVED', 'DISTRIBUTION_PENDING'].includes(s)) {
     actions.push(`<button onclick="closeDrawer();showManualDistributeModal(${order.order_id}, '${escapeHtml((order.customer_name||'').replace(/'/g, "\\'"))}', '${escapeHtml((order.address_text||'').replace(/'/g, "\\'"))}')" class="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs hover:bg-indigo-700 transition"><i class="fas fa-share-nodes mr-1"></i>수동 배분</button>`);
   }
   if (s === 'DISTRIBUTED') {
@@ -409,11 +409,11 @@ async function showOrderDetail(orderId) {
         <div><label class="text-xs text-gray-500">고객명</label><div class="font-medium">${o.customer_name || '-'}</div></div>
         <div><label class="text-xs text-gray-500">연락처</label><div>${o.customer_phone || '-'}</div></div>
         <div class="col-span-2"><label class="text-xs text-gray-500">주소</label><div>${o.address_text}${o.address_detail ? ` <span class="text-gray-500">${o.address_detail}</span>` : ''}</div></div>
-        <div><label class="text-xs text-gray-500">행정동코드</label><div class="font-mono text-xs">${o.admin_dong_code || '-'}</div></div>
+        <div><label class="text-xs text-gray-500">시군구</label><div class="font-mono text-xs">${o.sigungu_code || '-'}</div></div>
         <div><label class="text-xs text-gray-500">금액</label><div class="font-bold text-blue-600">${formatAmount(o.base_amount)}</div></div>
         <div><label class="text-xs text-gray-500">상태</label><div>${statusBadge(o.status)}</div></div>
         <div><label class="text-xs text-gray-500">주문 채널</label><div class="font-medium">${o.channel_name || '<span class="text-gray-400">미지정</span>'}</div></div>
-        <div><label class="text-xs text-gray-500">서비스 유형</label><div>${getServiceTypeBadge(o.service_type)}</div></div>
+        <div><label class="text-xs text-gray-500">서비스 유형</label><div>${getServiceTypeBadge(o)}</div></div>
         <div><label class="text-xs text-gray-500">지역총판</label><div>${o.region_name || '-'}</div></div>
         <div><label class="text-xs text-gray-500">배정팀장</label><div>${o.team_leader_name || '-'}</div></div>
         <div><label class="text-xs text-gray-500">요청일</label><div>${o.requested_date || '-'}</div></div>
@@ -474,7 +474,7 @@ function getServiceTypeLabel(code) {
   const st = SERVICE_TYPES.find(s => s.code === code);
   return st ? st.label : (code || '미분류');
 }
-function getServiceTypeBadge(code) {
+function getServiceTypeBadge(order) {
   const st = SERVICE_TYPES.find(s => s.code === code);
   if (!st) return `<span class="text-xs text-gray-400">미분류</span>`;
   return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-violet-50 text-violet-700 border border-violet-200"><i class="fas ${st.icon}"></i>${st.label}</span>`;
@@ -497,13 +497,7 @@ async function showNewOrderModal() {
             ${channels.map(ch => `<option value="${ch.channel_id}" ${ch.code === 'LOCAL' ? 'selected' : ''}>${ch.name} (${ch.code})</option>`).join('')}
           </select>
         </div>
-        <!-- 서비스 유형 (선택형) -->
-        <div>
-          <label class="block text-xs text-gray-500 mb-1">서비스 유형 *</label>
-          <select name="service_type" required class="w-full border rounded-lg px-3 py-2 text-sm">
-            ${SERVICE_TYPES.map(st => `<option value="${st.code}">${st.label}</option>`).join('')}
-          </select>
-        </div>
+        <!-- 서비스 카테고리는 order_items로 관리 (Phase 2) -->
         <div><label class="block text-xs text-gray-500 mb-1">외부주문번호</label><input name="external_order_no" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="채널에서 부여한 주문번호 (선택)"></div>
         <div><label class="block text-xs text-gray-500 mb-1">고객명 *</label><input name="customer_name" required class="w-full border rounded-lg px-3 py-2 text-sm"></div>
         <div><label class="block text-xs text-gray-500 mb-1">연락처 *</label><input name="customer_phone" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="01012345678"></div>
@@ -531,18 +525,18 @@ async function showNewOrderModal() {
             class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="동/호수 등 상세주소 입력">
         </div>
 
-        <!-- 행정동 자동 매핑 결과 -->
+        <!-- 시군구 자동 매핑 결과 -->
         <div class="col-span-2" id="address-match-result" style="display:none;">
           <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
             <div class="flex items-center gap-2 mb-1">
               <i class="fas fa-map-marker-alt text-blue-600"></i>
-              <span class="text-xs font-semibold text-blue-700">행정동 매칭 결과</span>
+              <span class="text-xs font-semibold text-blue-700">시군구 매칭 결과</span>
             </div>
             <div class="text-sm text-blue-800" id="address-match-text">-</div>
           </div>
         </div>
 
-        <input type="hidden" name="admin_dong_code" id="new-order-dong-code">
+        <input type="hidden" name="sigungu_code" id="new-order-sigungu-code">
 
         <div><label class="block text-xs text-gray-500 mb-1">금액(원) *</label><input name="base_amount" type="number" min="10000" step="100" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="최소 10,000원"></div>
         <div><label class="block text-xs text-gray-500 mb-1">요청일 *</label><input name="requested_date" type="date" required value="${new Date().toISOString().split('T')[0]}" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
@@ -579,8 +573,8 @@ function openAddressSearch() {
       }
       if (detailInput) detailInput.focus();
 
-      // 행정동코드 자동 매핑
-      matchAdminDongCode(data.sido, data.sigungu, data.bname || data.bname1 || '');
+      // 시군구코드 자동 매핑
+      matchSigunguCode(data.sido, data.sigungu, data.bname || data.bname1 || '');
     },
     width: '100%',
     height: '100%',
@@ -589,12 +583,12 @@ function openAddressSearch() {
   });
 }
 
-// ─── 행정동코드 자동 매핑 ───
-async function matchAdminDongCode(sido, sigungu, dong) {
+// ─── 시군구코드 자동 매핑 ───
+async function matchSigunguCode(sido, sigungu, dong) {
   try {
   const resultEl = document.getElementById('address-match-result');
   const textEl = document.getElementById('address-match-text');
-  const codeInput = document.getElementById('new-order-dong-code');
+  const codeInput = document.getElementById('new-order-sigungu-code');
 
   if (!resultEl || !textEl || !codeInput) return;
 
@@ -605,28 +599,28 @@ async function matchAdminDongCode(sido, sigungu, dong) {
 
     if (res?.regions?.length > 0) {
       const match = res.regions[0];
-      codeInput.value = match.admin_code;
+      codeInput.value = match.code;
       textEl.innerHTML = `
-        <span class="font-mono text-xs bg-blue-100 px-1.5 py-0.5 rounded mr-2">${match.admin_code}</span>
+        <span class="font-mono text-xs bg-blue-100 px-1.5 py-0.5 rounded mr-2">${match.code}</span>
         <span>${match.full_name}</span>
         ${res.regions.length > 1 ? `<span class="text-xs text-blue-500 ml-2">(외 ${res.regions.length - 1}건 매칭)</span>` : ''}`;
       resultEl.style.display = '';
       resultEl.querySelector('.bg-blue-50').className = 'bg-blue-50 border border-blue-200 rounded-lg p-3';
     } else {
       codeInput.value = '';
-      textEl.innerHTML = `<span class="text-amber-700"><i class="fas fa-exclamation-triangle mr-1"></i>행정동 매칭 실패 — 배분 시 수동 지정이 필요합니다.</span>`;
+      textEl.innerHTML = `<span class="text-amber-700"><i class="fas fa-exclamation-triangle mr-1"></i>시군구 매칭 실패 — 배분 시 수동 지정이 필요합니다.</span>`;
       resultEl.style.display = '';
       resultEl.querySelector('div').className = 'bg-amber-50 border border-amber-200 rounded-lg p-3';
       resultEl.querySelector('.text-blue-600')?.classList?.replace('text-blue-600', 'text-amber-600');
       resultEl.querySelector('.text-blue-700')?.classList?.replace('text-blue-700', 'text-amber-700');
     }
   } catch (e) {
-    console.error('행정동 매핑 실패:', e);
+    console.error('시군구 매핑 실패:', e);
     codeInput.value = '';
   }
 
   } catch (e) {
-  console.error('[matchAdminDongCode]', e);
+  console.error('[matchSigunguCode]', e);
   if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
   }
 }
@@ -667,7 +661,7 @@ async function showEditOrderModal(orderId) {
   const o = res.order;
 
   // 수정 가능 상태 체크
-  const editableStatuses = ['RECEIVED', 'VALIDATED', 'DISTRIBUTION_PENDING', 'DISTRIBUTED'];
+  const editableStatuses = ['RECEIVED', 'DISTRIBUTION_PENDING', 'DISTRIBUTED'];
   if (!editableStatuses.includes(o.status)) {
     showToast(`현재 상태(${OMS.STATUS[o.status]?.label || o.status})에서는 수정할 수 없습니다.`, 'warning');
     return;
@@ -686,12 +680,7 @@ async function showEditOrderModal(orderId) {
             ${channels.map(ch => `<option value="${ch.channel_id}" ${ch.channel_id == o.channel_id ? 'selected' : ''}>${ch.name} (${ch.code})</option>`).join('')}
           </select>
         </div>
-        <div>
-          <label class="block text-xs text-gray-500 mb-1">서비스 유형</label>
-          <select name="service_type" class="w-full border rounded-lg px-3 py-2 text-sm">
-            ${SERVICE_TYPES.map(st => `<option value="${st.code}" ${st.code === o.service_type ? 'selected' : ''}>${st.label}</option>`).join('')}
-          </select>
-        </div>
+        <!-- 서비스 카테고리는 order_items로 관리 (Phase 2) -->
         <div><label class="block text-xs text-gray-500 mb-1">외부주문번호</label><input name="external_order_no" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.external_order_no || ''}"></div>
         <div><label class="block text-xs text-gray-500 mb-1">고객명 *</label><input name="customer_name" required class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.customer_name || ''}"></div>
         <div><label class="block text-xs text-gray-500 mb-1">연락처 *</label><input name="customer_phone" required class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.customer_phone || ''}"></div>
@@ -709,11 +698,11 @@ async function showEditOrderModal(orderId) {
         </div>
         <div class="col-span-2" id="edit-address-match-result" style="display:none;">
           <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <div class="flex items-center gap-2 mb-1"><i class="fas fa-map-marker-alt text-blue-600"></i><span class="text-xs font-semibold text-blue-700">행정동 매칭 결과</span></div>
+            <div class="flex items-center gap-2 mb-1"><i class="fas fa-map-marker-alt text-blue-600"></i><span class="text-xs font-semibold text-blue-700">시군구 매칭 결과</span></div>
             <div class="text-sm text-blue-800" id="edit-address-match-text">-</div>
           </div>
         </div>
-        <input type="hidden" name="admin_dong_code" id="edit-order-dong-code" value="${o.admin_dong_code || ''}">
+        <input type="hidden" name="sigungu_code" id="edit-order-sigungu-code" value="${o.sigungu_code || ''}">
         <div><label class="block text-xs text-gray-500 mb-1">금액(원) *</label><input name="base_amount" type="number" min="10000" step="100" required class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.base_amount || ''}"></div>
         <div><label class="block text-xs text-gray-500 mb-1">요청일</label><input name="requested_date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.requested_date || ''}"></div>
         <div><label class="block text-xs text-gray-500 mb-1">예약일</label><input name="scheduled_date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.scheduled_date || ''}"></div>
@@ -743,8 +732,8 @@ async function submitEditOrder(orderId) {
   if (!data.external_order_no) data.external_order_no = null;
   if (!data.memo) data.memo = null;
   if (!data.address_detail) data.address_detail = null;
-  // admin_dong_code가 변경되었으면 포함
-  if (data.admin_dong_code === '') data.admin_dong_code = null;
+  // sigungu_code가 변경되었으면 포함
+  if (data.sigungu_code === '') data.sigungu_code = null;
 
   if (!data.customer_name?.trim()) { showToast('고객명을 입력해주세요.', 'warning'); return; }
   if (data.base_amount < 10000) { showToast('금액은 최소 10,000원 이상이어야 합니다.', 'warning'); return; }
@@ -776,19 +765,19 @@ function openEditAddressSearch() {
         addrInput.classList.add('bg-white');
       }
       if (detailInput) detailInput.focus();
-      // 행정동코드 재매핑
-      matchEditAdminDongCode(data.sido, data.sigungu, data.bname || data.bname1 || '');
+      // 시군구코드 재매핑
+      matchEditSigunguCode(data.sido, data.sigungu, data.bname || data.bname1 || '');
     },
     width: '100%',
     height: '100%',
   }).open({ popupTitle: 'Airflow - 주소 변경' });
 }
 
-async function matchEditAdminDongCode(sido, sigungu, dong) {
+async function matchEditSigunguCode(sido, sigungu, dong) {
   try {
   const resultEl = document.getElementById('edit-address-match-result');
   const textEl = document.getElementById('edit-address-match-text');
-  const codeInput = document.getElementById('edit-order-dong-code');
+  const codeInput = document.getElementById('edit-order-sigungu-code');
   if (!resultEl || !textEl || !codeInput) return;
 
   try {
@@ -797,18 +786,18 @@ async function matchEditAdminDongCode(sido, sigungu, dong) {
     const res = await api('GET', `/system/address-lookup?${params.toString()}`);
     if (res?.regions?.length > 0) {
       const match = res.regions[0];
-      codeInput.value = match.admin_code;
-      textEl.innerHTML = `<span class="font-mono text-xs bg-blue-100 px-1.5 py-0.5 rounded mr-2">${match.admin_code}</span><span>${match.full_name}</span>`;
+      codeInput.value = match.code;
+      textEl.innerHTML = `<span class="font-mono text-xs bg-blue-100 px-1.5 py-0.5 rounded mr-2">${match.code}</span><span>${match.full_name}</span>`;
       resultEl.style.display = '';
     } else {
       codeInput.value = '';
-      textEl.innerHTML = `<span class="text-amber-700"><i class="fas fa-exclamation-triangle mr-1"></i>행정동 매칭 실패</span>`;
+      textEl.innerHTML = `<span class="text-amber-700"><i class="fas fa-exclamation-triangle mr-1"></i>시군구 매칭 실패</span>`;
       resultEl.style.display = '';
     }
   } catch (e) { codeInput.value = ''; }
 
   } catch (e) {
-  console.error('[matchEditAdminDongCode]', e);
+  console.error('[matchEditSigunguCode]', e);
   if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
   }
 }
@@ -826,7 +815,7 @@ function showImportModal() {
   const content = `
     <div class="space-y-4">
       <p class="text-sm text-gray-600">JSON 형태로 주문 데이터를 입력하세요.</p>
-      <textarea id="import-data" rows="8" class="w-full border rounded-lg px-3 py-2 text-sm font-mono" placeholder='{"orders":[{"customer_name":"테스트","address_text":"서울특별시 강남구 역삼동 100","admin_dong_code":"1168010100","base_amount":100000,"requested_date":"2026-03-03"}]}'></textarea>
+      <textarea id="import-data" rows="8" class="w-full border rounded-lg px-3 py-2 text-sm font-mono" placeholder='{"orders":[{"customer_name":"테스트","address_text":"서울특별시 강남구 역삼동 100","sigungu_code":"11680","base_amount":100000,"requested_date":"2026-03-03"}]}'></textarea>
     </div>`;
   showModal('주문 일괄 수신', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
@@ -857,7 +846,7 @@ async function renderDistribute(el) {
   // 병렬 데이터 로드
   const [receivedRes, pendingRes, dpRes, distributedRes, summaryRes, orgsRes] = await Promise.all([
     api('GET', '/orders?status=RECEIVED&limit=200'),
-    api('GET', '/orders?status=VALIDATED&limit=200'),
+    api('GET', '/orders?status=DISTRIBUTION_PENDING&limit=200'),
     api('GET', '/orders?status=DISTRIBUTION_PENDING&limit=200'),
     api('GET', '/orders?status=DISTRIBUTED&limit=200'),
     api('GET', '/orders/distribution-summary'),
@@ -915,7 +904,7 @@ async function renderDistribute(el) {
           <div class="text-2xl font-bold text-yellow-600">${dpOrders.length}</div>
           <div class="text-xs text-yellow-600"><i class="fas fa-exclamation-triangle mr-1"></i>배분보류</div>
         </div>
-        <div class="ix-card bg-white rounded-xl p-3 border border-blue-200 text-center bg-blue-50 cursor-pointer" onclick="window._orderFilters={status:'VALIDATED'};navigateTo('orders')">
+        <div class="ix-card bg-white rounded-xl p-3 border border-blue-200 text-center bg-blue-50 cursor-pointer" onclick="window._orderFilters={status:'DISTRIBUTION_PENDING'};navigateTo('orders')">
           <div class="text-2xl font-bold text-blue-600">${receivedOrders.length + validatedOrders.length}</div>
           <div class="text-xs text-blue-600"><i class="fas fa-inbox mr-1"></i>수신/유효성통과</div>
         </div>
@@ -1336,7 +1325,7 @@ async function showOrderBatchDistributeModal() {
       </div>
       <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
         <i class="fas fa-info-circle mr-1"></i>
-        RECEIVED/VALIDATED/DISTRIBUTION_PENDING 상태의 주문만 배분됩니다. 이미 배분된 주문은 재배분됩니다.
+        RECEIVED/DISTRIBUTION_PENDING 상태의 주문만 배분됩니다. 이미 배분된 주문은 재배분됩니다.
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-building mr-1 text-indigo-500"></i>배분할 지역총판 선택</label>
@@ -1402,11 +1391,11 @@ async function exportOrdersCSV() {
     { label: '주문ID', key: 'order_id' },
     { label: '외부주문번호', key: 'external_order_no' },
     { label: '주문채널', key: 'channel_name' },
-    { label: '서비스유형', value: (o) => getServiceTypeLabel(o.service_type) },
+    { label: '서비스유형', value: () => '에어컨 세척' },
     { label: '고객명', key: 'customer_name' },
     { label: '연락처', key: 'customer_phone' },
     { label: '주소', key: 'address_text' },
-    { label: '행정동코드', key: 'admin_dong_code' },
+    { label: '시군구코드', key: 'sigungu_code' },
     { label: '금액', key: 'base_amount' },
     { label: '상태', value: (o) => STATUS_LABELS[o.status] || o.status },
     { label: '지역총판', key: 'region_name' },
@@ -1438,11 +1427,11 @@ async function exportOrdersExcel() {
     { label: '주문ID', key: 'order_id' },
     { label: '외부주문번호', key: 'external_order_no' },
     { label: '주문채널', key: 'channel_name' },
-    { label: '서비스유형', value: (o) => getServiceTypeLabel(o.service_type) },
+    { label: '서비스유형', value: () => '에어컨 세척' },
     { label: '고객명', key: 'customer_name' },
     { label: '연락처', key: 'customer_phone' },
     { label: '주소', key: 'address_text' },
-    { label: '행정동코드', key: 'admin_dong_code' },
+    { label: '시군구코드', key: 'sigungu_code' },
     { label: '금액', key: 'base_amount' },
     { label: '상태', value: (o) => STATUS_LABELS[o.status] || o.status },
     { label: '지역총판', key: 'region_name' },

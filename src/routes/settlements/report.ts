@@ -51,7 +51,7 @@ export function mountReport(router: Hono<Env>) {
     // 정산 명세
     const settlements = await db.prepare(`
       SELECT s.*, o.external_order_no, o.customer_name, o.address_text,
-             o.service_type, o.requested_date, o.base_amount as order_base_amount
+             o.requested_date, o.base_amount as order_base_amount
       FROM settlements s
       JOIN orders o ON s.order_id = o.order_id
       WHERE s.run_id = ? AND s.team_leader_id = ?
@@ -163,7 +163,7 @@ export function mountReport(router: Hono<Env>) {
           externalOrderNo: i.external_order_no,
           customerName: i.customer_name,
           address: i.address_text,
-          serviceType: i.service_type,
+          // serviceType: i.service_type,  // removed - now in order_items
           requestedDate: i.requested_date,
           baseAmount: i.base_amount,
           commissionMode: i.commission_mode,
@@ -199,7 +199,7 @@ export function mountReport(router: Hono<Env>) {
     if (!run) return c.json({ error: '정산 Run을 찾을 수 없습니다.' }, 404);
 
     let detailQuery = `
-      SELECT s.*, o.external_order_no, o.customer_name, o.address_text, o.service_type,
+      SELECT s.*, o.external_order_no, o.customer_name, o.address_text,
              u.name as team_leader_name, org.name as region_name, team_org.name as team_name
       FROM settlements s
       JOIN orders o ON s.order_id = o.order_id
@@ -248,7 +248,7 @@ export function mountReport(router: Hono<Env>) {
           count: g.items.length, total_base: g.totalBase, total_commission: g.totalComm, total_payable: g.totalPay,
           items: g.items.map(s => ({
             order_id: s.order_id, external_order_no: s.external_order_no, customer_name: s.customer_name,
-            address_text: s.address_text, service_type: s.service_type,
+            address_text: s.address_text,
             base_amount: s.base_amount, commission_mode: s.commission_mode, commission_rate: s.commission_rate,
             commission_amount: s.commission_amount, payable_amount: s.payable_amount,
           })),
@@ -270,7 +270,7 @@ export function mountReport(router: Hono<Env>) {
 
     let q = `
       SELECT s.settlement_id, s.order_id, o.external_order_no, o.customer_name, o.address_text,
-             o.service_type, s.base_amount, s.commission_mode, s.commission_rate,
+             s.base_amount, s.commission_mode, s.commission_rate,
              s.commission_amount, s.payable_amount, s.status,
              u.name as team_leader_name, org.name as region_name,
              ch.name as channel_name

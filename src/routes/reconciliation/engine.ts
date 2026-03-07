@@ -46,7 +46,7 @@ export function mountEngine(router: Hono<Env>) {
     const distMissing = await db.prepare(`
       SELECT o.order_id FROM orders o
       LEFT JOIN order_distributions od ON o.order_id = od.order_id AND od.status = 'ACTIVE'
-      WHERE o.status = 'VALIDATED' AND od.distribution_id IS NULL
+      WHERE o.status = 'DISTRIBUTION_PENDING' AND od.distribution_id IS NULL
       AND o.requested_date >= ? AND o.requested_date <= ?
     `).bind(date_range_start, date_range_end).all();
 

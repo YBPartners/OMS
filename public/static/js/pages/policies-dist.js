@@ -57,8 +57,8 @@ async function showDistDetailModal(policyId) {
       <div class="grid grid-cols-2 gap-3">
         <div class="bg-blue-50 rounded-lg p-3 border border-blue-200">
           <div class="text-[10px] text-blue-500 mb-1">매칭 방식</div>
-          <div class="font-bold text-blue-800">${ruleObj.method === 'admin_dong_code' ? '행정동 코드' : ruleObj.method === 'sido_sigungu' ? '시도·시군구' : ruleObj.method || '-'}</div>
-          <div class="text-[10px] text-blue-500 mt-1">${ruleObj.method === 'admin_dong_code' ? '가장 정확한 매칭 — 읍면동 단위' : ruleObj.method === 'sido_sigungu' ? '시군구 단위 매칭' : ''}</div>
+          <div class="font-bold text-blue-800">${ruleObj.method === 'sigungu_code' ? '시군구 코드' : ruleObj.method === 'sido_sigungu' ? '시도·시군구' : ruleObj.method || '-'}</div>
+          <div class="text-[10px] text-blue-500 mt-1">${ruleObj.method === 'sigungu_code' ? '시군구 단위 매칭' : ruleObj.method === 'sido_sigungu' ? '시군구 단위 매칭' : ''}</div>
         </div>
         <div class="bg-amber-50 rounded-lg p-3 border border-amber-200">
           <div class="text-[10px] text-amber-500 mb-1">매칭 실패 시 (Fallback)</div>
@@ -127,7 +127,7 @@ function showNewDistPolicyModal() {
         <div>
           <label class="block text-xs text-gray-500 mb-1">매칭 방식 *</label>
           <select id="dp-method" class="w-full border rounded-lg px-3 py-2 text-sm">
-            <option value="admin_dong_code" selected>행정동 코드 매칭 (가장 정확)</option>
+            <option value="sigungu_code" selected>시군구 코드 매칭 (기본)</option>
             <option value="sido_sigungu">시도·시군구 매칭 (넓은 범위)</option>
             <option value="postal_code">우편번호 매칭</option>
           </select>
@@ -151,7 +151,7 @@ function showNewDistPolicyModal() {
     <details class="bg-gray-50 rounded-lg border">
       <summary class="px-4 py-2 text-xs text-gray-500 cursor-pointer hover:bg-gray-100 rounded-lg"><i class="fas fa-code mr-1"></i>고급: JSON 직접 편집</summary>
       <div class="px-4 pb-3">
-        <textarea id="dp-rule-raw" rows="3" class="w-full border rounded-lg px-3 py-2 text-xs font-mono mt-2" placeholder='{"method":"admin_dong_code","fallback":"DISTRIBUTION_PENDING"}'></textarea>
+        <textarea id="dp-rule-raw" rows="3" class="w-full border rounded-lg px-3 py-2 text-xs font-mono mt-2" placeholder='{"method":"sigungu_code","fallback":"DISTRIBUTION_PENDING"}'></textarea>
         <p class="text-[10px] text-gray-400 mt-1">위 비주얼 설정 대신 JSON을 직접 입력하면 JSON이 우선 적용됩니다.</p>
       </div>
     </details>
@@ -173,7 +173,7 @@ async function submitNewDistPolicy() {
     try { JSON.parse(rawJson); rule_json = rawJson; } catch { showToast('JSON 형식이 올바르지 않습니다.', 'warning'); return; }
   } else {
     rule_json = JSON.stringify({
-      method: document.getElementById('dp-method')?.value || 'admin_dong_code',
+      method: document.getElementById('dp-method')?.value || 'sigungu_code',
       fallback: document.getElementById('dp-fallback')?.value || 'DISTRIBUTION_PENDING'
     });
   }
@@ -201,7 +201,7 @@ function showEditDistPolicyModal(p) {
       <div class="grid grid-cols-2 gap-4">
         <div><label class="block text-xs text-gray-500 mb-1">매칭 방식</label>
           <select id="dp-edit-method" class="w-full border rounded-lg px-3 py-2 text-sm">
-            ${['admin_dong_code','sido_sigungu','postal_code'].map(v => `<option value="${v}" ${ruleObj.method===v?'selected':''}>${v==='admin_dong_code'?'행정동 코드':v==='sido_sigungu'?'시도·시군구':'우편번호'}</option>`).join('')}
+            ${['sigungu_code','sido_sigungu','postal_code'].map(v => `<option value="${v}" ${ruleObj.method===v?'selected':''}>${v==='sigungu_code'?'시군구 코드':v==='sido_sigungu'?'시도·시군구':'우편번호'}</option>`).join('')}
           </select></div>
         <div><label class="block text-xs text-gray-500 mb-1">매칭 실패 시</label>
           <select id="dp-edit-fallback" class="w-full border rounded-lg px-3 py-2 text-sm">

@@ -261,8 +261,8 @@ function _renderDashCharts(funnel, regionSummary) {
   }
 
   const STATUS_COLORS = {
-    RECEIVED: '#94a3b8', VALIDATED: '#60a5fa', DISTRIBUTED: '#818cf8',
-    DISTRIBUTION_PENDING: '#fbbf24', ASSIGNED: '#a78bfa',
+    RECEIVED: '#94a3b8', DISTRIBUTION_PENDING: '#fbbf24', DISTRIBUTED: '#818cf8',
+    ASSIGNED: '#a78bfa', CONFIRMED: '#7c3aed',
     IN_PROGRESS: '#fb923c', SUBMITTED: '#38bdf8',
     REGION_APPROVED: '#34d399', REGION_REJECTED: '#f87171',
     HQ_APPROVED: '#22c55e', HQ_REJECTED: '#ef4444',
@@ -270,8 +270,8 @@ function _renderDashCharts(funnel, regionSummary) {
   };
 
   const STATUS_LABELS = {
-    RECEIVED: '수신', VALIDATED: '유효성통과', DISTRIBUTED: '배분완료',
-    DISTRIBUTION_PENDING: '배분보류', ASSIGNED: '배정완료',
+    RECEIVED: '수신', DISTRIBUTION_PENDING: '배분대기', DISTRIBUTED: '배분완료',
+    ASSIGNED: '배정완료', CONFIRMED: '가격확정',
     IN_PROGRESS: '작업중', SUBMITTED: '제출',
     REGION_APPROVED: '지역승인', REGION_REJECTED: '지역반려',
     HQ_APPROVED: 'HQ승인', HQ_REJECTED: 'HQ반려',

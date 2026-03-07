@@ -276,7 +276,7 @@ export function mountChannels(router: Hono<Env>) {
           const mapped = applyFieldMapping(raw, mapping);
 
           // 중복 검사 (fingerprint)
-          const fpData = `${mapped.address_text || ''}|${mapped.requested_date || ''}|${mapped.service_type || 'DEFAULT'}|${mapped.base_amount || 0}`;
+          const fpData = `${mapped.address_text || ''}|${mapped.requested_date || ''}|${mapped.base_amount || 0}`;
           const fingerprint = await generateFingerprint(fpData);
 
           const dup = await db.prepare(
@@ -289,15 +289,15 @@ export function mountChannels(router: Hono<Env>) {
           }
 
           const result = await db.prepare(`
-            INSERT INTO orders (external_order_no, source_fingerprint, service_type, customer_name, customer_phone,
-              address_text, address_detail, admin_dong_code, legal_dong_code, requested_date, scheduled_date, 
+            INSERT INTO orders (external_order_no, source_fingerprint, customer_name, customer_phone,
+              address_text, address_detail, sigungu_code, requested_date, scheduled_date, 
               base_amount, memo, channel_id, raw_json, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
           `).bind(
-            mapped.external_order_no || null, fingerprint, mapped.service_type || 'DEFAULT',
+            mapped.external_order_no || null, fingerprint,
             mapped.customer_name || null, mapped.customer_phone || null,
             mapped.address_text || '', mapped.address_detail || null,
-            mapped.admin_dong_code || null, mapped.legal_dong_code || null,
+            mapped.sigungu_code || null,
             mapped.requested_date || new Date().toISOString().split('T')[0],
             mapped.scheduled_date || null, mapped.base_amount || 0,
             mapped.memo || null, channelId, JSON.stringify(raw), 
