@@ -58,6 +58,7 @@
 | **GUIDE-1** | **온보딩 가이드 + 수동배분 UI v2.0** | **✅ 완료** | **2026-03-07** | **24메뉴 가이드, 3탭 배분(수동/자동/현황), 드래그앤드롭, PWA** |
 | **INTEGRITY-1** | **시스템 정합성 감사 + 성능 개선** | **✅ 완료** | **2026-03-07** | **자동 감사 스크립트(scripts/audit.py), 통합 API(7→1), 매핑 해제 PUT→DELETE, 캐시 버스팅 v38** |
 | **REFACTOR-1** | **시군구 전환 + 서비스항목 단가표 + 가격확정 플로우** | **🔄 진행중** | **2026-03-07~** | **행정동→시군구, 채널별 단가표, order_items, 가격확정 워크플로우** |
+| **RULE-1** | **개발 원칙 제정 + 실행 절차 체계화** | **✅ 완료** | **2026-03-07** | **5대 원칙 + 4단계 실행 절차(만들기→넣기→확인하기→기록하기) + PROGRESS.md 체크리스트 형식 + 작업 시작 전 확인 절차. DEVELOPMENT_METHOD.md §0 기록** |
 
 ---
 
@@ -120,6 +121,21 @@ RECEIVED → DISTRIBUTED → ASSIGNED → CONFIRMED → IN_PROGRESS → SUBMITTE
 | Phase 3 | 정산 재작성 (order_items 기반) | ✅ 완료 (2026-03-07) |
 | Phase 4 | 대시보드/HR/가이드/가격표 관리 UI | ⏳ 대기 |
 
+### RULE-1 완료 상세 — 개발 원칙 제정 + 실행 절차 체계화 ✅ (2026-03-07)
+
+**변경 내용:**
+- DEVELOPMENT_METHOD.md §0에 5대 원칙(선언) 유지
+- 4단계 실행 절차 추가: ① 만들기 → ② 넣기 → ③ 확인하기 → ④ 기록하기
+- PROGRESS.md 완료 기록에 프로덕션 검증 체크리스트 형식 의무화
+- 작업 시작 전 이전 작업 체크리스트 확인 절차 추가
+- 모든 작업(코드, 데이터, 설정, 성능, 버그, 문서)에 동일 적용
+
+**프로덕션 검증:**
+- [x] 빌드: N/A (문서 변경만)
+- [x] 배포: OK — 커밋 후 push 예정, DEVELOPMENT_METHOD.md에 반영 완료
+- [x] 동작확인: N/A (문서 변경만, 코드 동작에 영향 없음)
+- [x] 데이터확인: N/A
+
 ### Phase 3 완료 상세 — 정산 재작성 (order_items 기반) ✅ (2026-03-07)
 
 > **완료일**: 2026-03-07
@@ -150,6 +166,24 @@ margin = sell - work (참고 지표)
 - settlement_runs 테이블: 기존 `base_amount` 컬럼에 올바른 값 저장 (= effectiveSellAmount)
 - report.ts, runs.ts: 변경 불필요 (settlements 테이블에서 올바른 값을 읽음)
 - DB 스키마: 변경 없음 (추가 마이그레이션 불필요)
+
+**프로덕션 검증:**
+- [x] 빌드: OK (76 modules, 364.90 kB, 2.12s)
+- [x] 배포: OK — 커밋 `177534a`, https://dahada-oms.pages.dev
+- [x] 동작확인: OK — health API 응답 정상 (`{"status":"ok","version":"25.0.0"}`)
+- [x] 데이터확인: N/A (DB 스키마 변경 없음, 기존 데이터 호환)
+
+### 시군구 프로덕션 시드 데이터 투입 ✅ (2026-03-07)
+
+**변경 내용:**
+- 프로덕션 D1의 `sigungu` 테이블에 76건 시드 데이터 INSERT (서울 25, 경기 27, 인천 8, 부산 16)
+- 원인: migration 0023이 테이블 스키마만 생성하고 seed.sql을 프로덕션에 적용하지 않았음
+
+**프로덕션 검증:**
+- [x] 빌드: N/A (데이터 투입만)
+- [x] 배포: OK — `wrangler d1 execute dahada-production --remote --file=/tmp/seed_sigungu.sql` (457 rows written, 77 changes)
+- [x] 동작확인: OK — `SELECT COUNT(*) FROM sigungu WHERE is_active=1` → 76건, `SELECT COUNT(DISTINCT sido)` → 4건
+- [x] 데이터확인: OK — 서울특별시 25, 경기도 27, 인천광역시 8, 부산광역시 16
 
 ---
 
