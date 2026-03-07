@@ -84,7 +84,7 @@ app.use('*', async (c, next) => {
       "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com",
       "img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com https://pagead2.googlesyndication.com https://*.google.com https://*.googleusercontent.com",
       "connect-src 'self' https://pagead2.googlesyndication.com https://adservice.google.com https://cloudflareinsights.com https://static.cloudflareinsights.com https://www.google-analytics.com https://ep1.adtrafficquality.google https://ep2.adtrafficquality.google",
-      "frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com https://www.google.com",
+      "frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com https://www.google.com https://t1.daumcdn.net https://postcode.map.daum.net",
       "object-src 'none'",
       "base-uri 'self'",
     ].join('; '));
