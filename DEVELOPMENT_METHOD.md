@@ -1,6 +1,6 @@
 # Edge-First Serverless 개발 방법론
 
-> **이 문서는 Airflow OMS(다하다) 시스템 구축 경험에서 추출한 개발 방법론이다.**
+> **이 문서는 Airflow OMS(Airflow) 시스템 구축 경험에서 추출한 개발 방법론이다.**
 > 동일한 접근법으로 다른 업무 시스템(ERP, CRM, WMS 등)을 빠르게 구축할 수 있다.
 
 ---
@@ -538,6 +538,6 @@ curl -s -X POST http://localhost:3000/api/auth/login \
 ---
 
 > **작성일**: 2026-03-07
-> **기반 시스템**: Airflow OMS (다하다) — https://dahada-oms.pages.dev
+> **기반 시스템**: Airflow OMS (Airflow) — https://airflow-oms.pages.dev
 > **코드량**: Backend 12,190줄 + Frontend 17,385줄 + SQL 4,476줄 = 총 37,200줄
 > **엔드포인트**: ~130개 API, 22개 DB 마이그레이션, 44개 테이블

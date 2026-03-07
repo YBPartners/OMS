@@ -34,7 +34,7 @@ export async function sendEmail(
   config: EmailConfig,
   params: SendEmailParams
 ): Promise<{ ok: boolean; messageId?: string; error?: string }> {
-  const from = params.from || `${config.fromName || 'Airflow OMS'} <${config.fromAddress || 'noreply@dahada.co.kr'}>`;
+  const from = params.from || `${config.fromName || 'Airflow OMS'} <${config.fromAddress || 'noreply@airflow.co.kr'}>`;
 
   try {
     const response = await fetch('https://api.resend.com/emails', {
@@ -228,7 +228,7 @@ export function buildSignupApprovedEmailHTML(data: {
       <div class="info-row"><span class="label">팀명</span><span class="value">${data.teamName}</span></div>
     </div>
     <div class="cta">
-      <a href="https://dahada-oms.pages.dev">로그인하기 →</a>
+      <a href="https://airflow.co.kr">로그인하기 →</a>
     </div>
   </div>
   <div class="footer">

@@ -23,7 +23,7 @@
 
 - **전체 Phase**: 0~18.1 + D-1~D-6 완료
 - **최신 Phase**: D-6 (주문 채널 API 연동 + 브랜드 채널 + 법인→총판 치환)
-- **프로덕션 배포**: ✅ https://dahada-oms.pages.dev
+- **프로덕션 배포**: ✅ https://airflow-oms.pages.dev
 - **로컬 개발**: ✅ PM2 + wrangler pages dev, port 3000
 - **서비스 레이어**: ✅ 5개 서비스, 모듈 간 교차 의존성 해소
 - **E2E 테스트**: ✅ 50/50 통과 (15개 영역, `tests/e2e.sh`)
@@ -82,7 +82,7 @@
 - [x] Kanban: 다중선택, 배치배정, 배정해제, 드래그, 필터, 통계
 - [x] 감사 로그 API + UI (목록/통계/상세)
 - [x] Cloudflare Pages 프로덕션 배포
-- [x] D1 DB (dahada-production) 연결
+- [x] D1 DB (airflow-production) 연결
 - [x] E2E 테스트 23/23 PASS
 
 ### ✅ Phase 6: 인터랙션 디자인 시스템

@@ -33,13 +33,13 @@ curl http://localhost:3000/api/health
 
 - **프로젝트**: Airflow OMS (에어컨 세척 주문관리시스템)
 - **버전**: v19.0.0
-- **프로덕션**: https://dahada-oms.pages.dev
+- **프로덕션**: https://airflow-oms.pages.dev
 - **GitHub**: https://github.com/YBPartners/OMS
 - **기술 스택**: Hono v4 + TypeScript + Cloudflare Workers + D1 + KV + TailwindCSS(PostCSS)
 - **프로젝트 경로**: `/home/user/webapp/`
 - **빌드**: `npm run build` → `dist/_worker.js` (~252KB)
 - **서비스 시작**: `pm2 start ecosystem.config.cjs` (port 3000)
-- **DB**: Cloudflare D1 (dahada-production, ID: 0b7aedd5-7510-44d3-8b81-d421b03fffa6)
+- **DB**: Cloudflare D1 (airflow-production, ID: 0b7aedd5-7510-44d3-8b81-d421b03fffa6)
 - **KV**: SESSION_CACHE (ID: 5024085768aa47ba943e4e65a454795e)
 - **코드량**: 24,536줄 (48 TS + 23 JS + 13 SQL + CSS/SW/E2E)
 
@@ -160,5 +160,5 @@ curl -s -X POST http://localhost:3000/api/auth/login \
   -d '{"login_id":"admin","password":"admin123"}'
 
 # DB 쿼리 예시
-npx wrangler d1 execute dahada-production --local --command="SELECT * FROM order_channels ORDER BY priority DESC;"
+npx wrangler d1 execute airflow-production --local --command="SELECT * FROM order_channels ORDER BY priority DESC;"
 ```
