@@ -616,8 +616,19 @@ function getStatusActions(order) {
   }
   if (s === 'READY_DONE') {
     actions.push({
+      icon: 'fa-won-sign', label: '메뉴/가격 확정', badge: '필수',
+      badgeColor: 'bg-blue-100 text-blue-700',
+      action: () => { if (typeof showPriceConfirmModal === 'function') showPriceConfirmModal(order.order_id); else showToast('가격확정 기능을 불러오는 중입니다.', 'warning'); }
+    });
+  }
+  if (s === 'CONFIRMED') {
+    actions.push({
       icon: 'fa-play', label: '작업 시작',
       action: () => startWork(order.order_id)
+    });
+    actions.push({
+      icon: 'fa-pen', label: '가격 수정',
+      action: () => { if (typeof showPriceConfirmModal === 'function') showPriceConfirmModal(order.order_id); }
     });
   }
   if (s === 'SUBMITTED') {

@@ -89,7 +89,7 @@ export const STATUS_TRANSITIONS: Record<string, TransitionRule> = {
 export const STATUS_LABELS: Record<string, string> = {
   'RECEIVED': '수신', 'DISTRIBUTION_PENDING': '배분대기',
   'DISTRIBUTED': '배분완료', 'ASSIGNED': '준비(배정됨)', 'READY_DONE': '준비완료',
-  'IN_PROGRESS': '수행중', 'SUBMITTED': '완료전송', 'DONE': '최종완료',
+  'CONFIRMED': '가격확정', 'IN_PROGRESS': '수행중', 'SUBMITTED': '완료전송', 'DONE': '최종완료',
   'REGION_APPROVED': '지역승인', 'REGION_REJECTED': '지역반려',
   'HQ_APPROVED': 'HQ승인', 'HQ_REJECTED': 'HQ반려', 'SETTLEMENT_CONFIRMED': '정산확정',
   'PAID': '지급완료'

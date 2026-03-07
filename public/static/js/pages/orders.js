@@ -302,7 +302,11 @@ function _getQuickActions(order) {
     actions.push(`<button onclick="closeDrawer();readyDone(${order.order_id})" class="px-3 py-1.5 bg-violet-600 text-white rounded-lg text-xs hover:bg-violet-700 transition"><i class="fas fa-phone-volume mr-1"></i>준비완료</button>`);
   }
   if (s === 'READY_DONE') {
+    actions.push(`<button onclick="closeDrawer();if(typeof showPriceConfirmModal==='function')showPriceConfirmModal(${order.order_id})" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition"><i class="fas fa-won-sign mr-1"></i>메뉴/가격 확정</button>`);
+  }
+  if (s === 'CONFIRMED') {
     actions.push(`<button onclick="closeDrawer();startWork(${order.order_id})" class="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-xs hover:bg-orange-700 transition"><i class="fas fa-play mr-1"></i>작업 시작</button>`);
+    actions.push(`<button onclick="closeDrawer();if(typeof showPriceConfirmModal==='function')showPriceConfirmModal(${order.order_id})" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200 transition"><i class="fas fa-pen mr-1"></i>가격수정</button>`);
   }
   if (s === 'SUBMITTED') {
     actions.push(`<button onclick="closeDrawer();completeOrder(${order.order_id})" class="px-3 py-1.5 bg-sky-600 text-white rounded-lg text-xs hover:bg-sky-700 transition"><i class="fas fa-receipt mr-1"></i>최종완료</button>`);

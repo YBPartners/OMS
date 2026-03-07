@@ -23,6 +23,7 @@ async function renderMyOrders(el) {
           { status: '', label: '전체', icon: 'fa-list', color: 'gray', count: res?.total || 0 },
           { status: 'ASSIGNED', label: '준비', icon: 'fa-user-check', color: 'purple' },
           { status: 'READY_DONE', label: '준비완료', icon: 'fa-phone-volume', color: 'violet' },
+          { status: 'CONFIRMED', label: '가격확정', icon: 'fa-won-sign', color: 'blue' },
           { status: 'IN_PROGRESS', label: '수행중', icon: 'fa-wrench', color: 'orange' },
           { status: 'SUBMITTED,DONE', label: '완료', icon: 'fa-file-lines', color: 'cyan' },
           { status: 'REGION_REJECTED,HQ_REJECTED', label: '반려', icon: 'fa-times-circle', color: 'red' },
@@ -71,8 +72,15 @@ async function renderMyOrders(el) {
                   <i class="fas fa-phone-volume mr-1"></i>준비완료
                 </button>` : ''}
               ${o.status === 'READY_DONE' ? `
+                <button onclick="showPriceConfirmModal(${o.order_id})" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition" data-tooltip="서비스 항목 및 가격을 확정합니다">
+                  <i class="fas fa-won-sign mr-1"></i>메뉴/가격 확정
+                </button>` : ''}
+              ${o.status === 'CONFIRMED' ? `
                 <button onclick="startWork(${o.order_id})" class="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-xs hover:bg-orange-700 transition" data-tooltip="작업을 시작합니다">
                   <i class="fas fa-play mr-1"></i>작업시작
+                </button>
+                <button onclick="showPriceConfirmModal(${o.order_id})" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200 transition" data-tooltip="확정된 가격/메뉴 수정">
+                  <i class="fas fa-pen mr-1"></i>가격수정
                 </button>` : ''}
               ${['IN_PROGRESS', 'REGION_REJECTED', 'HQ_REJECTED'].includes(o.status) ? `
                 <button onclick="showReportModal(${o.order_id})" class="px-3 py-1.5 ${o.status.includes('REJECTED') ? 'bg-amber-600 hover:bg-amber-700' : 'bg-cyan-600 hover:bg-cyan-700'} text-white rounded-lg text-xs transition" data-tooltip="${o.status.includes('REJECTED') ? '반려된 보고서를 재제출합니다' : '보고서를 제출합니다'}">
@@ -796,5 +804,357 @@ async function renderMyStats(el) {
   } catch (e) {
   console.error('[renderMyStats]', e);
   el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  가격/메뉴 확정 모달 (READY_DONE → CONFIRMED)
+//  팀장이 현장에서 서비스 항목 추가/수정/삭제 후 최종 가격 확정
+// ════════════════════════════════════════════════════════════════
+
+let _catalogCache = null;
+
+async function _loadCatalog(channelId) {
+  if (_catalogCache && _catalogCache._channelId === channelId) return _catalogCache;
+  const url = channelId ? `/service-catalog?channel_id=${channelId}` : '/service-catalog';
+  const res = await api('GET', url);
+  if (res?.categories) {
+    res._channelId = channelId;
+    _catalogCache = res;
+  }
+  return res;
+}
+
+async function showPriceConfirmModal(orderId) {
+  try {
+    // 1) 주문 상세 + 기존 항목 + 카탈로그 병렬 조회
+    const [orderRes, itemsRes] = await Promise.all([
+      api('GET', `/orders/${orderId}`),
+      api('GET', `/orders/${orderId}/items`),
+    ]);
+    const order = orderRes?.order;
+    if (!order) { showToast('주문을 찾을 수 없습니다.', 'error'); return; }
+
+    const catalog = await _loadCatalog(order.channel_id);
+    const categories = catalog?.categories || [];
+    const prices = catalog?.prices || [];
+    const options = catalog?.options || [];
+    const items = itemsRes?.items || [];
+
+    // 가격 맵 구축: categoryId → { sell, work }
+    const priceMap = {};
+    for (const p of prices) { priceMap[p.category_id] = p; }
+
+    // 그룹별 카테고리 정리
+    const groups = {};
+    for (const c of categories) {
+      if (!groups[c.group_name]) groups[c.group_name] = [];
+      groups[c.group_name].push(c);
+    }
+
+    const isConfirmed = order.status === 'CONFIRMED';
+
+    const content = `
+      <div class="space-y-5" id="price-confirm-container" data-order-id="${orderId}" data-channel-id="${order.channel_id || ''}">
+        <!-- 주문 요약 -->
+        <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="font-mono text-xs text-gray-400">#${orderId}</span>
+            <span class="font-bold">${escapeHtml(order.customer_name || '-')}</span>
+            ${statusBadge(order.status)}
+            ${order.channel_name ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600"><i class="fas fa-satellite-dish mr-0.5"></i>${escapeHtml(order.channel_name)}</span>` : ''}
+          </div>
+          <div class="text-xs text-gray-500"><i class="fas fa-location-dot mr-1"></i>${escapeHtml(order.address_text || '-')}</div>
+          ${order.scheduled_date ? `<div class="text-xs text-violet-600 mt-1"><i class="fas fa-calendar-check mr-1"></i>${order.scheduled_date}${order.scheduled_time ? ' ' + order.scheduled_time : ''}</div>` : ''}
+          ${order.base_amount ? `<div class="text-xs text-gray-500 mt-1"><i class="fas fa-receipt mr-1"></i>접수금액: ${formatAmount(order.base_amount)}</div>` : ''}
+        </div>
+
+        <!-- 서비스 항목 추가 -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="font-semibold text-sm"><i class="fas fa-list-check mr-1.5 text-blue-500"></i>서비스 항목</h4>
+            <button onclick="_showAddItemSheet(${orderId})" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition">
+              <i class="fas fa-plus mr-1"></i>항목 추가
+            </button>
+          </div>
+          <div id="order-items-list">
+            ${items.length > 0 ? _renderItemsList(items) : '<div class="text-center py-6 text-gray-400 border-2 border-dashed rounded-xl"><i class="fas fa-box-open text-2xl mb-2 block"></i><p class="text-sm">서비스 항목을 추가해 주세요</p></div>'}
+          </div>
+        </div>
+
+        <!-- 합계 -->
+        <div class="bg-blue-50 rounded-xl p-4 border border-blue-200" id="price-totals">
+          ${_renderPriceTotals(items, order)}
+        </div>
+
+        ${isConfirmed ? `<div class="bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-700">
+          <i class="fas fa-check-circle mr-1"></i>가격이 확정되었습니다. 항목을 수정하면 재확정이 필요합니다.
+        </div>` : ''}
+      </div>`;
+
+    const actions = order.status === 'READY_DONE' ? `
+      <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">닫기</button>
+      <button onclick="_submitPriceConfirm(${orderId})" id="btn-confirm-price" class="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition ${items.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}">
+        <i class="fas fa-won-sign mr-1"></i>가격 확정
+      </button>`
+      : `<button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">닫기</button>
+         ${order.status === 'CONFIRMED' ? `<button onclick="_submitPriceConfirm(${orderId})" class="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition">
+           <i class="fas fa-won-sign mr-1"></i>재확정
+         </button>` : ''}`;
+
+    showModal(`<i class="fas fa-won-sign mr-2 text-blue-500"></i>메뉴/가격 확정 — 주문 #${orderId}`, content, actions, { large: true });
+
+  } catch (e) {
+    console.error('[showPriceConfirmModal]', e);
+    showToast('가격 확정 화면을 불러올 수 없습니다: ' + (e.message||e), 'error');
+  }
+}
+
+function _renderItemsList(items) {
+  let totalSell = 0, totalWork = 0;
+  const rows = items.map(it => {
+    totalSell += it.total_sell_price;
+    totalWork += it.total_work_price;
+    return `
+      <div class="flex items-center gap-3 px-4 py-3 bg-white rounded-lg border border-gray-200 hover:border-blue-300 transition group">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">${escapeHtml(it.group_name)}</span>
+            <span class="font-medium text-sm truncate">${escapeHtml(it.category_name)}</span>
+            ${it.quantity > 1 ? `<span class="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">×${it.quantity}</span>` : ''}
+          </div>
+          ${it.model_name ? `<div class="text-xs text-gray-500 mt-0.5"><i class="fas fa-tag mr-1"></i>${escapeHtml(it.model_name)}</div>` : ''}
+          ${it.notes ? `<div class="text-xs text-gray-400 mt-0.5">${escapeHtml(it.notes)}</div>` : ''}
+        </div>
+        <div class="text-right shrink-0">
+          <div class="text-sm font-bold text-blue-600">${formatAmount(it.total_sell_price)}</div>
+          <div class="text-[10px] text-gray-400">수행 ${formatAmount(it.total_work_price)}</div>
+        </div>
+        <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition shrink-0">
+          <button onclick="_editItem(${it.item_id}, ${it.order_id})" class="w-7 h-7 flex items-center justify-center rounded bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 transition text-xs" data-tooltip="수정">
+            <i class="fas fa-pen"></i>
+          </button>
+          <button onclick="_deleteItem(${it.item_id}, ${it.order_id})" class="w-7 h-7 flex items-center justify-center rounded bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 transition text-xs" data-tooltip="삭제">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+  return `<div class="space-y-2">${rows}</div>`;
+}
+
+function _renderPriceTotals(items, order) {
+  const totalSell = items.reduce((s, it) => s + it.total_sell_price, 0);
+  const totalWork = items.reduce((s, it) => s + it.total_work_price, 0);
+  const diff = order.base_amount ? totalSell - order.base_amount : 0;
+  const diffClass = diff > 0 ? 'text-red-600' : diff < 0 ? 'text-green-600' : 'text-gray-500';
+  const diffSign = diff > 0 ? '+' : '';
+
+  return `
+    <div class="grid grid-cols-3 gap-4 text-center">
+      <div>
+        <div class="text-xs text-gray-500 mb-1">판매가 합계</div>
+        <div class="text-lg font-bold text-blue-700">${formatAmount(totalSell)}</div>
+      </div>
+      <div>
+        <div class="text-xs text-gray-500 mb-1">수행가 합계</div>
+        <div class="text-lg font-bold text-green-700">${formatAmount(totalWork)}</div>
+      </div>
+      <div>
+        <div class="text-xs text-gray-500 mb-1">${order.base_amount ? '접수가 대비' : '항목 수'}</div>
+        <div class="text-lg font-bold ${diffClass}">${order.base_amount ? `${diffSign}${formatAmount(diff)}` : `${items.length}건`}</div>
+      </div>
+    </div>`;
+}
+
+// 항목 추가 바텀시트
+async function _showAddItemSheet(orderId) {
+  const container = document.getElementById('price-confirm-container');
+  const channelId = container?.dataset.channelId;
+  const catalog = await _loadCatalog(channelId);
+  const categories = catalog?.categories || [];
+  const prices = catalog?.prices || [];
+  const options = catalog?.options || [];
+
+  const priceMap = {};
+  for (const p of prices) priceMap[p.category_id] = p;
+
+  const groups = {};
+  for (const c of categories) {
+    if (!groups[c.group_name]) groups[c.group_name] = [];
+    groups[c.group_name].push(c);
+  }
+
+  const groupHtml = Object.entries(groups).map(([gn, cats]) => `
+    <div class="mb-3">
+      <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">${escapeHtml(gn)}</div>
+      <div class="grid grid-cols-2 gap-2">
+        ${cats.map(c => {
+          const pr = priceMap[c.category_id];
+          return `
+          <button onclick="_addItemFromCatalog(${orderId}, ${c.category_id}, '${escapeHtml(c.name).replace(/'/g, "\\'")}', ${pr?.sell_price || 0}, ${pr?.work_price || 0})"
+            class="text-left px-3 py-2.5 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition">
+            <div class="text-sm font-medium truncate">${escapeHtml(c.name)}</div>
+            ${pr ? `<div class="text-xs text-blue-600 mt-0.5">${formatAmount(pr.sell_price)} <span class="text-gray-400">/ 수행 ${formatAmount(pr.work_price)}</span></div>` : '<div class="text-[10px] text-gray-400 mt-0.5">단가 미설정</div>'}
+          </button>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+
+  // 옵션 목록
+  const optHtml = options.length > 0 ? `
+    <div class="mt-3 pt-3 border-t">
+      <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">추가 옵션</div>
+      <div class="flex flex-wrap gap-2">
+        ${options.map(o => `
+          <label class="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border rounded-lg text-xs cursor-pointer hover:bg-amber-50 hover:border-amber-300 transition">
+            <input type="checkbox" class="add-item-option" value="${escapeHtml(o.code)}" data-sell="${o.additional_sell_price}" data-work="${o.additional_work_price}">
+            ${escapeHtml(o.name)} (+${formatAmount(o.additional_sell_price)})
+          </label>`).join('')}
+      </div>
+    </div>` : '';
+
+  const sheetContent = `
+    <div class="space-y-3">
+      <p class="text-sm text-gray-600">추가할 서비스 항목을 선택하세요.</p>
+      <div class="max-h-[50vh] overflow-y-auto pr-1">${groupHtml}</div>
+      ${optHtml}
+      <div class="flex items-center gap-3">
+        <label class="text-xs text-gray-500">수량:</label>
+        <input type="number" id="add-item-qty" value="1" min="1" max="99" class="w-16 border rounded-lg px-2 py-1 text-sm text-center">
+        <label class="text-xs text-gray-500 ml-2">모델명:</label>
+        <input type="text" id="add-item-model" placeholder="(선택)" class="flex-1 border rounded-lg px-2 py-1 text-sm">
+      </div>
+    </div>`;
+
+  showModal('<i class="fas fa-plus mr-2 text-green-500"></i>서비스 항목 추가', sheetContent,
+    `<button onclick="closeModal();showPriceConfirmModal(${orderId})" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">돌아가기</button>`,
+    { small: false });
+}
+
+async function _addItemFromCatalog(orderId, categoryId, categoryName, sellPrice, workPrice) {
+  try {
+    const qty = parseInt(document.getElementById('add-item-qty')?.value) || 1;
+    const model = document.getElementById('add-item-model')?.value || '';
+    const optCheckboxes = document.querySelectorAll('.add-item-option:checked');
+    const optCodes = Array.from(optCheckboxes).map(cb => cb.value);
+
+    const payload = {
+      category_id: categoryId,
+      quantity: qty,
+      model_name: model || undefined,
+      options_json: optCodes.length > 0 ? JSON.stringify(optCodes) : undefined,
+    };
+
+    const res = await api('POST', `/orders/${orderId}/items`, payload);
+    if (res?.ok) {
+      showToast(`${categoryName} 추가됨`, 'success');
+      closeModal();
+      showPriceConfirmModal(orderId);  // 새로고침
+    } else {
+      showToast(res?.error || '추가 실패', 'error');
+    }
+  } catch (e) {
+    console.error('[_addItemFromCatalog]', e);
+    showToast('항목 추가 실패: ' + (e.message||e), 'error');
+  }
+}
+
+async function _deleteItem(itemId, orderId) {
+  showConfirmModal('항목 삭제', '이 서비스 항목을 삭제하시겠습니까?', async () => {
+    const res = await api('DELETE', `/orders/${orderId}/items/${itemId}`);
+    if (res?.ok) {
+      showToast('삭제됨', 'success');
+      closeModal();
+      showPriceConfirmModal(orderId);
+    } else {
+      showToast(res?.error || '삭제 실패', 'error');
+    }
+  }, '삭제', 'bg-red-600');
+}
+
+async function _editItem(itemId, orderId) {
+  try {
+    const itemsRes = await api('GET', `/orders/${orderId}/items`);
+    const item = (itemsRes?.items || []).find(i => i.item_id === itemId);
+    if (!item) { showToast('항목을 찾을 수 없습니다.', 'error'); return; }
+
+    const content = `
+      <div class="space-y-4">
+        <div class="bg-gray-50 rounded-lg p-3 border">
+          <span class="text-xs text-gray-500">${escapeHtml(item.group_name)}</span>
+          <span class="font-bold ml-1">${escapeHtml(item.category_name)}</span>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">수량</label>
+            <input type="number" id="edit-item-qty" value="${item.quantity}" min="1" max="99" class="w-full border rounded-lg px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">모델명</label>
+            <input type="text" id="edit-item-model" value="${escapeHtml(item.model_name || '')}" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="(선택)">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">판매 단가</label>
+            <input type="number" id="edit-item-sell" value="${item.unit_sell_price}" min="0" step="1000" class="w-full border rounded-lg px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">수행 단가</label>
+            <input type="number" id="edit-item-work" value="${item.unit_work_price}" min="0" step="1000" class="w-full border rounded-lg px-3 py-2 text-sm">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">메모</label>
+          <input type="text" id="edit-item-notes" value="${escapeHtml(item.notes || '')}" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="비고">
+        </div>
+      </div>`;
+
+    showModal(`<i class="fas fa-pen mr-2 text-blue-500"></i>항목 수정`, content, `
+      <button onclick="closeModal();showPriceConfirmModal(${orderId})" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+      <button onclick="_submitEditItem(${itemId}, ${orderId})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`);
+  } catch (e) {
+    console.error('[_editItem]', e);
+    showToast('수정 화면 오류: ' + (e.message||e), 'error');
+  }
+}
+
+async function _submitEditItem(itemId, orderId) {
+  try {
+    const payload = {
+      quantity: parseInt(document.getElementById('edit-item-qty')?.value) || 1,
+      model_name: document.getElementById('edit-item-model')?.value || '',
+      unit_sell_price: parseInt(document.getElementById('edit-item-sell')?.value) || 0,
+      unit_work_price: parseInt(document.getElementById('edit-item-work')?.value) || 0,
+      notes: document.getElementById('edit-item-notes')?.value || '',
+    };
+    const res = await api('PUT', `/orders/${orderId}/items/${itemId}`, payload);
+    if (res?.ok) {
+      showToast('수정됨', 'success');
+      closeModal();
+      showPriceConfirmModal(orderId);
+    } else {
+      showToast(res?.error || '수정 실패', 'error');
+    }
+  } catch (e) {
+    console.error('[_submitEditItem]', e);
+    showToast('수정 실패: ' + (e.message||e), 'error');
+  }
+}
+
+async function _submitPriceConfirm(orderId) {
+  try {
+    const res = await api('POST', `/orders/${orderId}/confirm-price`);
+    if (res?.ok) {
+      showToast(`가격 확정 완료! 판매가 ${formatAmount(res.confirmed_total_sell)}, 수행가 ${formatAmount(res.confirmed_total_work)} (${res.item_count}항목)`, 'success');
+      closeModal();
+      renderContent();
+    } else {
+      showToast(res?.error || '확정 실패', 'error');
+    }
+  } catch (e) {
+    console.error('[_submitPriceConfirm]', e);
+    showToast('가격 확정 실패: ' + (e.message||e), 'error');
   }
 }

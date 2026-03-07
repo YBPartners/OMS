@@ -5,6 +5,7 @@ import { authMiddleware } from './middleware/auth';
 import { cleanupRateLimit } from './middleware/security';
 import authRoutes from './routes/auth';
 import orderRoutes from './routes/orders/index';
+import { mountServiceCatalog } from './routes/orders/items';
 import settlementRoutes from './routes/settlements/index';
 import reconciliationRoutes from './routes/reconciliation/index';
 import statsRoutes from './routes/stats/index';
@@ -177,6 +178,7 @@ app.route('/api/notifications', notificationRoutes);
 app.route('/api/audit', auditRoutes);
 app.route('/api/system', systemRoutes);
 app.route('/api/banners', bannerRoutes);
+mountServiceCatalog(app);  // GET /api/service-catalog
 
 // ─── 헬스체크 ───
 app.get('/api/health', (c) => c.json({ status: 'ok', version: '25.0.0', system: 'Airflow OMS' }));
@@ -289,7 +291,7 @@ app.get('*', async (c) => {
 });
 
 function getIndexHtml(adsenseAccount: string = ''): string {
-  const V = '34';
+  const V = '35';
   return `<!DOCTYPE html>
 <html lang="ko">
 <head>

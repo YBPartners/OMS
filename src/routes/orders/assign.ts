@@ -217,12 +217,12 @@ export function mountAssign(router: Hono<Env>) {
     const db = c.env.DB;
     const orderId = Number(c.req.param('order_id'));
 
-    // ★ State Machine 적용 — READY_DONE → IN_PROGRESS
+    // ★ State Machine 적용 — READY_DONE/CONFIRMED → IN_PROGRESS
     const result = await transitionOrder(db, orderId, 'IN_PROGRESS', user, {
       afterTransition: async (db) => {
         await db.prepare(`
           UPDATE order_assignments SET status = 'IN_PROGRESS', updated_at = datetime('now')
-          WHERE order_id = ? AND status IN ('ASSIGNED','READY_DONE')
+          WHERE order_id = ? AND status IN ('ASSIGNED','READY_DONE','CONFIRMED')
         `).bind(orderId).run();
       },
     });
