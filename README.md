@@ -19,6 +19,19 @@
 
 ---
 
+## ⚠️ 범용 베이스 시스템 백업 (v25.0.0-base)
+
+> **다른 업종 재활용을 위한 분기점 보존본** (2026-03-07)
+
+| 백업 위치 | 접근 방법 |
+|-----------|-----------|
+| **CDN 다운로드** | https://www.genspark.ai/api/files/s/duK3Rb8T |
+| **GitHub 태그** | `git checkout v25.0.0-base` (repo: YBPartners/OMS) |
+
+이 태그 시점의 시스템을 기반으로 다른 업종에 맞게 DB 스키마, 상태머신, UI 텍스트를 변경하면 재활용 가능.
+
+---
+
 ## 테스트 계정
 
 | 역할 | 아이디 | 비밀번호 | 소속 |
@@ -153,6 +166,7 @@
 | R1~R15 | 시스템 고도화 | ✅ | 주문CRUD, E2E100%, 정산PAID, 정책CRUD, HR, UI표준화, 보안, 성능 |
 | **AUDIT-1** | **예방 점검 (크로스 스크립트)** | **✅** | **24페이지 의존성 감사, 12건 누락 수정, pageScripts 전면 재매핑** |
 | **SCHEDULE-1** | **일정/캘린더 기능** | **✅** | **준비완료 시간입력, 캘린더 뷰(월/주/일), schedule API, 드래그 일정변경** |
+| **INTEGRITY-1** | **시스템 정합성 감사 + 성능 개선** | **✅** | **자동 감사 스크립트, 통합 API(7→1), 매핑 해제 버그 수정, 캐시 버스팅** |
 
 ---
 
@@ -216,6 +230,24 @@
 
 ---
 
+## 시스템 정합성 감사 (INTEGRITY-1, 2026-03-07)
+
+### 자동 감사 스크립트
+```bash
+cd /home/user/webapp && python3 scripts/audit.py
+```
+7가지 항목을 자동 검사: SQL alias.column 참조, INSERT 컬럼-값 수, NOT NULL 누락, FE 고스트 필드, FE↔BE 라우트 매칭, 빌드 동기화.
+현재 결과: **0 issues (all checks passed)** — 47 tables, 465 columns, 215 BE routes, 142 FE calls.
+
+### 수정된 실제 버그
+| # | 버그 | 원인 | 수정 |
+|---|------|------|------|
+| 1 | 정책관리 페이지 크래시 | Wrangler 캐시된 빌드가 잘못된 `rsm.org_id` 컬럼 참조 → D1_ERROR | .wrangler 캐시 삭제 후 재빌드 |
+| 2 | 매핑 해제 항상 실패 | FE `PUT(org_id:null)` → BE `if(!org_id) return 400` | FE를 기존 `DELETE` 라우트로 변경 |
+| 3 | 정책관리 페이지 느림 | 7개 API 순차 호출 → 7배 네트워크 왕복 | `GET /stats/policies/all` 통합 엔드포인트 (217ms) |
+
+---
+
 ## QA 검수 결과 (QA-1, 2026-03-06)
 
 ### 점검 범위
@@ -254,10 +286,12 @@
 - **D1 ID**: 0b7aedd5-7510-44d3-8b81-d421b03fffa6
 - **KV ID**: 5024085768aa47ba943e4e65a454795e (SESSION_CACHE)
 - **빌드 크기**: ~337 KB (dist/_worker.js)
-- **코드량**: Backend 51 TS (~12,500줄) + Frontend 32 JS (~17,400줄) + 22 SQL migrations (~4,200줄) + CSS/SW
+- **코드량**: Backend 52 TS (~13,000줄) + Frontend 34 JS (~19,000줄) + 22 SQL migrations (~4,500줄) + CSS/SW
 - **E2E 테스트**: 28/28 PASS (100%) — 정상플로우, 반려재보고, 권한체크, 목록필터, 상세조회
+- **자동 감사**: `python3 scripts/audit.py` → 0 issues (47 tables, 215 BE routes, 142 FE calls)
 - **프론트엔드 최적화**: 지연 로딩 (코어 ~120KB 즉시 + 페이지별 동적 로드)
 - **최종 업데이트**: 2026-03-07
+- **Git 태그**: `v25.0.0-base` (범용 베이스 시스템 분기점)
 
 ## 로컬 개발
 ```bash
