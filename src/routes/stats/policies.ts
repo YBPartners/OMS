@@ -583,6 +583,103 @@ export function mountPolicies(router: Hono<Env>) {
 
   // ━━━━━━━━━━ 정책 대시보드(요약) ━━━━━━━━━━
 
+  // ━━━━━━━━━━ 통합 API (정책관리 페이지 일괄 로딩) ━━━━━━━━━━
+  router.get('/policies/all', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR', 'REGION_ADMIN']);
+    if (authErr) return authErr;
+    const user = c.get('user')!;
+    const db = c.env.DB;
+
+    // 1) 배분·보고서·지표 정책 (단순 SELECT)
+    // 2) 수수료 정책 (org/user JOIN + 권한 필터)
+    // 3) 가격 정책 (4개 테이블)
+    // 4) 시군구 territories (권한 필터)
+    // 5) summary 통계
+
+    // --- 수수료 쿼리 (권한별) ---
+    let commQuery = `
+      SELECT cp.*, o.name as org_name, u.name as team_leader_name
+      FROM commission_policies cp
+      JOIN organizations o ON cp.org_id = o.org_id
+      LEFT JOIN users u ON cp.team_leader_id = u.user_id WHERE 1=1`;
+    const commParams: any[] = [];
+    if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
+      commQuery += ' AND (cp.org_id = ? OR cp.org_id IN (SELECT org_id FROM organizations WHERE parent_org_id = ?))';
+      commParams.push(user.org_id, user.org_id);
+    }
+    commQuery += ' ORDER BY cp.org_id, cp.team_leader_id';
+
+    // --- 시군구 territories 쿼리 (권한별) ---
+    let terrQuery = `
+      SELECT sg.code, sg.sido, sg.sigungu, sg.full_name, sg.is_active,
+             rsm.region_org_id, o.name as org_name, o.org_type
+      FROM sigungu sg
+      LEFT JOIN region_sigungu_map rsm ON sg.code = rsm.sigungu_code
+      LEFT JOIN organizations o ON rsm.region_org_id = o.org_id
+      WHERE sg.is_active = 1`;
+    const terrParams: any[] = [];
+    if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
+      terrQuery += ' AND (rsm.region_org_id = ? OR rsm.region_org_id IN (SELECT org_id FROM organizations WHERE parent_org_id = ?))';
+      terrParams.push(user.org_id, user.org_id);
+    }
+    terrQuery += ' ORDER BY sg.sido, sg.sigungu';
+
+    const [
+      distResult, reportResult, commResult, metricsResult,
+      pricesResult, categoriesResult, channelsResult, optionsResult,
+      terrResult,
+      summaryDist, summaryReport, summaryComm, summaryMetrics,
+      sigunguStats, regionMappings, ordersDist, recentAudit
+    ] = await Promise.all([
+      // 정책 목록
+      db.prepare('SELECT * FROM distribution_policies ORDER BY version DESC').all(),
+      db.prepare('SELECT * FROM report_policies ORDER BY version DESC').all(),
+      db.prepare(commQuery).bind(...commParams).all(),
+      db.prepare('SELECT * FROM metrics_policies ORDER BY metrics_policy_id DESC').all(),
+      // 가격
+      db.prepare(`SELECT sp.*, sc.code as category_code, sc.name as category_name, sc.group_name, ch.name as channel_name
+        FROM service_prices sp JOIN service_categories sc ON sp.category_id = sc.category_id
+        JOIN order_channels ch ON sp.channel_id = ch.channel_id
+        WHERE sp.is_active = 1 AND sc.is_active = 1 ORDER BY sc.sort_order, ch.channel_id`).all(),
+      db.prepare('SELECT * FROM service_categories WHERE is_active = 1 ORDER BY sort_order').all(),
+      db.prepare("SELECT * FROM order_channels WHERE is_active = 1 ORDER BY channel_id").all(),
+      db.prepare('SELECT * FROM service_options WHERE is_active = 1 ORDER BY option_id').all(),
+      // 시군구
+      db.prepare(terrQuery).bind(...terrParams).all(),
+      // summary 통계
+      db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active FROM distribution_policies').first(),
+      db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active FROM report_policies').first(),
+      db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active FROM commission_policies').first(),
+      db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active FROM metrics_policies').first(),
+      db.prepare("SELECT COUNT(*) as total, COUNT(DISTINCT sido) as sido_cnt FROM sigungu WHERE is_active=1").first(),
+      db.prepare("SELECT COUNT(*) as total FROM region_sigungu_map").first(),
+      db.prepare("SELECT COUNT(*) as total FROM orders WHERE status IN ('RECEIVED','DISTRIBUTION_PENDING','DISTRIBUTED','ASSIGNED')").first(),
+      db.prepare(`SELECT al.*, u.name as actor_name FROM audit_logs al
+        LEFT JOIN users u ON al.actor_id = u.user_id
+        WHERE al.entity_type IN ('DISTRIBUTION_POLICY','REPORT_POLICY','COMMISSION_POLICY','METRICS_POLICY','REGION_MAPPING','SIGUNGU_MAPPING')
+        ORDER BY al.created_at DESC LIMIT 10`).all(),
+    ]);
+
+    return c.json({
+      distribution: { policies: distResult.results },
+      report: { policies: reportResult.results },
+      commission: { policies: commResult.results },
+      metrics: { policies: metricsResult.results },
+      pricing: { prices: pricesResult.results, categories: categoriesResult.results, channels: channelsResult.results, options: optionsResult.results },
+      territories: terrResult.results,
+      summary: {
+        distribution: summaryDist,
+        report: summaryReport,
+        commission: summaryComm,
+        metrics: summaryMetrics,
+        sigungu: sigunguStats,
+        region_mappings: regionMappings,
+        active_orders: (ordersDist as any)?.total || 0,
+        recent_audit: recentAudit.results,
+      },
+    });
+  });
+
   router.get('/policies/summary', async (c) => {
     const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
     if (authErr) return authErr;

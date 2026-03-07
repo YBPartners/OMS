@@ -291,7 +291,7 @@ app.get('*', async (c) => {
 });
 
 function getIndexHtml(adsenseAccount: string = ''): string {
-  const V = '37';
+  const V = '38';
   return `<!DOCTYPE html>
 <html lang="ko">
 <head>

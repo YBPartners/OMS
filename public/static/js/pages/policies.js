@@ -6,24 +6,18 @@
 async function renderPolicies(el) {
   try {
     showSkeletonLoading(el, 'table');
-    const [distRes, reportRes, commRes, terRes, metricsRes, pricingRes, summaryRes] = await Promise.all([
-      api('GET', '/stats/policies/distribution'),
-      api('GET', '/stats/policies/report'),
-      api('GET', '/stats/policies/commission'),
-      api('GET', '/stats/territories'),
-      api('GET', '/stats/policies/metrics'),
-      api('GET', '/stats/policies/pricing'),
-      api('GET', '/stats/policies/summary').catch(() => null),
-    ]);
+    
+    // ★ 통합 API: 7개 호출 → 1개로 병합 (속도 대폭 향상)
+    const allRes = await api('GET', '/stats/policies/all');
 
     const activeTab = window._policyTab || 'overview';
-    const summary = summaryRes || {};
-    const distPolicies = distRes?.policies || [];
-    const reportPolicies = reportRes?.policies || [];
-    const commPolicies = commRes?.policies || [];
-    const territories = terRes?.territories || [];
-    const metricsPolicies = metricsRes?.policies || [];
-    const pricingData = { prices: pricingRes?.prices || [], categories: pricingRes?.categories || [], channels: pricingRes?.channels || [], options: pricingRes?.options || [] };
+    const summary = allRes?.summary || {};
+    const distPolicies = allRes?.distribution?.policies || [];
+    const reportPolicies = allRes?.report?.policies || [];
+    const commPolicies = allRes?.commission?.policies || [];
+    const territories = allRes?.territories || [];
+    const metricsPolicies = allRes?.metrics?.policies || [];
+    const pricingData = { prices: allRes?.pricing?.prices || [], categories: allRes?.pricing?.categories || [], channels: allRes?.pricing?.channels || [], options: allRes?.pricing?.options || [] };
 
     // 전역 캐시
     window._cachedDistPolicies = distPolicies;
@@ -33,7 +27,7 @@ async function renderPolicies(el) {
     window._cachedMetricsPolicies = metricsPolicies;
     window._cachedPricingData = pricingData;
     window._cachedPolicySummary = summary;
-    window._cachedAdminRegionMappings = terRes?.admin_region_mappings || [];
+    window._cachedAdminRegionMappings = allRes?.admin_region_mappings || [];
 
     const tabs = [
       { id: 'overview', icon: 'fa-gauge-high', label: '전체 현황' },
