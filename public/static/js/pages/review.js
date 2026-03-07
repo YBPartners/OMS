@@ -383,32 +383,31 @@ function showReviewModal(orderId, stage, result) {
 }
 
 async function submitReview(orderId, stage, result) {
-  try {
-  console.log('[DEBUG] submitReview called:', { orderId, stage, result });
+  // 버튼 비활성화로 중복 클릭 방지
+  const allBtns = document.querySelectorAll('#modal-overlay button');
+  allBtns.forEach(b => { b.disabled = true; b.classList.add('opacity-60', 'pointer-events-none'); });
+
   try {
     const comment = document.getElementById('review-comment')?.value || '';
     const reasonChecks = document.querySelectorAll('.reject-reason-check:checked');
     const reason_codes = Array.from(reasonChecks).map(el => el.value);
 
-    console.log('[DEBUG] submitReview API call:', { path: `/orders/${orderId}/review/${stage}`, body: { result, comment, reason_codes } });
     const res = await api('POST', `/orders/${orderId}/review/${stage}`, { result, comment, reason_codes });
-    console.log('[DEBUG] submitReview API response:', res);
     if (res?.ok) {
-      showToast(`${result === 'APPROVE' ? '승인' : '반려'} 완료`, result === 'APPROVE' ? 'success' : 'warning');
       closeModal();
+      const stageLabel = stage === 'hq' ? 'HQ 최종' : '지역';
+      const actionLabel = result === 'APPROVE' ? '승인' : '반려';
+      showToast(`${stageLabel} ${actionLabel} 완료 — 주문 #${orderId}${comment ? ' (코멘트: ' + comment.substring(0,30) + (comment.length>30?'...':'') + ')' : ''}`, result === 'APPROVE' ? 'success' : 'warning');
       renderContent();
     } else {
-      console.error('[DEBUG] submitReview failed:', res);
       showToast(res?.error || '검수 실패', 'error');
+      // 실패 시 버튼 복원
+      allBtns.forEach(b => { b.disabled = false; b.classList.remove('opacity-60', 'pointer-events-none'); });
     }
   } catch (err) {
-    console.error('[DEBUG] submitReview exception:', err);
+    console.error('[submitReview] exception:', err);
     showToast('검수 처리 중 오류 발생: ' + (err.message || err), 'error');
-  }
-
-  } catch (e) {
-  console.error('[submitReview]', e);
-  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
+    allBtns.forEach(b => { b.disabled = false; b.classList.remove('opacity-60', 'pointer-events-none'); });
   }
 }
 

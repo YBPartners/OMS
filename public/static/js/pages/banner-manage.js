@@ -192,75 +192,91 @@ async function openBannerCreateModal(banner = null) {
           <label class="block text-sm font-medium text-gray-700 mb-1">정렬 순서</label>
           <input id="bn-sort" type="number" value="${b.sort_order ?? 0}" min="0"
                  class="w-full px-3 py-2 border rounded-lg text-sm num-input" placeholder="0 (낮을수록 먼저)">
+          <p class="text-xs text-gray-400 mt-1">같은 위치에 여러 배너를 등록하면 슬라이드로 표시됩니다 (무제한)</p>
         </div>
       </div>
 
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">이미지 URL</label>
-        <input id="bn-image-url" type="url" value="${b.image_url || ''}"
-               class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="https://example.com/banner.jpg">
-        <p class="text-xs text-gray-400 mt-1">이미지 URL 또는 아래 텍스트 내용 중 하나 입력</p>
+      <!-- 크기 설정 -->
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">배너 너비 (px)</label>
+          <input id="bn-width" type="number" value="${b.width || ''}" min="100" max="2000"
+                 class="w-full px-3 py-2 border rounded-lg text-sm num-input" placeholder="자동 (100%)">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">배너 높이 (px)</label>
+          <input id="bn-height" type="number" value="${b.height || ''}" min="40" max="800"
+                 class="w-full px-3 py-2 border rounded-lg text-sm num-input" placeholder="자동 (비율 유지)">
+        </div>
       </div>
 
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">또는 이미지 파일 업로드 (Base64)</label>
+      <!-- 이미지: 파일 업로드 우선 -->
+      <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <label class="block text-sm font-medium text-blue-800 mb-2"><i class="fas fa-image mr-1"></i>배너 이미지 *</label>
         <input id="bn-image-file" type="file" accept="image/*" onchange="handleBannerImageUpload(event)"
-               class="w-full px-3 py-2 border rounded-lg text-sm">
+               class="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm bg-white">
         <input id="bn-image-base64" type="hidden" value="">
-        ${b.image_base64 ? '<p class="text-xs text-green-600 mt-1"><i class="fas fa-check mr-1"></i>기존 Base64 이미지 있음</p>' : ''}
-      </div>
-
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">텍스트 내용 (HTML 지원)</label>
-        <textarea id="bn-text" rows="3" class="w-full px-3 py-2 border rounded-lg text-sm" 
-                  placeholder="<h3>프로모션 안내</h3><p>자세히 보기 →</p>">${b.text_content || ''}</textarea>
-      </div>
-
-      <div class="grid grid-cols-3 gap-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">배경색</label>
-          <div class="flex gap-2">
-            <input id="bn-bg" type="color" value="${b.bg_color || '#ffffff'}" class="w-10 h-10 rounded cursor-pointer border">
-            <input type="text" value="${b.bg_color || '#ffffff'}" class="flex-1 px-2 py-1 border rounded text-xs" 
-                   oninput="document.getElementById('bn-bg').value=this.value" readonly>
-          </div>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">텍스트 색상</label>
-          <div class="flex gap-2">
-            <input id="bn-tc" type="color" value="${b.text_color || '#000000'}" class="w-10 h-10 rounded cursor-pointer border">
-            <input type="text" value="${b.text_color || '#000000'}" class="flex-1 px-2 py-1 border rounded text-xs" readonly>
-          </div>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">링크 타겟</label>
-          <select id="bn-target" class="w-full px-3 py-2 border rounded-lg text-sm">
-            <option value="_blank" ${b.link_target === '_blank' ? 'selected' : ''}>새 탭</option>
-            <option value="_self" ${b.link_target === '_self' ? 'selected' : ''}>현재 탭</option>
-          </select>
+        ${b.image_base64 ? '<p class="text-xs text-green-600 mt-1"><i class="fas fa-check mr-1"></i>기존 이미지 있음</p>' : ''}
+        <div class="mt-2">
+          <label class="block text-xs text-gray-500 mb-1">또는 이미지 URL 직접 입력</label>
+          <input id="bn-image-url" type="url" value="${b.image_url || ''}"
+                 class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="https://example.com/banner.jpg">
         </div>
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">클릭 시 이동 URL</label>
+        <label class="block text-sm font-medium text-gray-700 mb-1">클릭 시 이동 URL (링크)</label>
         <input id="bn-link" type="url" value="${b.link_url || ''}"
                class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="https://example.com/promo">
       </div>
 
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">노출 시작일</label>
-          <input id="bn-start" type="datetime-local" value="${b.start_date ? b.start_date.replace(' ', 'T').substring(0, 16) : ''}"
-                 class="w-full px-3 py-2 border rounded-lg text-sm">
-          <p class="text-xs text-gray-400 mt-1">비어있으면 즉시 노출</p>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">노출 종료일</label>
-          <input id="bn-end" type="datetime-local" value="${b.end_date ? b.end_date.replace(' ', 'T').substring(0, 16) : ''}"
-                 class="w-full px-3 py-2 border rounded-lg text-sm">
-          <p class="text-xs text-gray-400 mt-1">비어있으면 무기한</p>
-        </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">텍스트 내용 (선택, HTML 지원)</label>
+        <textarea id="bn-text" rows="2" class="w-full px-3 py-2 border rounded-lg text-sm" 
+                  placeholder="<h3>프로모션 안내</h3><p>자세히 보기 →</p>">${b.text_content || ''}</textarea>
       </div>
+
+      <details class="border rounded-lg p-3">
+        <summary class="text-sm font-medium text-gray-700 cursor-pointer">고급 설정</summary>
+        <div class="mt-3 space-y-3">
+          <div class="grid grid-cols-3 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">배경색</label>
+              <div class="flex gap-2">
+                <input id="bn-bg" type="color" value="${b.bg_color || '#ffffff'}" class="w-10 h-10 rounded cursor-pointer border">
+                <input type="text" value="${b.bg_color || '#ffffff'}" class="flex-1 px-2 py-1 border rounded text-xs" 
+                       oninput="document.getElementById('bn-bg').value=this.value" readonly>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">텍스트 색상</label>
+              <div class="flex gap-2">
+                <input id="bn-tc" type="color" value="${b.text_color || '#000000'}" class="w-10 h-10 rounded cursor-pointer border">
+                <input type="text" value="${b.text_color || '#000000'}" class="flex-1 px-2 py-1 border rounded text-xs" readonly>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">링크 타겟</label>
+              <select id="bn-target" class="w-full px-3 py-2 border rounded-lg text-sm">
+                <option value="_blank" ${b.link_target === '_blank' ? 'selected' : ''}>새 탭</option>
+                <option value="_self" ${b.link_target === '_self' ? 'selected' : ''}>현재 탭</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">노출 시작일</label>
+              <input id="bn-start" type="datetime-local" value="${b.start_date ? b.start_date.replace(' ', 'T').substring(0, 16) : ''}"
+                     class="w-full px-3 py-2 border rounded-lg text-sm">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">노출 종료일</label>
+              <input id="bn-end" type="datetime-local" value="${b.end_date ? b.end_date.replace(' ', 'T').substring(0, 16) : ''}"
+                     class="w-full px-3 py-2 border rounded-lg text-sm">
+            </div>
+          </div>
+        </div>
+      </details>
 
       <div class="flex items-center gap-2">
         <input id="bn-active" type="checkbox" ${b.is_active !== 0 ? 'checked' : ''} class="rounded">
@@ -288,9 +304,9 @@ function handleBannerImageUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  // 최대 2MB
-  if (file.size > 2 * 1024 * 1024) {
-    showToast('이미지 크기는 2MB 이하만 지원합니다.', 'error');
+  // 최대 5MB
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('이미지 크기는 5MB 이하만 지원합니다.', 'error');
     event.target.value = '';
     return;
   }
@@ -328,6 +344,8 @@ async function saveBanner(bannerId) {
     text_content: textContent || null,
     text_color: document.getElementById('bn-tc')?.value || '#000000',
     sort_order: parseInt(document.getElementById('bn-sort')?.value || '0') || 0,
+    width: parseInt(document.getElementById('bn-width')?.value) || null,
+    height: parseInt(document.getElementById('bn-height')?.value) || null,
     is_active: document.getElementById('bn-active')?.checked ? 1 : 0,
     start_date: document.getElementById('bn-start')?.value ? document.getElementById('bn-start').value.replace('T', ' ') + ':00' : null,
     end_date: document.getElementById('bn-end')?.value ? document.getElementById('bn-end').value.replace('T', ' ') + ':00' : null,

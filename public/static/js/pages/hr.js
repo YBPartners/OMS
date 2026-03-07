@@ -23,6 +23,7 @@ async function renderHRManagement(el) {
         <button onclick="window._hrTab='commission';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'commission' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-percent mr-1"></i>수수료 설정</button>
         <button onclick="window._hrTab='phone';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'phone' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-mobile-alt mr-1"></i>폰인증</button>
         ${isAdmin || isRegion ? `<button onclick="window._hrTab='agency';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'agency' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-store mr-1"></i>대리점 관리</button>` : ''}
+        ${isAdmin || isRegion ? `<button onclick="window._hrTab='user-regions';renderContent()" class="px-4 py-2 text-sm whitespace-nowrap ${activeTab === 'user-regions' ? 'tab-active' : 'text-gray-500'}"><i class="fas fa-map-location mr-1"></i>사용자 지역매핑</button>` : ''}
       </div>
       <div id="hr-content"></div>
     </div>`;
@@ -37,6 +38,7 @@ async function renderHRManagement(el) {
     case 'commission': await renderHRCommission(hrEl); break;
     case 'phone': renderHRPhone(hrEl); break;
     case 'agency': await renderHRAgency(hrEl); break;
+    case 'user-regions': await renderHRUserRegions(hrEl); break;
   }
 
   } catch (e) {
@@ -321,10 +323,10 @@ async function renderHROrgs(el) {
             <span><i class="fas fa-user-tie mr-1"></i>팀장 ${o.active_leaders || 0}명</span>
             ${o.child_team_count ? `<span><i class="fas fa-sitemap mr-1"></i>하위팀 ${o.child_team_count}개</span>` : ''}
           </div>
-          ${canEdit('admin') ? `
+          ${(canEdit('admin') || canEdit('policy')) ? `
           <div class="flex gap-2 mt-3 pt-3 border-t">
-            <button onclick='showEditOrgModal(${JSON.stringify(o).replace(/'/g,"&#39;")})' class="px-3 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-edit mr-1"></i>수정</button>
-            ${o.org_type !== 'HQ' ? (o.status === 'ACTIVE' ? `<button onclick="deactivateOrg(${o.org_id},'${o.name.replace(/'/g,"\\'")}')" class="px-3 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100"><i class="fas fa-ban mr-1"></i>비활성화</button>` : `<button onclick="reactivateOrg(${o.org_id})" class="px-3 py-1 bg-green-50 text-green-600 rounded text-xs hover:bg-green-100"><i class="fas fa-check mr-1"></i>활성화</button>`) : ''}
+            <button onclick='showEditOrgModal(${JSON.stringify(o).replace(/'/g,"&#39;")})' class="px-3 py-1 bg-blue-50 text-blue-700 rounded text-xs hover:bg-blue-100 font-medium"><i class="fas fa-edit mr-1"></i>수정</button>
+            ${o.org_type !== 'HQ' && canEdit('admin') ? (o.status === 'ACTIVE' ? `<button onclick="deactivateOrg(${o.org_id},'${o.name.replace(/'/g,"\\'")}')" class="px-3 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100"><i class="fas fa-ban mr-1"></i>비활성화</button>` : `<button onclick="reactivateOrg(${o.org_id})" class="px-3 py-1 bg-green-50 text-green-600 rounded text-xs hover:bg-green-100"><i class="fas fa-check mr-1"></i>활성화</button>`) : ''}
           </div>` : ''}
         </div>
       `).join('')}
@@ -1024,4 +1026,206 @@ async function removeTeamFromAgency(agencyUserId, teamUserId, teamName, agencyNa
   console.error('[removeTeamFromAgency]', e);
   if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 사용자별 지역 매핑 (주문 수취 권한) — user-regions 탭
+// ═══════════════════════════════════════════════════════════════
+
+async function renderHRUserRegions(el) {
+  try {
+    showSkeletonLoading(el, 'table');
+    const res = await api('GET', '/hr/user-region-mappings');
+    const users = res?.users || [];
+
+    el.innerHTML = `
+      <div class="bg-white rounded-xl p-4 mb-4 border border-gray-100">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="font-semibold text-gray-800"><i class="fas fa-map-location mr-2 text-indigo-500"></i>사용자별 지역 매핑 (주문 수취 권한)</h3>
+            <p class="text-xs text-gray-500 mt-1">각 팀장에게 특정 행정동을 매핑하여 해당 지역 주문 수취 권한을 부여합니다.</p>
+          </div>
+        </div>
+      </div>
+
+      ${renderDataTable({
+        columns: [
+          { key: 'user_id', label: 'ID', render: u => '<span class="font-mono text-xs text-gray-400">' + u.user_id + '</span>' },
+          { key: 'name', label: '이름', render: u => '<span class="font-medium">' + escapeHtml(u.name) + '</span>' },
+          { key: 'login_id', label: '로그인ID', render: u => '<span class="text-xs font-mono">' + escapeHtml(u.login_id) + '</span>' },
+          { key: 'org_name', label: '소속', render: u => '<span class="text-xs">' + escapeHtml(u.org_name) + ' <span class="text-gray-400">(' + u.org_type + ')</span></span>' },
+          { key: 'mapped_count', label: '매핑 지역수', align: 'center', render: u => u.mapped_count > 0 
+            ? '<span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">' + u.mapped_count + '개</span>'
+            : '<span class="text-gray-400 text-xs">없음</span>' },
+          { key: '_actions', label: '관리', align: 'center', render: u => 
+            '<button onclick="showUserRegionDetail(' + u.user_id + ',\'' + escapeHtml(u.name).replace(/'/g, "\\'") + '\')" class="px-3 py-1 bg-indigo-50 text-indigo-700 rounded text-xs hover:bg-indigo-100"><i class="fas fa-map-location-dot mr-1"></i>지역 관리</button>' },
+        ],
+        rows: users,
+        sortable: true,
+        emptyText: '사용자가 없습니다.',
+        caption: '사용자별 지역 매핑 현황',
+      })}`;
+  } catch (e) {
+    console.error('[renderHRUserRegions]', e);
+    el.innerHTML = '<div class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>로드 실패</p><p class="text-xs mt-1 text-gray-400">' + (e.message||e) + '</p></div>';
+  }
+}
+
+async function showUserRegionDetail(userId, userName) {
+  try {
+    showToast('지역 매핑 정보 로드 중...', 'info');
+    const res = await api('GET', '/hr/users/' + userId + '/regions');
+    if (!res) return;
+
+    const mappings = res.mappings || [];
+    const user = res.user || {};
+
+    // 시도별 그룹핑
+    const grouped = {};
+    mappings.forEach(m => {
+      const key = m.sido + ' ' + m.sigungu;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(m);
+    });
+
+    const content = `
+      <div class="space-y-4">
+        <div class="bg-indigo-50 rounded-xl p-4 border border-indigo-200">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-indigo-200 rounded-lg flex items-center justify-center">
+              <i class="fas fa-user text-indigo-600"></i>
+            </div>
+            <div>
+              <div class="font-bold text-indigo-800">${escapeHtml(userName)}</div>
+              <div class="text-xs text-indigo-600">${escapeHtml(user.org_name || '')} · 매핑 ${mappings.length}개</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 현재 매핑된 지역 -->
+        <div>
+          <h4 class="font-semibold text-sm mb-2"><i class="fas fa-map-marker-alt mr-1 text-blue-500"></i>매핑된 지역 (${mappings.length}개)</h4>
+          ${mappings.length > 0 ? `
+          <div class="max-h-48 overflow-y-auto space-y-1">
+            ${Object.entries(grouped).map(([area, items]) => `
+              <div class="bg-gray-50 rounded-lg p-2">
+                <div class="text-xs font-medium text-gray-700 mb-1">${escapeHtml(area)}</div>
+                <div class="flex flex-wrap gap-1">
+                  ${items.map(m => `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">
+                      ${escapeHtml(m.eupmyeondong)}
+                      <button onclick="removeUserRegion(${userId}, ${m.mapping_id}, '${escapeHtml(userName).replace(/'/g, "\\'")}', '${escapeHtml(m.eupmyeondong).replace(/'/g, "\\'")}')" 
+                              class="ml-0.5 text-blue-400 hover:text-red-500" title="삭제">
+                        <i class="fas fa-times text-[8px]"></i>
+                      </button>
+                    </span>
+                  `).join('')}
+                </div>
+              </div>
+            `).join('')}
+          </div>` : '<div class="text-sm text-gray-400 text-center py-4">매핑된 지역이 없습니다.</div>'}
+        </div>
+
+        <!-- 지역 추가 -->
+        <div class="border-t pt-4">
+          <h4 class="font-semibold text-sm mb-2"><i class="fas fa-plus-circle mr-1 text-green-500"></i>지역 추가</h4>
+          <div class="grid grid-cols-3 gap-2 mb-2">
+            <select id="urm-sido" onchange="loadUrmSigungu()" class="px-2 py-1.5 border rounded text-xs">
+              <option value="">시/도 선택</option>
+            </select>
+            <select id="urm-sigungu" onchange="loadUrmDong()" class="px-2 py-1.5 border rounded text-xs">
+              <option value="">시/군/구 선택</option>
+            </select>
+            <select id="urm-dong" multiple class="px-2 py-1.5 border rounded text-xs" style="min-height:80px">
+            </select>
+          </div>
+          <button onclick="addUserRegions(${userId}, '${escapeHtml(userName).replace(/'/g, "\\'")}')" 
+                  class="w-full px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition">
+            <i class="fas fa-plus mr-1"></i>선택한 지역 추가
+          </button>
+        </div>
+      </div>`;
+
+    showModal('사용자 지역 매핑 — ' + escapeHtml(userName), content, `
+      <button onclick="closeModal();renderContent()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>
+    `, { large: true });
+
+    // 시도 목록 로드
+    loadUrmSido();
+  } catch (e) {
+    console.error('[showUserRegionDetail]', e);
+    showToast('처리 실패: ' + (e.message || e), 'error');
+  }
+}
+
+async function loadUrmSido() {
+  try {
+    const res = await api('GET', '/hr/admin-regions?group=sido');
+    const select = document.getElementById('urm-sido');
+    if (!select || !res?.sidos) return;
+    select.innerHTML = '<option value="">시/도 선택</option>' + res.sidos.map(s => '<option value="' + s + '">' + s + '</option>').join('');
+  } catch (e) {}
+}
+
+async function loadUrmSigungu() {
+  try {
+    const sido = document.getElementById('urm-sido')?.value;
+    const select = document.getElementById('urm-sigungu');
+    const dongSelect = document.getElementById('urm-dong');
+    if (!select) return;
+    select.innerHTML = '<option value="">시/군/구 선택</option>';
+    if (dongSelect) dongSelect.innerHTML = '';
+    if (!sido) return;
+    const res = await api('GET', '/hr/admin-regions?sido=' + encodeURIComponent(sido) + '&group=sigungu');
+    if (res?.sigungus) {
+      select.innerHTML = '<option value="">시/군/구 선택</option>' + res.sigungus.map(s => '<option value="' + s + '">' + s + '</option>').join('');
+    }
+  } catch (e) {}
+}
+
+async function loadUrmDong() {
+  try {
+    const sido = document.getElementById('urm-sido')?.value;
+    const sigungu = document.getElementById('urm-sigungu')?.value;
+    const select = document.getElementById('urm-dong');
+    if (!select) return;
+    select.innerHTML = '';
+    if (!sido || !sigungu) return;
+    const res = await api('GET', '/hr/admin-regions?sido=' + encodeURIComponent(sido) + '&sigungu=' + encodeURIComponent(sigungu));
+    if (res?.regions) {
+      select.innerHTML = res.regions.map(r => '<option value="' + r.region_id + '">' + escapeHtml(r.eupmyeondong) + '</option>').join('');
+    }
+  } catch (e) {}
+}
+
+async function addUserRegions(userId, userName) {
+  try {
+    const select = document.getElementById('urm-dong');
+    if (!select) return;
+    const regionIds = Array.from(select.selectedOptions).map(opt => Number(opt.value));
+    if (regionIds.length === 0) { showToast('추가할 지역(읍면동)을 선택하세요.', 'warning'); return; }
+
+    const res = await api('POST', '/hr/users/' + userId + '/regions', { region_ids: regionIds });
+    if (res?.ok) {
+      showToast(res.message || '지역 추가 완료', 'success');
+      closeModal();
+      showUserRegionDetail(userId, userName);
+    } else {
+      showToast(res?.error || '추가 실패', 'error');
+    }
+  } catch (e) {
+    showToast('처리 실패: ' + (e.message || e), 'error');
+  }
+}
+
+async function removeUserRegion(userId, mappingId, userName, dongName) {
+  showConfirmModal('지역 매핑 삭제', `<strong>${userName}</strong>님의 "<strong>${dongName}</strong>" 매핑을 삭제하시겠습니까?`,
+    async () => {
+      const res = await api('DELETE', '/hr/users/' + userId + '/regions/' + mappingId);
+      if (res?.ok) {
+        showToast('삭제 완료', 'success');
+        closeModal();
+        showUserRegionDetail(userId, userName);
+      } else showToast(res?.error || '삭제 실패', 'error');
+    }, '삭제', 'bg-red-600');
 }

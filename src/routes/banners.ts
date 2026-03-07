@@ -19,7 +19,7 @@ banners.get('/public', async (c) => {
 
     let query = `
       SELECT banner_id, title, image_url, image_base64, link_url, link_target,
-             position, bg_color, text_content, text_color, sort_order
+             position, bg_color, text_content, text_color, sort_order, width, height
       FROM banners
       WHERE is_active = 1
         AND (start_date IS NULL OR start_date <= ?)
@@ -309,7 +309,7 @@ banners.post('/admin', async (c) => {
     const db = c.env.DB;
     const user = c.get('user')!;
     const body = await c.req.json();
-    const { title, image_url, image_base64, link_url, link_target, position, bg_color, text_content, text_color, sort_order, is_active, start_date, end_date } = body;
+    const { title, image_url, image_base64, link_url, link_target, position, bg_color, text_content, text_color, sort_order, is_active, start_date, end_date, width, height } = body;
 
     // 유효성 검증
     if (!title || title.trim().length === 0) return c.json({ error: '배너 제목은 필수입니다.' }, 400);
@@ -326,9 +326,13 @@ banners.post('/admin', async (c) => {
     const target = link_target || '_blank';
     if (!validTargets.includes(target)) return c.json({ error: '유효하지 않은 링크 타겟입니다.' }, 400);
 
+    // 크기 유효성 검증
+    const w = width ? Math.min(Math.max(parseInt(width), 100), 2000) : null;
+    const h = height ? Math.min(Math.max(parseInt(height), 40), 800) : null;
+
     const result = await db.prepare(`
-      INSERT INTO banners (title, image_url, image_base64, link_url, link_target, position, bg_color, text_content, text_color, sort_order, is_active, start_date, end_date, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO banners (title, image_url, image_base64, link_url, link_target, position, bg_color, text_content, text_color, sort_order, is_active, start_date, end_date, width, height, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       title.trim(),
       image_url || null,
@@ -343,6 +347,8 @@ banners.post('/admin', async (c) => {
       is_active ?? 1,
       start_date || null,
       end_date || null,
+      w,
+      h,
       user.user_id
     ).run();
 
@@ -375,7 +381,7 @@ banners.put('/admin/:banner_id', async (c) => {
     if (!existing) return c.json({ error: '배너를 찾을 수 없습니다.' }, 404);
 
     const body = await c.req.json();
-    const { title, image_url, image_base64, link_url, link_target, position, bg_color, text_content, text_color, sort_order, is_active, start_date, end_date } = body;
+    const { title, image_url, image_base64, link_url, link_target, position, bg_color, text_content, text_color, sort_order, is_active, start_date, end_date, width, height } = body;
 
     if (title && title.length > 100) return c.json({ error: '배너 제목은 100자 이내입니다.' }, 400);
 
@@ -384,6 +390,10 @@ banners.put('/admin/:banner_id', async (c) => {
 
     const validTargets = ['_blank', '_self'];
     if (link_target && !validTargets.includes(link_target)) return c.json({ error: '유효하지 않은 링크 타겟입니다.' }, 400);
+
+    // 크기 유효성 검증
+    const w = width !== undefined ? (width ? Math.min(Math.max(parseInt(width), 100), 2000) : null) : undefined;
+    const h = height !== undefined ? (height ? Math.min(Math.max(parseInt(height), 40), 800) : null) : undefined;
 
     await db.prepare(`
       UPDATE banners SET
@@ -400,6 +410,8 @@ banners.put('/admin/:banner_id', async (c) => {
         is_active = COALESCE(?, is_active),
         start_date = ?,
         end_date = ?,
+        width = COALESCE(?, width),
+        height = COALESCE(?, height),
         updated_at = datetime('now')
       WHERE banner_id = ?
     `).bind(
@@ -416,6 +428,8 @@ banners.put('/admin/:banner_id', async (c) => {
       is_active ?? null,
       start_date ?? null,
       end_date ?? null,
+      w ?? null,
+      h ?? null,
       bannerId
     ).run();
 

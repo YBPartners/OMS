@@ -307,7 +307,7 @@ function initHoverPreview() {
           maxWidth: '400px'
         });
       }
-    }, 350); // 350ms 딜레이
+    }, 3000); // 3초 딜레이 — 빠른 마우스 이동 시 불필요한 팝업 방지
   });
 
   document.addEventListener('mouseout', (e) => {
@@ -876,11 +876,75 @@ function initInteractionSystem() {
   });
 }
 
+// ────────────────────────────────────────
+//  13. DEBOUNCE / THROTTLE — 연속 클릭 방지
+// ────────────────────────────────────────
+const _btnProcessing = new WeakSet();
+
+/** 버튼 연속 클릭 방지 래퍼 — 함수를 debounce */
+function withThrottle(fn, ms = 1500) {
+  let lastCall = 0;
+  return function(...args) {
+    const now = Date.now();
+    if (now - lastCall < ms) {
+      showToast('처리 중입니다. 잠시 기다려주세요.', 'info');
+      return;
+    }
+    lastCall = now;
+    return fn.apply(this, args);
+  };
+}
+
+/** 버튼 클릭 시 자동 비활성화 → API 완료 후 복원 */
+function disableBtn(btn) {
+  if (!btn || _btnProcessing.has(btn)) return false;
+  _btnProcessing.add(btn);
+  btn.disabled = true;
+  btn.dataset.origHtml = btn.innerHTML;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>처리중...';
+  btn.classList.add('opacity-60', 'pointer-events-none');
+  return true;
+}
+function enableBtn(btn) {
+  if (!btn) return;
+  _btnProcessing.delete(btn);
+  btn.disabled = false;
+  if (btn.dataset.origHtml) btn.innerHTML = btn.dataset.origHtml;
+  btn.classList.remove('opacity-60', 'pointer-events-none');
+}
+
+// 자동 클릭 쓰로틀: 모든 버튼에 대한 전역 이벤트
+let _lastClickTime = 0;
+function initClickThrottle() {
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    // 모달 닫기/취소 버튼은 제외
+    if (btn.textContent.includes('취소') || btn.textContent.includes('닫기') || btn.textContent.includes('해제')) return;
+    // 이미 처리중인 버튼 클릭 차단
+    if (btn.disabled || _btnProcessing.has(btn)) {
+      e.stopPropagation();
+      e.preventDefault();
+      return;
+    }
+    const now = Date.now();
+    if (now - _lastClickTime < 500) {
+      // 500ms 이내 연속 클릭은 무시 + 피드백
+      e.stopPropagation();
+      e.preventDefault();
+      showToast('처리 중입니다. 잠시 기다려주세요.', 'info');
+      return;
+    }
+    _lastClickTime = now;
+  }, true); // capture phase
+}
+
 // 페이지 로드 시 자동 초기화
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initInteractionSystem);
+  document.addEventListener('DOMContentLoaded', () => { initInteractionSystem(); initClickThrottle(); });
 } else {
   initInteractionSystem();
+  initClickThrottle();
 }
 
 // ============================================================

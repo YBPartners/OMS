@@ -48,10 +48,11 @@ function renderDataTable(config) {
   // 헤더 HTML
   const headerHtml = columns.map(c => {
     const align = c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left';
-    const sortAttr = (sortable || c.sortable) && c.key && c.key !== '_actions'
-      ? ` style="cursor:pointer" onclick="window._dtSort('${tId}','${c.key}')" title="정렬"`
+    const isSortable = (sortable || c.sortable) && c.key && c.key !== '_actions' && c.key !== '_chk' && c.key !== '_progress';
+    const sortAttr = isSortable
+      ? ` style="cursor:pointer" onclick="window._dtSort('${tId}','${c.key}')" title="${c.label} 기준 정렬" data-sort-key="${c.key}"`
       : '';
-    return `<th class="${px} ${align} font-medium ${c.thClass || ''}" ${c.width ? `style="width:${c.width}${sortAttr ? ';cursor:pointer' : ''}"` : sortAttr} scope="col">${c.label}${sortAttr ? ' <i class="fas fa-sort text-gray-300 text-xs ml-1"></i>' : ''}</th>`;
+    return `<th class="${px} ${align} font-medium ${c.thClass || ''}" ${c.width ? `style="width:${c.width}${isSortable ? ';cursor:pointer' : ''}"` : ''} ${sortAttr} scope="col">${c.label}${isSortable ? ' <i class="fas fa-sort text-gray-300 text-xs ml-1"></i>' : ''}</th>`;
   }).join('');
 
   // 행 렌더링 함수
@@ -183,11 +184,31 @@ window._dtSort = function(tId, key) {
   var table = document.getElementById(tId);
   if (!table) return;
   var tbody = table.querySelector('tbody');
+  var thList = Array.from(table.querySelectorAll('thead th'));
+  
+  // data-sort-key 속성 또는 인덱스 기반으로 컬럼 찾기
+  var aIdx = thList.findIndex(function(th) {
+    return th.dataset.sortKey === key;
+  });
+  if (aIdx < 0) {
+    // fallback: 헤더 텍스트 포함 검색
+    aIdx = thList.findIndex(function(th) { return th.textContent.trim().replace(/[▲▼↕]/g, '').includes(key); });
+  }
+  if (aIdx < 0) return;
+  
+  // 정렬 아이콘 업데이트
+  thList.forEach(function(th) {
+    var icon = th.querySelector('.fa-sort, .fa-sort-up, .fa-sort-down');
+    if (icon) { icon.className = 'fas fa-sort text-gray-300 text-xs ml-1'; }
+  });
+  var activeIcon = thList[aIdx] ? thList[aIdx].querySelector('.fa-sort, .fa-sort-up, .fa-sort-down') : null;
+  if (activeIcon) {
+    activeIcon.className = 'fas ' + (state.dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down') + ' text-blue-500 text-xs ml-1';
+  }
+
   var rows = Array.from(tbody.querySelectorAll('tr'));
 
   rows.sort(function(a, b) {
-    var aIdx = Array.from(table.querySelectorAll('thead th')).findIndex(function(th) { return th.textContent.trim().includes(key); });
-    if (aIdx < 0) return 0;
     var aVal = a.cells[aIdx] ? a.cells[aIdx].textContent.trim() : '';
     var bVal = b.cells[aIdx] ? b.cells[aIdx].textContent.trim() : '';
     var aNum = parseFloat(aVal.replace(/[^0-9.-]/g, ''));
@@ -195,7 +216,7 @@ window._dtSort = function(tId, key) {
     if (!isNaN(aNum) && !isNaN(bNum)) {
       return state.dir === 'asc' ? aNum - bNum : bNum - aNum;
     }
-    return state.dir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+    return state.dir === 'asc' ? aVal.localeCompare(bVal, 'ko') : bVal.localeCompare(aVal, 'ko');
   });
 
   rows.forEach(function(row) { tbody.appendChild(row); });

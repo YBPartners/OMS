@@ -86,6 +86,7 @@ async function renderOrders(el) {
         rows: orders,
         tbodyId: 'order-table-body',
         compact: true,
+        sortable: true,
         caption: '주문 목록',
         rowClass: o => orderListState.selected.has(o.order_id) ? 'bg-blue-50' : '',
         rowAttrs: o => `onclick="handleOrderRowClick(event, ${o.order_id})" oncontextmenu="showOrderContextMenu(event, ${JSON.stringify(o).replace(/"/g, '&quot;')})"`,
@@ -222,10 +223,14 @@ async function showOrderDetailDrawer(orderId) {
       <div>
         <h4 class="font-semibold text-sm mb-2"><i class="fas fa-clipboard-check mr-1 text-green-500"></i>검수 이력</h4>
         <div class="space-y-2">${res.reviews.map(r => `
-          <div class="bg-gray-50 rounded-lg p-3 text-sm flex items-center justify-between">
-            <div><span class="font-medium">${r.stage === 'REGION' ? '지역 1차' : 'HQ 2차'}</span>
-              <span class="ml-2 ${r.result === 'APPROVE' ? 'text-green-600' : 'text-red-600'}">${r.result === 'APPROVE' ? '승인' : '반려'}</span></div>
-            <div class="text-gray-500 text-xs">${r.reviewer_name} · ${formatDate(r.reviewed_at)}</div>
+          <div class="bg-gray-50 rounded-lg p-3 text-sm">
+            <div class="flex items-center justify-between">
+              <div><span class="font-medium">${r.stage === 'REGION' ? '지역 1차' : 'HQ 2차'}</span>
+                <span class="ml-2 ${r.result === 'APPROVE' ? 'text-green-600' : 'text-red-600'}">${r.result === 'APPROVE' ? '승인' : '반려'}</span></div>
+              <div class="text-gray-500 text-xs">${r.reviewer_name} · ${formatDate(r.reviewed_at)}</div>
+            </div>
+            ${r.comment ? `<div class="mt-1.5 text-xs text-gray-600 bg-white rounded p-2 border border-gray-100"><i class="fas fa-comment text-gray-300 mr-1"></i>${r.comment}</div>` : ''}
+            ${r.reason_codes_json && r.reason_codes_json !== '[]' ? (() => { try { const codes = JSON.parse(r.reason_codes_json); return codes.length > 0 ? '<div class="mt-1 flex gap-1 flex-wrap">' + codes.map(c => '<span class="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded">' + (OMS.REJECT_REASONS?.find(rr => rr.code === c)?.label || c) + '</span>').join('') + '</div>' : ''; } catch(e) { return ''; } })() : ''}
           </div>`).join('')}</div>
       </div>` : ''}
 

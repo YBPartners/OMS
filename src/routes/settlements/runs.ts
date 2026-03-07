@@ -10,6 +10,33 @@ import { normalizePagination } from '../../lib/validators';
 
 export function mountRuns(router: Hono<Env>) {
 
+  // ─── 정산 대기 주문 (HQ_APPROVED 이지만 아직 정산 미포함) ───
+  router.get('/pending-orders', async (c) => {
+    const authErr = requireAuth(c);
+    if (authErr) return authErr;
+
+    const db = c.env.DB;
+    const result = await db.prepare(`
+      SELECT o.order_id, o.customer_name, o.address_text, o.base_amount, o.requested_date,
+             o.service_type, o.status, o.updated_at,
+             od.region_org_id, org.name as region_name,
+             oa.team_leader_id, tl.name as team_leader_name,
+             ch.name as channel_name
+      FROM orders o
+      LEFT JOIN order_distributions od ON o.order_id = od.order_id AND od.status = 'ACTIVE'
+      LEFT JOIN organizations org ON od.region_org_id = org.org_id
+      LEFT JOIN order_assignments oa ON o.order_id = oa.order_id AND oa.status = 'HQ_APPROVED'
+      LEFT JOIN users tl ON oa.team_leader_id = tl.user_id
+      LEFT JOIN order_channels ch ON o.channel_id = ch.channel_id
+      WHERE o.status = 'HQ_APPROVED'
+        AND o.order_id NOT IN (SELECT order_id FROM settlements WHERE status IN ('PENDING','CONFIRMED','PAID'))
+      ORDER BY o.updated_at DESC
+      LIMIT 200
+    `).all();
+
+    return c.json({ orders: result.results, total: result.results.length });
+  });
+
   // ─── 정산 Run 목록 (REGION/TEAM도 조회 가능하도록 확장) ───
   router.get('/runs', async (c) => {
     const authErr = requireAuth(c);

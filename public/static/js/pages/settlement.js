@@ -8,8 +8,12 @@
 async function renderSettlement(el) {
   try {
   showSkeletonLoading(el, 'table');
-  const res = await api('GET', '/settlements/runs');
-  const runs = res?.runs || [];
+  const [runsRes, pendingRes] = await Promise.all([
+    api('GET', '/settlements/runs'),
+    api('GET', '/settlements/pending-orders'),
+  ]);
+  const runs = runsRes?.runs || [];
+  const pendingOrders = pendingRes?.orders || [];
 
   el.innerHTML = `
     <div class="fade-in">
@@ -20,6 +24,44 @@ async function renderSettlement(el) {
           ${canEdit('policy') ? `<button onclick="showCreateRunModal()" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700 transition"><i class="fas fa-plus mr-1"></i>정산 Run 생성</button>` : ''}
         </div>
       </div>
+
+      <!-- 정산 대기 (HQ 승인 완료) 주문 안내 -->
+      ${pendingOrders.length > 0 ? `
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-amber-200 rounded-lg flex items-center justify-center">
+              <i class="fas fa-hourglass-half text-amber-700"></i>
+            </div>
+            <div>
+              <div class="font-semibold text-amber-800">정산 대기 주문 <span class="text-lg">${pendingOrders.length}</span>건</div>
+              <div class="text-xs text-amber-600">HQ 최종 승인 완료 후 정산 Run에 포함되지 않은 주문입니다.</div>
+            </div>
+          </div>
+          ${canEdit('policy') ? `<button onclick="showCreateRunModal()" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700 transition">
+            <i class="fas fa-calculator mr-1"></i>정산 Run 생성
+          </button>` : ''}
+        </div>
+        <div class="mt-3 max-h-40 overflow-y-auto">
+          <table class="w-full text-xs">
+            <thead class="text-gray-500"><tr>
+              <th class="py-1 text-left">주문</th><th class="py-1 text-left">고객</th>
+              <th class="py-1 text-left">팀장</th><th class="py-1 text-right">금액</th>
+              <th class="py-1 text-left">요청일</th>
+            </tr></thead>
+            <tbody class="divide-y divide-amber-100">
+              ${pendingOrders.slice(0, 20).map(o => `<tr class="hover:bg-amber-100/50 cursor-pointer" onclick="showOrderDetailDrawer(${o.order_id})">
+                <td class="py-1.5 text-blue-600">#${o.order_id}</td>
+                <td class="py-1.5">${o.customer_name || '-'}</td>
+                <td class="py-1.5">${o.team_leader_name || '-'}</td>
+                <td class="py-1.5 text-right font-medium">${formatAmount(o.base_amount)}</td>
+                <td class="py-1.5 text-gray-500">${o.requested_date || '-'}</td>
+              </tr>`).join('')}
+              ${pendingOrders.length > 20 ? `<tr><td colspan="5" class="py-1.5 text-center text-amber-600">... 외 ${pendingOrders.length - 20}건</td></tr>` : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>` : ''}
 
       <!-- 요약 카드 -->
       ${runs.length > 0 ? `
