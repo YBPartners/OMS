@@ -585,24 +585,55 @@ system.post('/push/unsubscribe', async (c) => {
 });
 
 // ─── 주소 → 행정동코드 조회 ───
+// ─── 화성시 분구 매핑 (2026.02.01 시행) ───
+// 카카오 주소 API가 sigungu로 '만세구','효행구','병점구','동탄구'를 반환함
+// DB에는 sigungu='화성시'로 저장되어 있으므로 변환 필요
+const HWASEONG_GU_TO_DONG: Record<string, string[]> = {
+  '만세구': ['우정읍','향남읍','남양읍','마도면','송산면','서신면','팔탄면','장안면','양감면','새솔동'],
+  '효행구': ['봉담읍','매송면','비봉면','정남면','기배동'],
+  '병점구': ['진안동','병점동','반월동','화산동'],
+  '동탄구': ['동탄','동탄동','능동'],
+};
+const HWASEONG_GU_NAMES = Object.keys(HWASEONG_GU_TO_DONG);
+
 system.get('/address-lookup', async (c) => {
   const user = c.get('user');
   if (!user) return c.json({ error: '인증 필요' }, 401);
 
   const db = c.env.DB;
   const sido = c.req.query('sido') || '';
-  const sigungu = c.req.query('sigungu') || '';
+  let sigungu = c.req.query('sigungu') || '';
   const dong = c.req.query('dong') || '';
 
   if (!sido || !sigungu) return c.json({ error: 'sido, sigungu 필수' }, 400);
 
+  // ── 화성시 분구 처리: sigungu가 만세구/효행구/병점구/동탄구인 경우 ──
+  let hwaseongGu = '';
+  if (HWASEONG_GU_NAMES.includes(sigungu)) {
+    hwaseongGu = sigungu;
+    sigungu = '화성시';  // DB에서는 '화성시'로 조회
+  }
+
   let query = 'SELECT region_id, admin_code, sido, sigungu, eupmyeondong, full_name FROM admin_regions WHERE sido LIKE ? AND sigungu LIKE ?';
   const params: string[] = [`%${sido}%`, `%${sigungu}%`];
 
-  if (dong) {
+  // 화성시 분구인 경우: 해당 구의 행정동만 필터링
+  if (hwaseongGu && HWASEONG_GU_TO_DONG[hwaseongGu]) {
+    const dongList = HWASEONG_GU_TO_DONG[hwaseongGu];
+    // dong 파라미터가 있으면 그 동만, 없으면 구 소속 전체 동
+    if (dong) {
+      query += ' AND eupmyeondong LIKE ?';
+      params.push(`%${dong}%`);
+    } else {
+      const placeholders = dongList.map(() => 'eupmyeondong LIKE ?').join(' OR ');
+      query += ` AND (${placeholders})`;
+      params.push(...dongList.map(d => `%${d}%`));
+    }
+  } else if (dong) {
     query += ' AND eupmyeondong LIKE ?';
     params.push(`%${dong}%`);
   }
+
   query += ' ORDER BY full_name LIMIT 20';
 
   const results = await db.prepare(query).bind(...params).all();
