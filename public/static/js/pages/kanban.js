@@ -665,54 +665,5 @@ async function executeBatchAssign(orderIds, leaderId) {
   }
 }
 
-// ─── 개별 배정 모달 (기존 호환) ───
-async function showAssignModal(orderId) {
-  try {
-  const orgId = currentUser.org_id;
-  const leadersRes = await api('GET', `/auth/team-leaders?org_id=${orgId}`);
-  const leaders = leadersRes?.team_leaders || [];
-
-  const content = `
-    <div class="space-y-4">
-      <p class="text-sm text-gray-600">주문 <strong>#${orderId}</strong>을 배정할 팀장을 선택하세요.</p>
-      <div class="space-y-2">
-        ${leaders.map(l => `
-          <button onclick="assignToLeader(${orderId}, ${l.user_id})" 
-            class="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-lg hover:bg-purple-50 hover:border-purple-300 border border-gray-200 transition">
-            <div class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-              <i class="fas fa-user text-purple-600"></i>
-            </div>
-            <div class="text-left flex-1">
-              <div class="font-medium">${l.name}</div>
-              <div class="text-xs text-gray-500">${l.org_name || ''} · ${formatPhone(l.phone)}</div>
-            </div>
-            <i class="fas fa-arrow-right text-gray-400"></i>
-          </button>
-        `).join('')}
-      </div>
-    </div>`;
-  showModal(`팀장 배정 — 주문 #${orderId}`, content);
-
-  } catch (e) {
-  console.error('[showAssignModal]', e);
-  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
-  }
-}
-
-async function assignToLeader(orderId, leaderId) {
-  try {
-  const res = await api('POST', `/orders/${orderId}/assign`, { team_leader_id: leaderId });
-  if (res?.ok) {
-    showToast('팀장 배정 완료', 'success');
-    closeModal();
-    kanbanState.selected.delete(orderId);
-    renderContent();
-  } else {
-    showToast(res?.error || '배정 실패', 'error');
-  }
-
-  } catch (e) {
-  console.error('[assignToLeader]', e);
-  if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
-  }
-}
+// ─── 개별 배정: interactions.js의 showAssignModal / assignToLeader 사용 ───
+// (kanban.js 중복 제거 — 주문 배분 지역법인 기준 필터링 버전은 core/interactions.js에 정의)
