@@ -16,5 +16,11 @@
       "binding": "SESSION_CACHE",
       "id": "5024085768aa47ba943e4e65a454795e"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PHOTO_BUCKET",
+      "bucket_name": "dahada-oms-photos"
+    }
   ]
 }

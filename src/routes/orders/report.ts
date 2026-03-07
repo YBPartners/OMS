@@ -82,20 +82,35 @@ export function mountReport(router: Hono<Env>) {
     // 규칙화된 파일명 생성
     const fileName = generateFileName(today, teamCode, category, orderId, ext);
 
-    // 파일 → Base64 Data URL
+    // ★ R2 스토리지 업로드 (base64 DB 저장 → R2 전환)
     const arrayBuffer = await file.arrayBuffer();
-    const uint8 = new Uint8Array(arrayBuffer);
-    let binary = '';
-    for (let i = 0; i < uint8.length; i++) {
-      binary += String.fromCharCode(uint8[i]);
-    }
-    const base64 = btoa(binary);
-    const dataUrl = `data:${file.type};base64,${base64}`;
+    // R2 키는 영문 기반 (한글 URL 인코딩 문제 방지)
+    const timestamp = Date.now();
+    const r2Key = `photos/${orderId}/${category}/${timestamp}_${orderId}.${ext}`;
 
-    // DB 저장
+    // R2에 업로드
+    const r2 = c.env.PHOTO_BUCKET;
+    if (r2) {
+      await r2.put(r2Key, arrayBuffer, {
+        httpMetadata: { contentType: file.type },
+        customMetadata: { orderId: String(orderId), category, uploadedBy: String(user.user_id) },
+      });
+    } else {
+      // R2 미설정 시 fallback: base64 Data URL (로컬 개발 호환)
+      console.warn('[upload] R2 PHOTO_BUCKET not bound, falling back to base64');
+    }
+
+    // file_url: R2 키 경로 (조회 시 /api/orders/:id/photos/:photo_id 라우트로 서빙)
+    const fileUrl = r2 ? `/api/orders/${orderId}/photo/${r2Key}` : (() => {
+      const uint8 = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+      return `data:${file.type};base64,${btoa(binary)}`;
+    })();
+
+    // DB 저장 (file_url에 R2 경로 또는 base64 저장)
     let targetReportId = reportId;
     if (!targetReportId) {
-      // 최신 보고서 찾기 또는 임시 보고서 생성
       const latestReport = await db.prepare(
         'SELECT report_id FROM work_reports WHERE order_id = ? ORDER BY version DESC LIMIT 1'
       ).bind(orderId).first();
@@ -106,12 +121,13 @@ export function mountReport(router: Hono<Env>) {
       const result = await db.prepare(`
         INSERT INTO work_report_photos (report_id, category, file_url, file_name, file_size, mime_type)
         VALUES (?, ?, ?, ?, ?, ?)
-      `).bind(targetReportId, category, dataUrl, fileName, file.size, file.type).run();
+      `).bind(targetReportId, category, fileUrl, fileName, file.size, file.type).run();
 
       return c.json({
         ok: true,
         photo_id: result.meta.last_row_id,
         file_name: fileName,
+        file_url: fileUrl,
         category,
         file_size: file.size,
       }, 201);
@@ -120,11 +136,11 @@ export function mountReport(router: Hono<Env>) {
     // 보고서가 아직 없으면 file_url만 반환 (프론트에서 임시 보관 후 보고서 제출 시 함께 전송)
     return c.json({
       ok: true,
-      file_url: dataUrl,
+      file_url: fileUrl,
       file_name: fileName,
       category,
       file_size: file.size,
-      pending: true,  // 보고서 제출 시 함께 저장 필요
+      pending: true,
     }, 201);
   });
 
@@ -212,10 +228,33 @@ export function mountReport(router: Hono<Env>) {
           JSON.stringify(body.checklist || {}), body.note ?? null, newVersion).run();
         const reportId = reportResult.meta.last_row_id;
 
-        // 사진 첨부 (Base64 Data URL 또는 외부 URL)
+        // 사진 첨부 — R2 업로드 또는 기존 Data URL 호환
         if (body.photos && Array.isArray(body.photos)) {
+          const r2 = c.env.PHOTO_BUCKET;
           for (const photo of body.photos) {
-            const photoUrl = photo.file_url || photo.url || '';
+            let photoUrl = photo.file_url || photo.url || '';
+
+            // base64 Data URL인 경우 R2로 마이그레이션
+            if (r2 && photoUrl.startsWith('data:')) {
+              try {
+                const [header, b64data] = photoUrl.split(',');
+                const mimeMatch = header.match(/data:([^;]+)/);
+                const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+                const binary = atob(b64data);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                const ext = mime.split('/')[1] || 'jpg';
+                const r2Key = `photos/${orderId}/${(photo.category || 'ETC')}/${Date.now()}_${reportId}.${ext}`;
+                await r2.put(r2Key, bytes.buffer, {
+                  httpMetadata: { contentType: mime },
+                  customMetadata: { orderId: String(orderId), category: photo.category || 'ETC' },
+                });
+                photoUrl = `/api/orders/${orderId}/photo/${r2Key}`;
+              } catch (e) {
+                console.error('[report] R2 migration failed, keeping data URL:', (e as any).message);
+              }
+            }
+
             await db.prepare(`
               INSERT INTO work_report_photos (report_id, category, file_url, file_name, file_size, mime_type, file_hash)
               VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -271,17 +310,41 @@ export function mountReport(router: Hono<Env>) {
     const result = await transitionOrder(db, orderId, 'DONE', user, {
       note: body.note || '영수증 첨부 완료 → 최종완료',
       afterTransition: async (db, order) => {
-        // 영수증 사진 첨부 (선택적 — Base64 Data URL 또는 외부 URL)
+        // 영수증 사진 첨부 — R2 업로드 또는 기존 Data URL 호환
         if (body.receipt_url) {
           const report = await db.prepare(
             'SELECT report_id FROM work_reports WHERE order_id = ? ORDER BY version DESC LIMIT 1'
           ).bind(orderId).first();
           if (report) {
+            let receiptUrl = body.receipt_url;
+            const r2 = c.env.PHOTO_BUCKET;
+
+            // base64 Data URL인 경우 R2로 마이그레이션
+            if (r2 && receiptUrl.startsWith('data:')) {
+              try {
+                const [header, b64data] = receiptUrl.split(',');
+                const mimeMatch = header.match(/data:([^;]+)/);
+                const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+                const binary = atob(b64data);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                const ext = mime.split('/')[1] || 'jpg';
+                const r2Key = `photos/${orderId}/RECEIPT/${Date.now()}_receipt.${ext}`;
+                await r2.put(r2Key, bytes.buffer, {
+                  httpMetadata: { contentType: mime },
+                  customMetadata: { orderId: String(orderId), category: 'RECEIPT' },
+                });
+                receiptUrl = `/api/orders/${orderId}/photo/${r2Key}`;
+              } catch (e) {
+                console.error('[complete] R2 receipt migration failed:', (e as any).message);
+              }
+            }
+
             await db.prepare(`
               INSERT INTO work_report_photos (report_id, category, file_url, file_name, file_size, mime_type, file_hash)
               VALUES (?, 'RECEIPT', ?, ?, ?, ?, ?)
             `).bind(
-              report.report_id, body.receipt_url,
+              report.report_id, receiptUrl,
               body.file_name ?? null, body.file_size ?? 0, body.mime_type ?? null,
               body.file_hash ?? null
             ).run();
@@ -325,5 +388,31 @@ export function mountReport(router: Hono<Env>) {
     }
 
     return c.json({ ok: true, order_id: orderId, new_status: 'DONE' });
+  });
+
+  // ─── R2 사진 서빙 (GET /orders/:order_id/photo/*) ───
+  router.get('/:order_id/photo/*', async (c) => {
+    const user = c.get('user');
+    if (!user) return c.json({ error: '인증이 필요합니다.' }, 401);
+
+    const r2 = c.env.PHOTO_BUCKET;
+    if (!r2) return c.json({ error: 'R2 스토리지가 설정되지 않았습니다.' }, 503);
+
+    // URL에서 R2 key 추출 + 디코딩
+    const url = new URL(c.req.url);
+    const pathParts = url.pathname.split('/photo/');
+    const r2Key = pathParts.length > 1 ? decodeURIComponent(pathParts[1]) : '';
+
+    if (!r2Key) return c.json({ error: '파일 키가 필요합니다.' }, 400);
+
+    const object = await r2.get(r2Key);
+    if (!object) return c.json({ error: '파일을 찾을 수 없습니다.' }, 404);
+
+    const headers = new Headers();
+    headers.set('Content-Type', object.httpMetadata?.contentType || 'image/jpeg');
+    headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+    headers.set('ETag', object.httpEtag);
+
+    return new Response(object.body, { headers });
   });
 }

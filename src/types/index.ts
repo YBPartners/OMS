@@ -38,6 +38,7 @@ export interface Env {
   Bindings: {
     DB: D1Database;
     SESSION_CACHE: KVNamespace;
+    PHOTO_BUCKET: R2Bucket;
     RESEND_API_KEY?: string;
     ASSETS?: Fetcher;
   };
