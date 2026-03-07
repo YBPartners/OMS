@@ -3,7 +3,7 @@
 // 웹 푸시 알림 수신 + 오프라인 캐시
 // ============================================================
 
-const CACHE_NAME = 'airflow-oms-v18';
+const CACHE_NAME = 'airflow-oms-v19';
 const STATIC_ASSETS = [
   '/',
   '/static/css/mobile.css',
@@ -15,6 +15,7 @@ const STATIC_ASSETS = [
   '/static/js/core/app.js',
   '/static/js/shared/table.js',
   '/static/js/shared/form-helpers.js',
+  '/static/js/shared/guide.js',
 ];
 
 // ─── 설치: 정적 자산 프리캐시 ───

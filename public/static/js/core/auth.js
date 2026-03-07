@@ -139,6 +139,28 @@ async function renderContent() {
       case 'banner-manage': await renderBannerManage(el); break;
       default: el.innerHTML = '<div class="text-center py-16 text-gray-400"><i class="fas fa-compass text-5xl mb-4"></i><p class="text-lg">페이지를 찾을 수 없습니다.</p></div>';
     }
+    
+    // ★ 온보딩 가이드 삽입 (페이지 컨텐츠 최상단)
+    if (typeof renderPageGuide === 'function') {
+      const guideHtml = renderPageGuide(currentPage);
+      if (guideHtml && el.firstChild) {
+        const guideWrapper = document.createElement('div');
+        guideWrapper.innerHTML = guideHtml;
+        // fade-in 컨테이너의 첫 번째 자식 앞에 삽입
+        const fadeIn = el.querySelector('.fade-in');
+        if (fadeIn && fadeIn.firstChild) {
+          // 헤더(h2) 다음에 삽입
+          const header = fadeIn.querySelector('h2, .flex.items-center.justify-between');
+          if (header && header.parentElement) {
+            header.parentElement.insertBefore(guideWrapper.firstElementChild, header.nextSibling);
+          } else {
+            fadeIn.insertBefore(guideWrapper.firstElementChild, fadeIn.firstChild);
+          }
+        } else {
+          el.insertBefore(guideWrapper.firstElementChild, el.firstChild);
+        }
+      }
+    }
   } catch (err) {
     console.error('[Render Error]', currentPage, err);
     el.innerHTML = `<div class="text-center py-16 text-red-400"><i class="fas fa-exclamation-triangle text-5xl mb-4"></i><p class="text-lg">페이지 로드 중 오류 발생</p><p class="text-sm mt-2">${err.message}</p><button onclick="renderContent()" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"><i class="fas fa-redo mr-1"></i>다시 시도</button></div>`;

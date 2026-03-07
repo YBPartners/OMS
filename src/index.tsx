@@ -289,7 +289,7 @@ app.get('*', async (c) => {
 });
 
 function getIndexHtml(adsenseAccount: string = ''): string {
-  const V = '28';
+  const V = '29';
   return `<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -452,6 +452,9 @@ function getIndexHtml(adsenseAccount: string = ''): string {
       });
     }
   </script>
+  
+  <!-- Onboarding guide (before app bootstrap) -->
+  <script src="/static/js/shared/guide.js?v=${V}"></script>
   
   <!-- App bootstrap (must be last) -->
   <script src="/static/js/core/app.js?v=${V}"></script>
