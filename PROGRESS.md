@@ -108,17 +108,48 @@ RECEIVED → DISTRIBUTED → ASSIGNED → CONFIRMED → IN_PROGRESS → SUBMITTE
 
 | 단계 | 범위 | 상태 |
 |------|------|------|
-| Phase 1-1 | 마이그레이션 0023: 신규 테이블 + orders 재생성 | 🔄 진행중 |
-| Phase 1-2 | seed.sql: 시군구 + 서비스항목 + 가격표 + 테스트 주문 | ⏳ 대기 |
-| Phase 1-3 | constants.js 상태/서비스유형 재정의 | ⏳ 대기 |
-| Phase 1-4 | 배분 로직 시군구 기반 재작성 (distribute.ts) | ⏳ 대기 |
-| Phase 1-5 | 주문 CRUD 백엔드 시군구 기반 재작성 (crud.ts) | ⏳ 대기 |
-| Phase 1-6 | 프론트엔드 orders.js 시군구 기반 수정 | ⏳ 대기 |
-| Phase 1-7 | HR/시스템 라우트 시군구 기반 수정 | ⏳ 대기 |
-| Phase 1-8 | 빌드 + 로컬 테스트 + 배포 | ⏳ 대기 |
-| Phase 2 | 가격확정 플로우 (팀장 UI + 자동산출 + 현장변동) | ⏳ 대기 |
-| Phase 3 | 정산 재작성 (order_items 기반) | ⏳ 대기 |
+| Phase 1-1 | 마이그레이션 0023: 신규 테이블 + orders 재생성 | ✅ 완료 |
+| Phase 1-2 | seed.sql: 시군구 + 서비스항목 + 가격표 + 테스트 주문 | ✅ 완료 |
+| Phase 1-3 | constants.js 상태/서비스유형 재정의 | ✅ 완료 |
+| Phase 1-4 | 배분 로직 시군구 기반 재작성 (distribute.ts) | ✅ 완료 |
+| Phase 1-5 | 주문 CRUD 백엔드 시군구 기반 재작성 (crud.ts) | ✅ 완료 |
+| Phase 1-6 | 프론트엔드 orders.js 시군구 기반 수정 | ✅ 완료 |
+| Phase 1-7 | HR/시스템 라우트 시군구 기반 수정 | ✅ 완료 |
+| Phase 1-8 | 빌드 + 로컬 테스트 + 배포 | ✅ 완료 |
+| Phase 2 | 가격확정 플로우 (팀장 UI + 자동산출 + 현장변동) | ✅ 완료 |
+| Phase 3 | 정산 재작성 (order_items 기반) | ✅ 완료 (2026-03-07) |
 | Phase 4 | 대시보드/HR/가이드/가격표 관리 UI | ⏳ 대기 |
+
+### Phase 3 완료 상세 — 정산 재작성 (order_items 기반) ✅ (2026-03-07)
+
+> **완료일**: 2026-03-07
+> **변경 파일**: `src/routes/settlements/calculation.ts` (v5.0 → v5.1), `src/lib/batch-builder.ts`, `public/static/js/pages/settlement.js`
+
+**핵심 변경:**
+1. **calculation.ts** — 정산 산출 엔진이 `price_confirmed=1`인 주문에 대해 `confirmed_total_sell` (order_items 합산 판매가)을 사용하도록 변환
+2. `confirmed_total_work` (수행가 합계)를 정산 산출 시 집계하여 감사 로그 + API 응답에 포함
+3. `price_confirmed=0`인 레거시 주문은 기존 `base_amount` 사용 (하위 호환)
+4. **SettlementItem** 타입에 `workAmount`, `margin`, `priceConfirmed` 필드 추가
+5. **FE (settlement.js)** — 산출 결과 메시지에 가격확정 건수/수행가/마진/레거시 건수 표시
+
+**정산 산출 로직 (변경 후):**
+```
+if (price_confirmed === 1 && confirmed_total_sell > 0):
+  effectiveSellAmount = confirmed_total_sell  (order_items 합산)
+  effectiveWorkAmount = confirmed_total_work  (수행가 합산)
+else:
+  effectiveSellAmount = base_amount  (레거시 호환)
+  effectiveWorkAmount = 0
+
+commission = rate에 따라 sell 기준 산출
+payable = sell - commission
+margin = sell - work (참고 지표)
+```
+
+**영향 범위 제한:**
+- settlement_runs 테이블: 기존 `base_amount` 컬럼에 올바른 값 저장 (= effectiveSellAmount)
+- report.ts, runs.ts: 변경 불필요 (settlements 테이블에서 올바른 값을 읽음)
+- DB 스키마: 변경 없음 (추가 마이그레이션 불필요)
 
 ---
 

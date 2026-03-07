@@ -1,6 +1,7 @@
 // ================================================================
-// Airflow OMS — 정산 산출/확정 v5.0
+// Airflow OMS — 정산 산출/확정 v5.1
 // Batch Builder + State Machine 적용
+// R3: order_items 기반 confirmed_total_sell/work 반영
 // 기존: for문 개별 INSERT → BatchBuilder 1회 batch()
 // ================================================================
 import { Hono } from 'hono';
@@ -32,6 +33,7 @@ export function mountCalculation(router: Hono<Env>) {
     // HQ_APPROVED 주문 조회 (정산 대상)
     const approvedOrders = await db.prepare(`
       SELECT o.order_id, o.base_amount, o.requested_date, o.channel_id,
+             o.price_confirmed, o.confirmed_total_sell, o.confirmed_total_work,
              od.region_org_id,
              oa.team_leader_id,
              u.org_id as team_org_id
@@ -75,15 +77,31 @@ export function mountCalculation(router: Hono<Env>) {
 
         const mode: CommissionMode = (policy?.mode || 'PERCENT') as CommissionMode;
         const rate = Number(policy?.value || 0);
-        const commissionAmount = mode === 'FIXED' ? rate : Math.round(order.base_amount * rate / 100);
-        const payableAmount = Math.max(0, order.base_amount - commissionAmount);
+
+        // ★ R3: order_items 기반 정산 (confirmed_total_sell/work 반영)
+        // price_confirmed=1: 가격 확정된 주문 → confirmed_total_sell 사용
+        // price_confirmed=0: 미확정 → 레거시 base_amount 사용 (하위 호환)
+        const isPriceConfirmed = order.price_confirmed === 1;
+        const effectiveSellAmount = isPriceConfirmed && order.confirmed_total_sell > 0
+          ? Number(order.confirmed_total_sell)
+          : Number(order.base_amount);
+        const effectiveWorkAmount = isPriceConfirmed && order.confirmed_total_work > 0
+          ? Number(order.confirmed_total_work)
+          : 0;
+
+        // 수수료: 판매가(sell) 기준 산출
+        const commissionAmount = mode === 'FIXED' ? rate : Math.round(effectiveSellAmount * rate / 100);
+        // 지급액: 판매가 - 수수료
+        const payableAmount = Math.max(0, effectiveSellAmount - commissionAmount);
+        // 수익: 판매가 - 수행가 (참고 지표)
+        const margin = effectiveWorkAmount > 0 ? effectiveSellAmount - effectiveWorkAmount : 0;
 
         items.push({
           orderId: order.order_id,
           teamLeaderId: order.team_leader_id,
           teamOrgId: order.team_org_id || undefined,
           regionOrgId: order.region_org_id,
-          baseAmount: order.base_amount,
+          baseAmount: effectiveSellAmount,
           commissionMode: mode,
           commissionRate: rate,
           commissionAmount,
@@ -91,6 +109,10 @@ export function mountCalculation(router: Hono<Env>) {
           periodType: run.period_type as string,
           periodStart: run.period_start as string,
           periodEnd: run.period_end as string,
+          // R3 추가 메타
+          workAmount: effectiveWorkAmount,
+          margin,
+          priceConfirmed: isPriceConfirmed,
         });
       } catch (err: any) {
         errors.push({ order_id: order.order_id, error: err.message });
@@ -105,12 +127,21 @@ export function mountCalculation(router: Hono<Env>) {
     const batch = buildSettlementBatch(db, runId, items);
     await batch.execute();
 
+    // R3: work_amount & margin 집계 (감사 로그에 기록)
+    const totalWork = items.reduce((s, i) => s + (i.workAmount || 0), 0);
+    const totalMargin = items.reduce((s, i) => s + (i.margin || 0), 0);
+    const confirmedCount = items.filter(i => i.priceConfirmed).length;
+
     await writeAuditLog(db, {
       entity_type: 'SETTLEMENT_RUN', entity_id: runId, action: 'CALCULATE',
       actor_id: user.user_id,
       detail_json: JSON.stringify({
         total_orders: items.length,
         total_payable_amount: items.reduce((s, i) => s + i.payableAmount, 0),
+        total_work_amount: totalWork,
+        total_margin: totalMargin,
+        price_confirmed_count: confirmedCount,
+        legacy_fallback_count: items.length - confirmedCount,
         errors: errors.length,
       }),
     });
@@ -124,6 +155,11 @@ export function mountCalculation(router: Hono<Env>) {
       total_base_amount: totalBase,
       total_commission_amount: totalCommission,
       total_payable_amount: totalPayable,
+      // R3: order_items 기반 추가 지표
+      total_work_amount: totalWork,
+      total_margin: totalMargin,
+      price_confirmed_count: confirmedCount,
+      legacy_fallback_count: items.length - confirmedCount,
     };
     if (errors.length > 0) {
       response.warnings = `${errors.length}건 산출 실패 (부분 산출 완료)`;

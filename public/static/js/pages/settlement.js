@@ -268,7 +268,16 @@ async function calculateRun(runId) {
   await apiAction('POST', `/settlements/runs/${runId}/calculate`, null, {
     confirm: { title: '정산 산출', message: `Run #${runId}의 정산을 산출하시겠습니까?<br><span class="text-xs text-gray-400">수수료 정책에 따라 자동 계산됩니다.</span>`, buttonText: '산출 실행', buttonColor: 'bg-blue-600' },
     successCheck: d => !!d?.run_id,
-    successMsg: d => `산출 완료 — ${d.total_orders}건, 지급액 ${formatAmount(d.total_payable_amount)}`,
+    successMsg: d => {
+      let msg = `산출 완료 — ${d.total_orders}건, 지급액 ${formatAmount(d.total_payable_amount)}`;
+      if (d.price_confirmed_count > 0) {
+        msg += `\n(가격확정 ${d.price_confirmed_count}건, 수행가 ${formatAmount(d.total_work_amount)}, 마진 ${formatAmount(d.total_margin)})`;
+      }
+      if (d.legacy_fallback_count > 0) {
+        msg += `\n(레거시 ${d.legacy_fallback_count}건 — base_amount 기준)`;
+      }
+      return msg;
+    },
     refresh: true
   });
 }

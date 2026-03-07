@@ -128,6 +128,10 @@ export interface SettlementItem {
   periodType: string;
   periodStart: string;
   periodEnd: string;
+  // R3: order_items 기반 추가 필드
+  workAmount?: number;       // confirmed_total_work (수행가 합계)
+  margin?: number;           // sell - work (수익 참고 지표)
+  priceConfirmed?: boolean;  // 가격 확정 여부
 }
 
 import type { CommissionMode } from '../types';
