@@ -343,7 +343,7 @@ INSERT OR IGNORE INTO distribution_policies (policy_id, name, version, rule_json
 -- ============================================================
 -- 13. 보고서 정책
 -- ============================================================
-INSERT OR IGNORE INTO report_policies (policy_id, name, required_photos_json, checklist_json, receipt_required, version, is_active) VALUES
+INSERT OR IGNORE INTO report_policies (policy_id, name, required_photos_json, required_checklist_json, require_receipt, version, is_active) VALUES
   (1, '에어컨 세척 표준 보고서 v1',
    '{"exterior_photo":1,"interior_photo":1,"before_wash":1,"after_wash":1}',
    '["작업완료확인","고객서명확인","현장정리확인","에어컨 정상가동 확인"]',
@@ -380,7 +380,7 @@ INSERT OR IGNORE INTO orders (order_id, external_order_no, customer_name, custom
 -- ============================================================
 -- 16. 주문 배분 데이터
 -- ============================================================
-INSERT OR IGNORE INTO order_distributions (order_id, region_org_id, policy_version, distributed_at, status) VALUES
+INSERT OR IGNORE INTO order_distributions (order_id, region_org_id, distribution_policy_version, distributed_at, status) VALUES
   (3, 2, 1, '2026-03-07 08:25:00', 'ACTIVE'),   -- 이영희 → 서울총판
   (4, 2, 1, '2026-03-07 08:35:00', 'ACTIVE'),   -- 박지성 → 서울총판
   (5, 2, 1, '2026-03-07 08:45:00', 'ACTIVE'),   -- 손흥민 → 서울총판

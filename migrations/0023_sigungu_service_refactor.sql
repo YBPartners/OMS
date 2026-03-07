@@ -273,6 +273,7 @@ CREATE INDEX IF NOT EXISTS idx_assignments_status ON order_assignments(status);
 
 -- 행정동 관련 테이블 삭제
 DROP TABLE IF EXISTS user_region_mappings;
+DROP TABLE IF EXISTS org_region_mappings;
 DROP TABLE IF EXISTS org_territories;
 DROP TABLE IF EXISTS territories;
 DROP TABLE IF EXISTS admin_regions;
@@ -291,5 +292,5 @@ DROP TABLE IF EXISTS admin_regions;
 --             order_items, order_item_changes
 -- 재생성: orders (시군구+가격확정 필드 추가, 행정동/서비스타입 삭제)
 --         order_assignments (CONFIRMED 상태 추가)
--- 삭제: admin_regions, territories, org_territories, user_region_mappings
+-- 삭제: admin_regions, territories, org_territories, user_region_mappings, org_region_mappings
 -- ================================================================
