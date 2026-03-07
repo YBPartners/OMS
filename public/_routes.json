@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "include": ["/*"],
+  "exclude": ["/static/*", "/manifest.json", "/sw.js", "/ads.txt"]
+}

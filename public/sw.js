@@ -3,7 +3,7 @@
 // 웹 푸시 알림 수신 + 오프라인 캐시
 // ============================================================
 
-const CACHE_NAME = 'airflow-oms-v17';
+const CACHE_NAME = 'airflow-oms-v18';
 const STATIC_ASSETS = [
   '/',
   '/static/css/mobile.css',

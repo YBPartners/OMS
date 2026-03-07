@@ -289,7 +289,7 @@ app.get('*', async (c) => {
 });
 
 function getIndexHtml(adsenseAccount: string = ''): string {
-  const V = '27';
+  const V = '28';
   return `<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -302,7 +302,8 @@ function getIndexHtml(adsenseAccount: string = ''): string {
   <meta name="google-adsense-account" content="${adsenseAccount}">
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseAccount}" crossorigin="anonymous"></script>
   <link rel="icon" type="image/png" href="/static/img/airflow-logo.png">
-  <link rel="apple-touch-icon" href="/static/img/airflow-logo.png">
+  <link rel="apple-touch-icon" href="/static/img/icon-192x192.png">
+  <link rel="manifest" href="/manifest.json">
   <title>Airflow - 주문관리시스템</title>
   <link href="/static/css/tailwind.css?v=${V}" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.0/css/all.min.css" rel="stylesheet">
