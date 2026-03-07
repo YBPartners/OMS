@@ -8,7 +8,7 @@ import type { Env } from '../../types';
 import { requireAuth } from '../../middleware/auth';
 import { writeAuditLog } from '../../lib/audit';
 import { hashPassword, verifyPassword, needsRehash, normalizePhone, isValidPhone, isValidLoginId, isValidEmail, safeAuditDetail } from '../../middleware/security';
-import { normalizePagination, isValidRole } from '../../lib/validators';
+import { normalizePagination, isValidRole, canActorModifyTarget, canActorAssignRole, canActorAssignRoles, getHighestRoleLevel } from '../../lib/validators';
 import { invalidateUserSessions } from '../../services/session-service';
 
 export function mountUsers(router: Hono<Env>) {
@@ -146,6 +146,11 @@ export function mountUsers(router: Hono<Env>) {
     if (body.email && !isValidEmail(body.email)) return c.json({ error: '올바른 이메일 형식을 입력하세요.' }, 400);
 
     // ★ Scope: REGION은 자기 총판 + 하위 TEAM에만 등록 가능
+    // ★ 계층 검증: 행위자가 부여하려는 역할은 자기보다 하위여야 함
+    if (!canActorAssignRole(currentUser.roles, body.role)) {
+      return c.json({ error: '자기보다 상위 또는 동급 역할은 부여할 수 없습니다.' }, 403);
+    }
+
     if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN')) {
       const targetOrg = await db.prepare(
         'SELECT org_id, org_type, parent_org_id FROM organizations WHERE org_id = ?'
@@ -157,8 +162,9 @@ export function mountUsers(router: Hono<Env>) {
       if (!isOwnOrg && !isChildTeam) {
         return c.json({ error: '자기 총판 또는 하위 팀에만 인원을 등록할 수 있습니다.' }, 403);
       }
-      if (body.role !== 'TEAM_LEADER' && body.role !== 'REGION_ADMIN') {
-        return c.json({ error: '총판 관리자는 팀장 또는 파트장만 등록할 수 있습니다.' }, 403);
+      // REGION_ADMIN은 AGENCY_LEADER / TEAM_LEADER만 생성 가능 (자기보다 하위)
+      if (!['TEAM_LEADER', 'AGENCY_LEADER'].includes(body.role)) {
+        return c.json({ error: '총판 관리자는 팀장 또는 대리점장만 등록할 수 있습니다.' }, 403);
       }
     }
 
@@ -232,6 +238,15 @@ export function mountUsers(router: Hono<Env>) {
     const target = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(userId).first();
     if (!target) return c.json({ error: '사용자를 찾을 수 없습니다.' }, 404);
 
+    // ★ 계층 검증: 대상 사용자의 현재 역할이 행위자보다 하위인지 확인
+    const targetRolesResult = await db.prepare(
+      'SELECT r.code FROM user_roles ur JOIN roles r ON ur.role_id = r.role_id WHERE ur.user_id = ?'
+    ).bind(userId).all();
+    const targetRoleCodes = targetRolesResult.results.map((r: any) => r.code);
+    if (!canActorModifyTarget(currentUser.roles, targetRoleCodes)) {
+      return c.json({ error: '상위 또는 동급 권한의 사용자를 수정할 수 없습니다.' }, 403);
+    }
+
     if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN')) {
       const isOwnOrg = target.org_id === currentUser.org_id;
       const isChildTeam = await db.prepare(
@@ -268,6 +283,10 @@ export function mountUsers(router: Hono<Env>) {
 
       if (body.role) {
         if (!isValidRole(body.role)) return c.json({ error: '유효하지 않은 역할입니다.' }, 400);
+        // ★ 계층 검증: 부여하려는 역할이 행위자보다 하위인지 확인
+        if (!canActorAssignRole(currentUser.roles, body.role)) {
+          return c.json({ error: '자기보다 상위 또는 동급 역할은 부여할 수 없습니다.' }, 403);
+        }
         await db.prepare('DELETE FROM user_roles WHERE user_id = ?').bind(userId).run();
         const roleRow = await db.prepare('SELECT role_id FROM roles WHERE code = ?').bind(body.role).first();
         if (roleRow) {
@@ -305,6 +324,15 @@ export function mountUsers(router: Hono<Env>) {
       return c.json({ error: '자기 자신을 비활성화할 수 없습니다.' }, 400);
     }
 
+    // ★ 계층 검증: 대상이 행위자보다 하위인지 확인
+    const targetStatusRoles = await db.prepare(
+      'SELECT r.code FROM user_roles ur JOIN roles r ON ur.role_id = r.role_id WHERE ur.user_id = ?'
+    ).bind(userId).all();
+    const targetStatusRoleCodes = targetStatusRoles.results.map((r: any) => r.code);
+    if (!canActorModifyTarget(currentUser.roles, targetStatusRoleCodes)) {
+      return c.json({ error: '상위 또는 동급 권한의 사용자 상태를 변경할 수 없습니다.' }, 403);
+    }
+
     if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN') && target.org_id !== currentUser.org_id) {
       return c.json({ error: '권한이 없습니다.' }, 403);
     }
@@ -338,6 +366,15 @@ export function mountUsers(router: Hono<Env>) {
 
     const target = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(userId).first();
     if (!target) return c.json({ error: '사용자를 찾을 수 없습니다.' }, 404);
+
+    // ★ 계층 검증: 대상이 행위자보다 하위인지 확인
+    const targetPwdRoles = await db.prepare(
+      'SELECT r.code FROM user_roles ur JOIN roles r ON ur.role_id = r.role_id WHERE ur.user_id = ?'
+    ).bind(userId).all();
+    const targetPwdRoleCodes = targetPwdRoles.results.map((r: any) => r.code);
+    if (!canActorModifyTarget(currentUser.roles, targetPwdRoleCodes)) {
+      return c.json({ error: '상위 또는 동급 권한의 사용자 비밀번호를 초기화할 수 없습니다.' }, 403);
+    }
 
     if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN') && target.org_id !== currentUser.org_id) {
       return c.json({ error: '권한이 없습니다.' }, 403);
@@ -400,6 +437,15 @@ export function mountUsers(router: Hono<Env>) {
 
     const target = await db.prepare('SELECT * FROM users WHERE user_id = ?').bind(userId).first();
     if (!target) return c.json({ error: '사용자를 찾을 수 없습니다.' }, 404);
+
+    // ★ 계층 검증: 대상이 행위자보다 하위인지 확인
+    const targetCredRoles = await db.prepare(
+      'SELECT r.code FROM user_roles ur JOIN roles r ON ur.role_id = r.role_id WHERE ur.user_id = ?'
+    ).bind(userId).all();
+    const targetCredRoleCodes = targetCredRoles.results.map((r: any) => r.code);
+    if (!canActorModifyTarget(currentUser.roles, targetCredRoleCodes)) {
+      return c.json({ error: '상위 또는 동급 권한의 사용자 자격증명을 변경할 수 없습니다.' }, 403);
+    }
 
     if (currentUser.org_type === 'REGION' && !currentUser.roles.includes('SUPER_ADMIN') && target.org_id !== currentUser.org_id) {
       return c.json({ error: '권한이 없습니다.' }, 403);
@@ -514,6 +560,20 @@ export function mountUsers(router: Hono<Env>) {
     // 유효성 검증
     for (const role of roles) {
       if (!isValidRole(role)) return c.json({ error: `유효하지 않은 역할: ${role}` }, 400);
+    }
+
+    // ★ 계층 검증: 대상 사용자의 현재 역할이 행위자보다 하위인지 확인
+    const targetMultiRoles = await db.prepare(
+      'SELECT r.code FROM user_roles ur JOIN roles r ON ur.role_id = r.role_id WHERE ur.user_id = ?'
+    ).bind(userId).all();
+    const targetMultiRoleCodes = targetMultiRoles.results.map((r: any) => r.code);
+    if (!canActorModifyTarget(currentUser.roles, targetMultiRoleCodes)) {
+      return c.json({ error: '상위 또는 동급 권한의 사용자 역할을 변경할 수 없습니다.' }, 403);
+    }
+
+    // ★ 계층 검증: 부여하려는 역할 전체가 행위자보다 하위인지 확인
+    if (!canActorAssignRoles(currentUser.roles, roles)) {
+      return c.json({ error: '자기보다 상위 또는 동급 역할은 부여할 수 없습니다.' }, 403);
     }
 
     // 기존 역할 삭제 후 새 역할 삽입

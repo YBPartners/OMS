@@ -55,6 +55,64 @@ export function isValidRole(role: string): boolean {
   return VALID_ROLES.includes(role as any);
 }
 
+// ================================================================
+// 역할 계층 등급 — 숫자가 작을수록 상위 권한
+// ================================================================
+const ROLE_HIERARCHY: Record<string, number> = {
+  'SUPER_ADMIN':   1,
+  'HQ_OPERATOR':   2,
+  'REGION_ADMIN':  3,
+  'AGENCY_LEADER': 4,
+  'TEAM_LEADER':   5,
+  'AUDITOR':       6,
+};
+
+/** 역할 코드의 계층 등급 반환 (낮을수록 강함, 없으면 99) */
+export function getRoleLevel(role: string): number {
+  return ROLE_HIERARCHY[role] ?? 99;
+}
+
+/**
+ * 사용자의 역할 목록에서 최고 등급(가장 강한 권한)을 반환.
+ * roles가 비어있으면 99(최하위).
+ */
+export function getHighestRoleLevel(roles: string[]): number {
+  if (!roles || roles.length === 0) return 99;
+  return Math.min(...roles.map(r => getRoleLevel(r)));
+}
+
+/**
+ * 행위자(actor)가 대상(target)보다 상위 권한인지 검증.
+ * 동급은 불허 — 반드시 상위만 수정 가능.
+ * SUPER_ADMIN은 항상 통과.
+ */
+export function canActorModifyTarget(actorRoles: string[], targetRoles: string[]): boolean {
+  if (actorRoles.includes('SUPER_ADMIN')) return true;
+  const actorLevel = getHighestRoleLevel(actorRoles);
+  const targetLevel = getHighestRoleLevel(targetRoles);
+  return actorLevel < targetLevel; // 숫자가 작을수록 상위
+}
+
+/**
+ * 행위자가 부여하려는 역할이 자신의 등급보다 하위인지 검증.
+ * SUPER_ADMIN만이 SUPER_ADMIN을 부여 가능.
+ * HQ_OPERATOR는 REGION_ADMIN 이하만 부여 가능.
+ * REGION_ADMIN은 TEAM_LEADER/AGENCY_LEADER만 부여 가능.
+ */
+export function canActorAssignRole(actorRoles: string[], targetRole: string): boolean {
+  if (actorRoles.includes('SUPER_ADMIN')) return true;
+  const actorLevel = getHighestRoleLevel(actorRoles);
+  const targetLevel = getRoleLevel(targetRole);
+  return actorLevel < targetLevel; // 행위자가 부여 역할보다 반드시 상위
+}
+
+/**
+ * 행위자가 부여하려는 역할 목록 전체를 검증.
+ */
+export function canActorAssignRoles(actorRoles: string[], targetRoles: string[]): boolean {
+  return targetRoles.every(r => canActorAssignRole(actorRoles, r));
+}
+
 /** 화이트리스트 검증 */
 export function isInWhitelist<T extends string>(value: string, whitelist: readonly T[]): value is T {
   return whitelist.includes(value as T);
