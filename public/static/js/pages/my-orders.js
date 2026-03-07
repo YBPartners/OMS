@@ -59,6 +59,7 @@ async function renderMyOrders(el) {
             <div class="flex items-center gap-1.5 mb-2 flex-wrap">
               ${o.channel_name ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium"><i class="fas fa-satellite-dish mr-0.5"></i>${o.channel_name}</span>` : ''}
               ${o.service_type && o.service_type !== 'DEFAULT' ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-600"><i class="fas ${OMS.SERVICE_TYPES[o.service_type]?.icon || 'fa-question'} mr-0.5"></i>${OMS.SERVICE_TYPES[o.service_type]?.label || o.service_type}</span>` : ''}
+              ${o.scheduled_date ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600"><i class="fas fa-calendar-check mr-0.5"></i>${o.scheduled_date}${o.scheduled_time ? ' ' + o.scheduled_time : ''}</span>` : ''}
             </div>
             ${_renderStatusProgress(o.status)}
             <div class="flex flex-wrap gap-2 mt-3" onclick="event.stopPropagation()">
@@ -156,9 +157,23 @@ function readyDone(orderId) {
   const content = `
     <div class="space-y-4">
       <p class="text-sm text-gray-600">고객 통화 후 방문 일정을 확정하세요.</p>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">방문 예정일</label>
+          <input id="ready-done-date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${new Date().toISOString().split('T')[0]}">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">방문 시간</label>
+          <input id="ready-done-time" type="time" class="w-full border rounded-lg px-3 py-2 text-sm" step="1800">
+        </div>
+      </div>
       <div>
-        <label class="block text-xs text-gray-500 mb-1">방문 예정일</label>
-        <input id="ready-done-date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${new Date().toISOString().split('T')[0]}">
+        <label class="block text-xs text-gray-500 mb-1.5">빠른 시간 선택</label>
+        <div class="flex flex-wrap gap-1.5" id="quick-time-btns">
+          ${['09:00','10:00','11:00','13:00','14:00','15:00','16:00','17:00'].map(t =>
+            `<button type="button" onclick="document.getElementById('ready-done-time').value='${t}';document.querySelectorAll('#quick-time-btns button').forEach(b=>b.classList.remove('bg-violet-600','text-white'));this.classList.add('bg-violet-600','text-white')" class="px-2.5 py-1 border rounded-md text-xs hover:bg-violet-50 transition">${t}</button>`
+          ).join('')}
+        </div>
       </div>
       <div>
         <label class="block text-xs text-gray-500 mb-1">메모 (선택)</label>
@@ -173,16 +188,18 @@ function readyDone(orderId) {
 async function submitReadyDone(orderId) {
   try {
   const scheduledDate = document.getElementById('ready-done-date')?.value || '';
+  const scheduledTime = document.getElementById('ready-done-time')?.value || '';
   const note = document.getElementById('ready-done-note')?.value || '';
   if (!scheduledDate) {
     showToast('방문 예정일을 선택해주세요.', 'warning');
     return;
   }
-  const res = await api('POST', `/orders/${orderId}/ready-done`, {
-    scheduled_date: scheduledDate, note: note || '고객 통화 후 일정 확정'
-  });
+  const payload = { scheduled_date: scheduledDate, note: note || '고객 통화 후 일정 확정' };
+  if (scheduledTime) payload.scheduled_time = scheduledTime;
+  const res = await api('POST', `/orders/${orderId}/ready-done`, payload);
   if (res?.ok) {
-    showToast('준비완료! 일정: ' + (scheduledDate || '-'), 'success');
+    const timeStr = scheduledTime ? ` ${scheduledTime}` : '';
+    showToast(`준비완료! 일정: ${scheduledDate}${timeStr}`, 'success');
     closeModal();
     renderContent();
   } else showToast(res?.error || '실패', 'error');

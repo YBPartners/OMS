@@ -395,6 +395,9 @@ function getIndexHtml(adsenseAccount: string = ''): string {
       'settlement': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/kanban.js', '/static/js/pages/review.js', '/static/js/pages/settlement.js'],
       'reconciliation': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/kanban.js', '/static/js/pages/review.js', '/static/js/pages/settlement.js'],
       'statistics': ['/static/js/pages/statistics.js', '/static/js/pages/dashboard.js'],
+      // schedule.js → orders.js(showOrderDetailDrawer) + my-orders.js(readyDone,startWork)
+      //             + orders.js chain → kanban.js(showAssignModal) + review.js(showReviewModal)
+      'schedule': ['/static/js/pages/orders.js', '/static/js/pages/my-orders.js', '/static/js/pages/kanban.js', '/static/js/pages/review.js', '/static/js/pages/schedule.js'],
       'policies': ['/static/js/pages/policies.js', '/static/js/pages/policies-dist.js', '/static/js/pages/policies-report.js', '/static/js/pages/policies-comm.js', '/static/js/pages/policies-territory.js', '/static/js/pages/policies-metrics.js'],
       // hr.js → signup-admin.js(renderHROrgTree,renderHRSignupRequests,renderHRRegionAddRequests)
       //       → agency.js(showAgencyOnboardingModal) → agency.js 내부에서 orders/review/my-orders 함수 참조하나

@@ -28,11 +28,11 @@ const STATUS = OMS.STATUS;
 
 // 권한별 접근 가능 페이지
 OMS.PERMISSIONS = {
-  SUPER_ADMIN: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'audit-log', 'notifications', 'my-profile', 'channels', 'system-admin', 'banner-manage'],
-  HQ_OPERATOR: ['dashboard', 'orders', 'distribute', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'audit-log', 'notifications', 'my-profile', 'channels'],
-  REGION_ADMIN: ['dashboard', 'kanban', 'review-region', 'hr-management', 'statistics', 'notifications', 'my-profile'],
-  AGENCY_LEADER: ['dashboard', 'agency-dashboard', 'agency-orders', 'agency-team', 'agency-statement', 'review-region', 'kanban', 'my-orders', 'my-stats', 'notifications', 'my-profile'],
-  TEAM_LEADER: ['dashboard', 'my-orders', 'my-stats', 'notifications', 'my-profile'],
+  SUPER_ADMIN: ['dashboard', 'orders', 'distribute', 'schedule', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'audit-log', 'notifications', 'my-profile', 'channels', 'system-admin', 'banner-manage'],
+  HQ_OPERATOR: ['dashboard', 'orders', 'distribute', 'schedule', 'review-hq', 'settlement', 'reconciliation', 'statistics', 'hr-management', 'policies', 'audit-log', 'notifications', 'my-profile', 'channels'],
+  REGION_ADMIN: ['dashboard', 'kanban', 'schedule', 'review-region', 'hr-management', 'statistics', 'notifications', 'my-profile'],
+  AGENCY_LEADER: ['dashboard', 'agency-dashboard', 'agency-orders', 'agency-team', 'agency-statement', 'review-region', 'kanban', 'schedule', 'my-orders', 'my-stats', 'notifications', 'my-profile'],
+  TEAM_LEADER: ['dashboard', 'my-orders', 'schedule', 'my-stats', 'notifications', 'my-profile'],
   AUDITOR: ['dashboard', 'statistics', 'reconciliation', 'audit-log', 'notifications', 'my-profile'],
 };
 
@@ -42,6 +42,7 @@ OMS.MENU_ITEMS = {
     { id: 'dashboard', icon: 'fa-chart-pie', label: '대시보드', group: '현황' },
     { id: 'orders', icon: 'fa-list-check', label: '주문관리', group: '주문' },
     { id: 'distribute', icon: 'fa-share-nodes', label: '자동배분', group: '주문' },
+    { id: 'schedule', icon: 'fa-calendar-days', label: '일정/캘린더', group: '주문' },
     { id: 'channels', icon: 'fa-satellite-dish', label: '주문채널', group: '주문' },
     { id: 'review-hq', icon: 'fa-clipboard-check', label: 'HQ검수', group: '검수' },
     { id: 'settlement', icon: 'fa-coins', label: '정산관리', group: '정산' },
@@ -57,6 +58,7 @@ OMS.MENU_ITEMS = {
   REGION: [
     { id: 'dashboard', icon: 'fa-chart-pie', label: '대시보드', group: '현황' },
     { id: 'kanban', icon: 'fa-columns', label: '칸반(팀장배정)', group: '배정' },
+    { id: 'schedule', icon: 'fa-calendar-days', label: '일정/캘린더', group: '배정' },
     { id: 'review-region', icon: 'fa-clipboard-check', label: '1차검수', group: '검수' },
     { id: 'hr-management', icon: 'fa-users-gear', label: '인사/수수료', group: '관리' },
     { id: 'statistics', icon: 'fa-chart-bar', label: '통계', group: '분석' },
@@ -68,6 +70,7 @@ OMS.MENU_ITEMS = {
     { id: 'agency-team', icon: 'fa-people-group', label: '소속 팀장', group: '관리' },
     { id: 'agency-statement', icon: 'fa-file-invoice-dollar', label: '정산 내역', group: '정산' },
     { id: 'kanban', icon: 'fa-columns', label: '칸반(배정)', group: '배정' },
+    { id: 'schedule', icon: 'fa-calendar-days', label: '일정/캘린더', group: '배정' },
     { id: 'review-region', icon: 'fa-clipboard-check', label: '검수', group: '검수' },
     { id: 'my-orders', icon: 'fa-list', label: '내 주문', group: '내 작업' },
     { id: 'my-stats', icon: 'fa-chart-line', label: '내 현황', group: '내 작업' },
@@ -76,6 +79,7 @@ OMS.MENU_ITEMS = {
   TEAM_LEADER: [
     { id: 'dashboard', icon: 'fa-chart-pie', label: '대시보드', group: '현황' },
     { id: 'my-orders', icon: 'fa-list', label: '내 주문', group: '주문' },
+    { id: 'schedule', icon: 'fa-calendar-days', label: '일정/캘린더', group: '주문' },
     { id: 'my-stats', icon: 'fa-chart-line', label: '내 현황', group: '현황' },
     { id: 'notifications', icon: 'fa-bell', label: '알림', group: '알림' },
   ],

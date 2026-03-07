@@ -1,6 +1,6 @@
 // ================================================================
 // Airflow OMS — Orders 라우트 인덱스 (서브라우터 마운트)
-// crud.ts + distribute.ts + assign.ts + review.ts + report.ts
+// crud.ts + distribute.ts + assign.ts + review.ts + report.ts + schedule.ts
 // ================================================================
 import { Hono } from 'hono';
 import type { Env } from '../../types';
@@ -9,6 +9,7 @@ import { mountDistribute } from './distribute';
 import { mountAssign } from './assign';
 import { mountReview } from './review';
 import { mountReport } from './report';
+import { mountSchedule } from './schedule';
 
 const orders = new Hono<Env>();
 
@@ -17,5 +18,6 @@ mountDistribute(orders);
 mountAssign(orders);
 mountReview(orders);
 mountReport(orders);
+mountSchedule(orders);
 
 export default orders;

@@ -188,7 +188,7 @@ async function showOrderDetailDrawer(orderId) {
         </div>
         <div class="bg-gray-50 rounded-lg p-3">
           <div class="text-[10px] text-gray-400 uppercase">예약일</div>
-          <div class="text-sm mt-1">${o.scheduled_date || '<span class="text-gray-300">미정</span>'}</div>
+          <div class="text-sm mt-1">${o.scheduled_date ? `${o.scheduled_date}${o.scheduled_time ? ' ' + o.scheduled_time : ''}` : '<span class="text-gray-300">미정</span>'}</div>
         </div>
       </div>
       ${o.memo ? `
@@ -417,7 +417,7 @@ async function showOrderDetail(orderId) {
         <div><label class="text-xs text-gray-500">지역총판</label><div>${o.region_name || '-'}</div></div>
         <div><label class="text-xs text-gray-500">배정팀장</label><div>${o.team_leader_name || '-'}</div></div>
         <div><label class="text-xs text-gray-500">요청일</label><div>${o.requested_date || '-'}</div></div>
-        <div><label class="text-xs text-gray-500">예약일</label><div>${o.scheduled_date || '<span class="text-gray-300">미정</span>'}</div></div>
+        <div><label class="text-xs text-gray-500">예약일</label><div>${o.scheduled_date ? `${o.scheduled_date}${o.scheduled_time ? ' ' + o.scheduled_time : ''}` : '<span class="text-gray-300">미정</span>'}</div></div>
         ${o.memo ? `<div class="col-span-2"><label class="text-xs text-gray-500">메모</label><div class="text-sm text-gray-700 bg-gray-50 rounded p-2">${o.memo}</div></div>` : ''}
       </div>
       ${res.reports?.length > 0 ? `
@@ -547,6 +547,7 @@ async function showNewOrderModal() {
         <div><label class="block text-xs text-gray-500 mb-1">금액(원) *</label><input name="base_amount" type="number" min="10000" step="100" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="최소 10,000원"></div>
         <div><label class="block text-xs text-gray-500 mb-1">요청일 *</label><input name="requested_date" type="date" required value="${new Date().toISOString().split('T')[0]}" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
         <div><label class="block text-xs text-gray-500 mb-1">예약일 (선택)</label><input name="scheduled_date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">예약시간 (선택)</label><input name="scheduled_time" type="time" step="1800" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
       </div>
     </form>`;
   showModal('주문 수동 등록', content, `
@@ -716,6 +717,7 @@ async function showEditOrderModal(orderId) {
         <div><label class="block text-xs text-gray-500 mb-1">금액(원) *</label><input name="base_amount" type="number" min="10000" step="100" required class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.base_amount || ''}"></div>
         <div><label class="block text-xs text-gray-500 mb-1">요청일</label><input name="requested_date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.requested_date || ''}"></div>
         <div><label class="block text-xs text-gray-500 mb-1">예약일</label><input name="scheduled_date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.scheduled_date || ''}"></div>
+        <div><label class="block text-xs text-gray-500 mb-1">예약시간</label><input name="scheduled_time" type="time" step="1800" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.scheduled_time || ''}"></div>
       </div>
     </form>`;
   showModal(`주문 수정 #${o.order_id}`, content, `
@@ -737,6 +739,7 @@ async function submitEditOrder(orderId) {
   data.base_amount = Number(data.base_amount);
   data.channel_id = Number(data.channel_id);
   if (!data.scheduled_date) data.scheduled_date = null;
+  if (!data.scheduled_time) data.scheduled_time = null;
   if (!data.external_order_no) data.external_order_no = null;
   if (!data.memo) data.memo = null;
   if (!data.address_detail) data.address_detail = null;

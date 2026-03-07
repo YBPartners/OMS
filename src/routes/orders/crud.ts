@@ -281,7 +281,7 @@ export function mountCrud(router: Hono<Env>) {
     const allowedFields: Record<string, string> = {
       customer_name: 'TEXT', customer_phone: 'TEXT', address_text: 'TEXT',
       address_detail: 'TEXT', admin_dong_code: 'TEXT', legal_dong_code: 'TEXT',
-      base_amount: 'NUMBER', requested_date: 'TEXT', scheduled_date: 'TEXT',
+      base_amount: 'NUMBER', requested_date: 'TEXT', scheduled_date: 'TEXT', scheduled_time: 'TEXT',
       memo: 'TEXT', channel_id: 'NUMBER', service_type: 'TEXT',
       external_order_no: 'TEXT',
     };

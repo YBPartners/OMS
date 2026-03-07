@@ -187,7 +187,10 @@ export function mountAssign(router: Hono<Env>) {
     // ★ State Machine 적용 — ASSIGNED → READY_DONE
     const result = await transitionOrder(db, orderId, 'READY_DONE', user, {
       note: body.note || '고객 통화 후 일정 확정',
-      additionalUpdates: body.scheduled_date ? { scheduled_date: body.scheduled_date } : undefined,
+      additionalUpdates: {
+        ...(body.scheduled_date ? { scheduled_date: body.scheduled_date } : {}),
+        ...(body.scheduled_time ? { scheduled_time: body.scheduled_time } : {}),
+      },
       afterTransition: async (db) => {
         await db.prepare(`
           UPDATE order_assignments SET status = 'READY_DONE', updated_at = datetime('now')
@@ -202,7 +205,7 @@ export function mountAssign(router: Hono<Env>) {
       return c.json({ error: result.error }, statusCode);
     }
 
-    return c.json({ ok: true, scheduled_date: body.scheduled_date || null });
+    return c.json({ ok: true, scheduled_date: body.scheduled_date || null, scheduled_time: body.scheduled_time || null });
   });
 
   // ─── 작업 시작 (READY_DONE → IN_PROGRESS) ───

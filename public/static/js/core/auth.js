@@ -125,6 +125,7 @@ async function renderContent() {
       case 'audit-log': await renderAuditLog(el); break;
       case 'notifications': await renderNotifications(el); break;
       case 'my-orders': await renderMyOrders(el); break;
+      case 'schedule': await renderSchedule(el); break;
       case 'my-stats': await renderMyStats(el); break;
       case 'my-profile': await renderMyProfile(el); break;
       // v7.0: 대리점 전용 페이지
