@@ -525,9 +525,15 @@ function getServiceTypeBadge(order) {
 // ─── 수동 등록 모달 ───
 async function showNewOrderModal() {
   try {
-  // 활성 채널 목록을 API에서 가져옴
-  const channelRes = await api('GET', '/hr/channels?active_only=1');
+  // 활성 채널 + 서비스 카탈로그 동시 로드
+  const [channelRes, catalogRes] = await Promise.all([
+    api('GET', '/hr/channels?active_only=1'),
+    api('GET', '/service-catalog'),
+  ]);
   const channels = channelRes?.channels || [];
+  const catalog = catalogRes || { categories: [], prices: [], options: [] };
+  // 글로벌에 카탈로그 저장 (동적 가격 계산용)
+  window._orderCatalog = catalog;
 
   const content = `
     <form id="new-order-form" class="space-y-4">
@@ -539,7 +545,6 @@ async function showNewOrderModal() {
             ${channels.map(ch => `<option value="${ch.channel_id}" ${ch.code === 'LOCAL' ? 'selected' : ''}>${ch.name} (${ch.code})</option>`).join('')}
           </select>
         </div>
-        <!-- 서비스 카테고리는 order_items로 관리 (Phase 2) -->
         <div><label class="block text-xs text-gray-500 mb-1">외부주문번호</label><input name="external_order_no" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="채널에서 부여한 주문번호 (선택)"></div>
         <div><label class="block text-xs text-gray-500 mb-1">고객명 *</label><input name="customer_name" required class="w-full border rounded-lg px-3 py-2 text-sm"></div>
         <div><label class="block text-xs text-gray-500 mb-1">연락처 *</label><input name="customer_phone" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="01012345678"></div>
@@ -580,15 +585,35 @@ async function showNewOrderModal() {
 
         <input type="hidden" name="sigungu_code" id="new-order-sigungu-code">
 
-        <div><label class="block text-xs text-gray-500 mb-1">금액(원) *</label><input name="base_amount" type="number" min="10000" step="100" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="최소 10,000원"></div>
         <div><label class="block text-xs text-gray-500 mb-1">요청일 *</label><input name="requested_date" type="date" required value="${new Date().toISOString().split('T')[0]}" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
         <div><label class="block text-xs text-gray-500 mb-1">예약일 (선택)</label><input name="scheduled_date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
         <div><label class="block text-xs text-gray-500 mb-1">예약시간 (선택)</label><input name="scheduled_time" type="time" step="1800" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
       </div>
+
+      <!-- 서비스 항목 선택 -->
+      <div class="border-t pt-4">
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-sm font-semibold text-gray-700"><i class="fas fa-list-check mr-1 text-emerald-500"></i>서비스 항목 (선택)</label>
+          <button type="button" onclick="addOrderItemRow()" class="text-xs px-3 py-1 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100">
+            <i class="fas fa-plus mr-1"></i>항목 추가
+          </button>
+        </div>
+        <p class="text-[10px] text-gray-400 mb-2">서비스 항목을 선택하면 금액이 자동 계산됩니다. 미선택 시 수동 금액을 입력하세요.</p>
+        <div id="order-items-container" class="space-y-2"></div>
+        <div id="order-items-total" class="hidden mt-2 p-2 bg-emerald-50 rounded-lg text-sm flex items-center justify-between">
+          <span class="font-medium text-emerald-700"><i class="fas fa-calculator mr-1"></i>항목 합계</span>
+          <span class="font-bold text-emerald-800" id="order-items-total-amount">0원</span>
+        </div>
+      </div>
+
+      <!-- 금액 -->
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs text-gray-500 mb-1">금액(원) *</label><input name="base_amount" id="new-order-base-amount" type="number" min="10000" step="100" required class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="최소 10,000원"></div>
+      </div>
     </form>`;
   showModal('주문 수동 등록', content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
-    <button onclick="submitNewOrder()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">등록</button>`);
+    <button onclick="submitNewOrder()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">등록</button>`, { size: 'lg' });
 
   } catch (e) {
   console.error('[showNewOrderModal]', e);
@@ -667,6 +692,93 @@ async function matchSigunguCode(sido, sigungu, dong) {
   }
 }
 
+// ─── 서비스 항목 행 추가/삭제/가격 계산 ───
+let _orderItemSeq = 0;
+function addOrderItemRow() {
+  const container = document.getElementById('order-items-container');
+  if (!container) return;
+  const catalog = window._orderCatalog || { categories: [] };
+  const groups = {};
+  catalog.categories.forEach(c => {
+    if (!groups[c.group_name]) groups[c.group_name] = [];
+    groups[c.group_name].push(c);
+  });
+  const idx = _orderItemSeq++;
+  const row = document.createElement('div');
+  row.className = 'flex items-center gap-2 bg-gray-50 rounded-lg p-2 order-item-row';
+  row.id = `order-item-${idx}`;
+  row.innerHTML = `
+    <select class="flex-1 border rounded px-2 py-1.5 text-xs" onchange="onOrderItemCategoryChange(${idx})">
+      <option value="">서비스 선택...</option>
+      ${Object.entries(groups).map(([g, cats]) =>
+        `<optgroup label="${g}">${cats.map(c => `<option value="${c.category_id}" data-code="${c.code}">${c.name}</option>`).join('')}</optgroup>`
+      ).join('')}
+    </select>
+    <input type="number" min="1" value="1" class="w-14 border rounded px-2 py-1.5 text-xs text-center" placeholder="수량" onchange="recalcOrderItems()">
+    <span class="text-xs text-blue-600 font-bold w-20 text-right order-item-price">0원</span>
+    <button type="button" onclick="removeOrderItemRow(${idx})" class="w-7 h-7 flex items-center justify-center rounded-full bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 text-xs">
+      <i class="fas fa-times"></i>
+    </button>`;
+  container.appendChild(row);
+}
+
+function removeOrderItemRow(idx) {
+  const el = document.getElementById(`order-item-${idx}`);
+  if (el) el.remove();
+  recalcOrderItems();
+}
+
+function onOrderItemCategoryChange(idx) {
+  recalcOrderItems();
+}
+
+function recalcOrderItems() {
+  const catalog = window._orderCatalog || { prices: [] };
+  const channelId = Number(document.querySelector('[name="channel_id"]')?.value) || 1;
+  const rows = document.querySelectorAll('.order-item-row');
+  let total = 0;
+  rows.forEach(row => {
+    const sel = row.querySelector('select');
+    const qtyInput = row.querySelector('input[type="number"]');
+    const priceSpan = row.querySelector('.order-item-price');
+    const catId = Number(sel?.value);
+    const qty = Number(qtyInput?.value) || 1;
+    if (!catId) { priceSpan.textContent = '0원'; return; }
+    const price = catalog.prices.find(p => p.category_id === catId && p.channel_id === channelId)
+      || catalog.prices.find(p => p.category_id === catId);
+    const unitPrice = price?.sell_price || 0;
+    const lineTotal = unitPrice * qty;
+    priceSpan.textContent = formatAmount(lineTotal);
+    total += lineTotal;
+  });
+  const totalEl = document.getElementById('order-items-total');
+  const totalAmtEl = document.getElementById('order-items-total-amount');
+  const baseAmtInput = document.getElementById('new-order-base-amount');
+  if (rows.length > 0 && total > 0) {
+    totalEl?.classList.remove('hidden');
+    if (totalAmtEl) totalAmtEl.textContent = formatAmount(total);
+    if (baseAmtInput) baseAmtInput.value = total;
+  } else {
+    totalEl?.classList.add('hidden');
+  }
+}
+
+function getOrderItemsFromForm() {
+  const catalog = window._orderCatalog || { prices: [] };
+  const channelId = Number(document.querySelector('[name="channel_id"]')?.value) || 1;
+  const rows = document.querySelectorAll('.order-item-row');
+  const items = [];
+  rows.forEach(row => {
+    const catId = Number(row.querySelector('select')?.value);
+    const qty = Number(row.querySelector('input[type="number"]')?.value) || 1;
+    if (!catId) return;
+    const price = catalog.prices.find(p => p.category_id === catId && p.channel_id === channelId)
+      || catalog.prices.find(p => p.category_id === catId);
+    items.push({ category_id: catId, quantity: qty, unit_sell_price: price?.sell_price || 0, unit_work_price: price?.work_price || 0 });
+  });
+  return items;
+}
+
 async function submitNewOrder() {
   try {
   const form = document.getElementById('new-order-form');
@@ -684,6 +796,12 @@ async function submitNewOrder() {
   data.channel_id = Number(data.channel_id);
 
   if (data.base_amount < 10000) { showToast('금액은 최소 10,000원 이상이어야 합니다.', 'warning'); return; }
+
+  // 서비스 항목 수집
+  const orderItems = getOrderItemsFromForm();
+  if (orderItems.length > 0) {
+    data.order_items = orderItems;
+  }
 
   const res = await api('POST', '/orders', data);
   if (res?.order_id) { showToast(`주문 #${res.order_id}이(가) 등록되었습니다.`, 'success'); closeModal(); renderContent(); }
@@ -709,8 +827,15 @@ async function showEditOrderModal(orderId) {
     return;
   }
 
-  const channelRes = await api('GET', '/hr/channels?active_only=1');
+  const [channelRes, catalogRes, itemsRes] = await Promise.all([
+    api('GET', '/hr/channels?active_only=1'),
+    api('GET', '/service-catalog'),
+    api('GET', `/orders/${orderId}/items`),
+  ]);
   const channels = channelRes?.channels || [];
+  const catalog = catalogRes || { categories: [], prices: [], options: [] };
+  window._orderCatalog = catalog;
+  const existingItems = itemsRes?.items || [];
 
   const content = `
     <form id="edit-order-form" class="space-y-4">
@@ -750,10 +875,30 @@ async function showEditOrderModal(orderId) {
         <div><label class="block text-xs text-gray-500 mb-1">예약일</label><input name="scheduled_date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.scheduled_date || ''}"></div>
         <div><label class="block text-xs text-gray-500 mb-1">예약시간</label><input name="scheduled_time" type="time" step="1800" class="w-full border rounded-lg px-3 py-2 text-sm" value="${o.scheduled_time || ''}"></div>
       </div>
+
+      <!-- 서비스 항목 편집 -->
+      <div class="border-t pt-4">
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-sm font-semibold text-gray-700"><i class="fas fa-list-check mr-1 text-emerald-500"></i>서비스 항목</label>
+          <button type="button" onclick="addEditItemRow()" class="text-xs px-3 py-1 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100">
+            <i class="fas fa-plus mr-1"></i>항목 추가
+          </button>
+        </div>
+        <div id="edit-items-container" class="space-y-2"></div>
+        <div id="edit-items-total" class="hidden mt-2 p-2 bg-emerald-50 rounded-lg text-sm flex items-center justify-between">
+          <span class="font-medium text-emerald-700"><i class="fas fa-calculator mr-1"></i>항목 합계</span>
+          <span class="font-bold text-emerald-800" id="edit-items-total-amount">0원</span>
+        </div>
+      </div>
     </form>`;
   showModal(`주문 수정 #${o.order_id}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
     <button onclick="submitEditOrder(${o.order_id})" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">저장</button>`);
+
+  // 기존 항목 로드
+  if (existingItems.length > 0) {
+    existingItems.forEach(item => addEditItemRow(item));
+  }
 
   } catch (e) {
   console.error('[showEditOrderModal]', e);
@@ -780,6 +925,10 @@ async function submitEditOrder(orderId) {
   if (!data.customer_name?.trim()) { showToast('고객명을 입력해주세요.', 'warning'); return; }
   if (data.base_amount < 10000) { showToast('금액은 최소 10,000원 이상이어야 합니다.', 'warning'); return; }
 
+  // 서비스 항목 수집 (편집 모달)
+  const editItems = getEditItemsFromForm();
+  data.order_items = editItems;
+
   const res = await api('PATCH', `/orders/${orderId}`, data);
   if (res?.ok) { showToast('주문이 수정되었습니다.', 'success'); closeModal(); renderContent(); }
   else showToast(res?.error || '수정 실패', 'error');
@@ -788,6 +937,81 @@ async function submitEditOrder(orderId) {
   console.error('[submitEditOrder]', e);
   if (typeof showToast === 'function') showToast('처리 실패: ' + (e.message||e), 'error');
   }
+}
+
+// ─── 수정 모달: 서비스 항목 관리 ───
+let _editItemIdx = 0;
+function addEditItemRow(existing) {
+  const catalog = window._orderCatalog || { categories: [] };
+  const container = document.getElementById('edit-items-container');
+  if (!container) return;
+  const idx = _editItemIdx++;
+  const row = document.createElement('div');
+  row.className = 'edit-item-row flex items-center gap-2 bg-gray-50 rounded-lg p-2';
+  row.dataset.idx = idx;
+  if (existing?.item_id) row.dataset.itemId = existing.item_id;
+  row.innerHTML = `
+    <select class="flex-1 border rounded px-2 py-1 text-sm" onchange="recalcEditItems()">
+      <option value="">카테고리 선택</option>
+      ${catalog.categories.map(c => `<option value="${c.category_id}" ${existing?.category_id == c.category_id ? 'selected' : ''}>${c.name}</option>`).join('')}
+    </select>
+    <input type="number" min="1" value="${existing?.quantity || 1}" class="w-16 border rounded px-2 py-1 text-sm text-center" onchange="recalcEditItems()">
+    <span class="text-xs text-gray-500 w-20 text-right edit-item-price">${existing ? formatAmount(existing.total_sell_price || 0) : '-'}</span>
+    <button type="button" onclick="removeEditItemRow(${idx})" class="text-red-400 hover:text-red-600"><i class="fas fa-times"></i></button>`;
+  container.appendChild(row);
+  recalcEditItems();
+}
+
+function removeEditItemRow(idx) {
+  document.querySelector(`.edit-item-row[data-idx='${idx}']`)?.remove();
+  recalcEditItems();
+}
+
+function recalcEditItems() {
+  const catalog = window._orderCatalog || { prices: [] };
+  const channelId = Number(document.querySelector('#edit-order-form [name="channel_id"]')?.value) || 1;
+  const rows = document.querySelectorAll('.edit-item-row');
+  let total = 0;
+  rows.forEach(row => {
+    const catId = Number(row.querySelector('select')?.value);
+    const qty = Number(row.querySelector('input[type="number"]')?.value) || 1;
+    const priceEl = row.querySelector('.edit-item-price');
+    if (!catId) { if (priceEl) priceEl.textContent = '-'; return; }
+    const price = catalog.prices.find(p => p.category_id === catId && p.channel_id === channelId)
+      || catalog.prices.find(p => p.category_id === catId);
+    const amount = (price?.sell_price || 0) * qty;
+    if (priceEl) priceEl.textContent = formatAmount(amount);
+    total += amount;
+  });
+  const totalEl = document.getElementById('edit-items-total');
+  const totalAmtEl = document.getElementById('edit-items-total-amount');
+  if (rows.length > 0 && total > 0) {
+    totalEl?.classList.remove('hidden');
+    if (totalAmtEl) totalAmtEl.textContent = formatAmount(total);
+  } else {
+    totalEl?.classList.add('hidden');
+  }
+}
+
+function getEditItemsFromForm() {
+  const catalog = window._orderCatalog || { prices: [] };
+  const channelId = Number(document.querySelector('#edit-order-form [name="channel_id"]')?.value) || 1;
+  const rows = document.querySelectorAll('.edit-item-row');
+  const items = [];
+  rows.forEach(row => {
+    const catId = Number(row.querySelector('select')?.value);
+    const qty = Number(row.querySelector('input[type="number"]')?.value) || 1;
+    if (!catId) return;
+    const price = catalog.prices.find(p => p.category_id === catId && p.channel_id === channelId)
+      || catalog.prices.find(p => p.category_id === catId);
+    items.push({
+      item_id: row.dataset.itemId ? Number(row.dataset.itemId) : null,
+      category_id: catId, quantity: qty,
+      unit_sell_price: price?.sell_price || 0,
+      unit_work_price: price?.work_price || 0
+    });
+  });
+  return items;
 }
 
 // ─── 수정 모달용 주소 검색 ───

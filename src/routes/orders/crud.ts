@@ -230,6 +230,25 @@ export function mountCrud(router: Hono<Env>) {
     const orderId = result.meta.last_row_id;
     await writeStatusHistory(db, { order_id: orderId as number, from_status: null, to_status: 'RECEIVED', actor_id: user.user_id, note: '수동 등록' });
 
+    // ★ order_items 저장 (선택사항 — 주문 생성 시 서비스 항목 선택한 경우)
+    if (Array.isArray(body.order_items) && body.order_items.length > 0) {
+      for (const item of body.order_items) {
+        const catId = Number(item.category_id);
+        const qty = Number(item.quantity) || 1;
+        const unitSell = Number(item.unit_sell_price) || 0;
+        const unitWork = Number(item.unit_work_price) || 0;
+        if (!catId) continue;
+        await db.prepare(`
+          INSERT INTO order_items (order_id, category_id, quantity, unit_sell_price, unit_work_price, total_sell_price, total_work_price, model_name)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          orderId, catId, qty, unitSell, unitWork,
+          unitSell * qty, unitWork * qty,
+          item.model_name || null
+        ).run();
+      }
+    }
+
     return c.json({ order_id: orderId, fingerprint }, 201);
   });
 
@@ -350,6 +369,27 @@ export function mountCrud(router: Hono<Env>) {
     params.push(orderId);
 
     await db.prepare(`UPDATE orders SET ${updates.join(', ')} WHERE order_id = ?`).bind(...params).run();
+
+    // ★ order_items 업데이트 (전체 교체 방식)
+    if (Array.isArray(body.order_items)) {
+      // 기존 항목 삭제 후 재삽입
+      await db.prepare('DELETE FROM order_items WHERE order_id = ?').bind(orderId).run();
+      for (const item of body.order_items) {
+        const catId = Number(item.category_id);
+        const qty = Number(item.quantity) || 1;
+        const unitSell = Number(item.unit_sell_price) || 0;
+        const unitWork = Number(item.unit_work_price) || 0;
+        if (!catId) continue;
+        await db.prepare(`
+          INSERT INTO order_items (order_id, category_id, quantity, unit_sell_price, unit_work_price, total_sell_price, total_work_price, model_name)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          orderId, catId, qty, unitSell, unitWork,
+          unitSell * qty, unitWork * qty,
+          item.model_name || null
+        ).run();
+      }
+    }
 
     await writeStatusHistory(db, {
       order_id: orderId, from_status: order.status as string, to_status: order.status as string,

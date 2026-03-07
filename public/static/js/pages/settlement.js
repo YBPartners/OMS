@@ -95,6 +95,7 @@ async function renderSettlement(el) {
             ${r.status !== 'DRAFT' && currentUser?.roles?.includes('TEAM_LEADER') ? `<button onclick="showTeamInvoice(${r.run_id}, ${currentUser.user_id})" class="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs hover:bg-amber-200" data-tooltip="내 계산서"><i class="fas fa-file-invoice-dollar mr-1"></i>계산서</button>` : ''}
             ${r.status === 'DRAFT' && canEdit('policy') ? `<button onclick="calculateRun(${r.run_id})" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200" data-tooltip="산출"><i class="fas fa-calculator mr-1"></i>산출</button>` : ''}
             ${r.status === 'CALCULATED' && canEdit('policy') ? `<button onclick="confirmRun(${r.run_id})" class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200" data-tooltip="확정"><i class="fas fa-check mr-1"></i>확정</button>` : ''}
+            ${r.status === 'CONFIRMED' && canEdit('policy') ? `<button onclick="payRun(${r.run_id})" class="px-2 py-1 bg-teal-100 text-teal-700 rounded text-xs hover:bg-teal-200" data-tooltip="지급"><i class="fas fa-money-check mr-1"></i>지급</button>` : ''}
           </div>` },
         ],
         rows: runs,
@@ -127,6 +128,9 @@ function showRunContextMenu(event, run) {
   if (r.status === 'CALCULATED' && canEdit('policy')) {
     items.push({ icon: 'fa-check', label: '정산 확정', badge: 'CALCULATED', badgeColor: 'bg-blue-100 text-blue-700', action: () => confirmRun(r.run_id) });
   }
+  if (r.status === 'CONFIRMED' && canEdit('policy')) {
+    items.push({ icon: 'fa-money-check', label: '정산 지급', badge: 'CONFIRMED', badgeColor: 'bg-green-100 text-green-700', action: () => payRun(r.run_id) });
+  }
 
   items.push(
     { divider: true },
@@ -146,8 +150,82 @@ function showRunContextMenu(event, run) {
 // ─── 정산 요약 드릴다운 ───
 function showSettlementSummary(type) {
   if (type === 'all') navigateTo('settlement');
-  else if (type === 'confirmed') showToast('확정 완료 Run만 필터링합니다', 'info');
-  else showToast('총 지급액 상세 분석 기능 준비 중', 'info');
+  else if (type === 'confirmed') {
+    showToast('확정 완료 Run만 필터링합니다', 'info');
+  }
+  else if (type === 'amount') {
+    // 지급액 상세 분석 모달
+    showPaymentAnalysis();
+  }
+}
+
+async function showPaymentAnalysis() {
+  try {
+    const res = await api('GET', '/settlements/runs');
+    const runs = res?.runs || [];
+    if (runs.length === 0) { showToast('정산 Run 데이터가 없습니다.', 'info'); return; }
+
+    const totalBase = runs.reduce((s, r) => s + (r.total_base_amount || 0), 0);
+    const totalComm = runs.reduce((s, r) => s + (r.total_commission_amount || 0), 0);
+    const totalPay = runs.reduce((s, r) => s + (r.total_payable_amount || 0), 0);
+    const byStatus = {};
+    runs.forEach(r => {
+      if (!byStatus[r.status]) byStatus[r.status] = { count: 0, base: 0, commission: 0, payable: 0 };
+      byStatus[r.status].count++;
+      byStatus[r.status].base += r.total_base_amount || 0;
+      byStatus[r.status].commission += r.total_commission_amount || 0;
+      byStatus[r.status].payable += r.total_payable_amount || 0;
+    });
+
+    const statusLabels = { DRAFT: '초안', CALCULATED: '산출완료', CONFIRMED: '확정', PAID: '지급완료' };
+    const statusColors = { DRAFT: 'bg-gray-100 text-gray-700', CALCULATED: 'bg-yellow-100 text-yellow-700', CONFIRMED: 'bg-green-100 text-green-700', PAID: 'bg-teal-100 text-teal-700' };
+
+    const content = `
+      <div class="space-y-4">
+        <div class="grid grid-cols-3 gap-4">
+          <div class="bg-blue-50 rounded-lg p-4 text-center"><div class="text-lg font-bold text-blue-700">${formatAmount(totalBase)}</div><div class="text-xs text-gray-500">기본금액 합계</div></div>
+          <div class="bg-red-50 rounded-lg p-4 text-center"><div class="text-lg font-bold text-red-600">${formatAmount(totalComm)}</div><div class="text-xs text-gray-500">수수료 합계</div></div>
+          <div class="bg-green-50 rounded-lg p-4 text-center"><div class="text-lg font-bold text-green-700">${formatAmount(totalPay)}</div><div class="text-xs text-gray-500">지급액 합계</div></div>
+        </div>
+        <div class="bg-gray-50 rounded-lg p-4">
+          <div class="text-sm font-semibold mb-3"><i class="fas fa-chart-pie mr-1 text-indigo-500"></i>상태별 분석</div>
+          <div class="space-y-2">
+            ${Object.entries(byStatus).map(([status, d]) => `
+              <div class="flex items-center justify-between p-2 bg-white rounded border">
+                <div class="flex items-center gap-2">
+                  <span class="status-badge ${statusColors[status] || 'bg-gray-100'}">${statusLabels[status] || status}</span>
+                  <span class="text-sm text-gray-600">${d.count}건</span>
+                </div>
+                <div class="text-sm">
+                  <span class="text-gray-500">기본:</span> <span class="font-medium">${formatAmount(d.base)}</span>
+                  <span class="mx-2 text-gray-300">|</span>
+                  <span class="text-gray-500">수수료:</span> <span class="text-red-600">${formatAmount(d.commission)}</span>
+                  <span class="mx-2 text-gray-300">|</span>
+                  <span class="text-gray-500">지급:</span> <span class="font-bold text-green-600">${formatAmount(d.payable)}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        ${totalBase > 0 ? `
+        <div class="bg-white rounded-lg p-4 border">
+          <div class="text-sm font-semibold mb-2"><i class="fas fa-percentage mr-1 text-amber-500"></i>수수료율</div>
+          <div class="flex items-center gap-4">
+            <div class="flex-1 bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div class="bg-green-500 h-full rounded-full" style="width: ${((totalPay / totalBase) * 100).toFixed(1)}%"></div>
+            </div>
+            <span class="text-sm font-bold">${((totalComm / totalBase) * 100).toFixed(1)}%</span>
+          </div>
+          <div class="text-xs text-gray-400 mt-1">지급률: ${((totalPay / totalBase) * 100).toFixed(1)}%  |  수수료율: ${((totalComm / totalBase) * 100).toFixed(1)}%</div>
+        </div>` : ''}
+      </div>`;
+
+    showModal('<i class="fas fa-chart-line text-blue-500 mr-2"></i>지급액 상세 분석', content, `
+      <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">닫기</button>`, { size: 'lg' });
+  } catch (e) {
+    console.error('[showPaymentAnalysis]', e);
+    showToast('지급액 분석 실패: ' + (e.message || e), 'error');
+  }
 }
 
 function showCreateRunModal() {
@@ -199,6 +277,34 @@ async function confirmRun(runId) {
   await apiAction('POST', `/settlements/runs/${runId}/confirm`, null, {
     confirm: { title: '정산 확정', message: `Run #${runId}의 정산을 확정하시겠습니까?<br><span class="text-xs text-red-500">확정 후에는 되돌릴 수 없습니다.</span>`, buttonText: '확정', buttonColor: 'bg-green-600' },
     successMsg: d => `확정 완료 — ${d.confirmed_count}건`,
+    refresh: true
+  });
+}
+
+async function payRun(runId) {
+  const today = new Date().toISOString().split('T')[0];
+  const content = `
+    <div class="space-y-4">
+      <div class="bg-teal-50 rounded-lg p-4 border border-teal-200 text-sm text-teal-800">
+        <i class="fas fa-info-circle mr-1"></i>확정된 정산 항목을 지급 완료 처리합니다.<br>
+        <span class="text-xs text-teal-600">주문 상태가 SETTLEMENT_CONFIRMED → PAID로 변경됩니다.</span>
+      </div>
+      <div><label class="block text-xs text-gray-500 mb-1">지급일</label>
+        <input id="pay-date" type="date" class="w-full border rounded-lg px-3 py-2 text-sm" value="${today}"></div>
+      <div><label class="block text-xs text-gray-500 mb-1">비고 (선택)</label>
+        <input id="pay-note" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="지급 관련 메모"></div>
+    </div>`;
+  showModal('정산 지급 처리', content, `
+    <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
+    <button onclick="executePayRun(${runId})" class="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700"><i class="fas fa-money-check mr-1"></i>지급 실행</button>`);
+}
+
+async function executePayRun(runId) {
+  const paymentDate = document.getElementById('pay-date')?.value || new Date().toISOString().split('T')[0];
+  const paymentNote = document.getElementById('pay-note')?.value || '';
+  await apiAction('POST', `/settlements/runs/${runId}/pay`, { payment_date: paymentDate, payment_note: paymentNote }, {
+    confirm: { title: '지급 실행', message: `Run #${runId}을(를) 지급 완료 처리하시겠습니까?<br><span class="text-xs text-red-500">되돌릴 수 없습니다.</span>`, buttonText: '지급 실행', buttonColor: 'bg-teal-600' },
+    successMsg: d => `지급 완료 — ${d.paid_count}건, ${formatAmount(d.total_paid_amount)}`,
     refresh: true
   });
 }
