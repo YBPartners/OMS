@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "dahada-oms",
+  "name": "airflow-oms",
   "compatibility_date": "2026-03-03",
   "pages_build_output_dir": "./dist",
   "compatibility_flags": ["nodejs_compat"],
