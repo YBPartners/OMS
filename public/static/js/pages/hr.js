@@ -1113,8 +1113,8 @@ async function showUserRegionDetail(userId, userName) {
                 <div class="flex flex-wrap gap-1">
                   ${items.map(m => `
                     <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">
-                      ${escapeHtml(m.eupmyeondong)}
-                      <button onclick="removeUserRegion(${userId}, ${m.mapping_id}, '${escapeHtml(userName).replace(/'/g, "\\'")}', '${escapeHtml(m.eupmyeondong).replace(/'/g, "\\'")}')" 
+                      ${escapeHtml(m.sigungu)}
+                      <button onclick="removeUserRegion(${userId}, ${m.map_id}, '${escapeHtml(userName).replace(/'/g, "\\'")}', '${escapeHtml(m.sigungu).replace(/'/g, "\\'")}')" 
                               class="ml-0.5 text-blue-400 hover:text-red-500" title="삭제">
                         <i class="fas fa-times text-[8px]"></i>
                       </button>

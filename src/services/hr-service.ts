@@ -76,7 +76,7 @@ export async function createTeamWithLeader(
   // 5. 조직-시군구 매핑
   for (const code of params.regionIds) {
     await db.prepare(
-      'INSERT OR IGNORE INTO region_sigungu_map (org_id, sigungu_code, mapped_by) VALUES (?, ?, 0)'
+      'INSERT OR IGNORE INTO region_sigungu_map (region_org_id, sigungu_code) VALUES (?, ?)'
     ).bind(newOrgId, String(code)).run();
   }
 

@@ -42,7 +42,7 @@ export function mountDistributors(router: Hono<Env>) {
         (SELECT COUNT(*) FROM users u2
          JOIN organizations c2 ON u2.org_id = c2.org_id
          WHERE c2.parent_org_id = o.org_id AND c2.org_type = 'TEAM' AND u2.status = 'ACTIVE') as team_members,
-        (SELECT COUNT(*) FROM region_sigungu_map rsm WHERE rsm.org_id = o.org_id) as region_mapping_count
+        (SELECT COUNT(*) FROM region_sigungu_map rsm WHERE rsm.region_org_id = o.org_id) as region_mapping_count
       FROM organizations o
       ${where}
       ORDER BY o.name
@@ -87,10 +87,10 @@ export function mountDistributors(router: Hono<Env>) {
     // 관할 시군구 목록
     const regions = await db.prepare(`
       SELECT sg.code, sg.sido, sg.sigungu, sg.full_name,
-             rsm.id as mapping_id, rsm.created_at as mapped_at
+             rsm.map_id, rsm.created_at as mapped_at
       FROM region_sigungu_map rsm
       JOIN sigungu sg ON rsm.sigungu_code = sg.code
-      WHERE rsm.org_id = ?
+      WHERE rsm.region_org_id = ?
       ORDER BY sg.sido, sg.sigungu
     `).bind(orgId).all();
 
@@ -108,8 +108,8 @@ export function mountDistributors(router: Hono<Env>) {
 
     // 팀-총판 매핑 정보
     const teamMappings = await db.prepare(`
-      SELECT tdm.mapping_id, tdm.team_org_id, tdm.distributor_org_id,
-             t.name as team_name, d.name as distributor_name
+      SELECT tdm.id, tdm.team_org_id, tdm.distributor_org_id,
+             tdm.mapped_at, t.name as team_name, d.name as distributor_name
       FROM team_distributor_mappings tdm
       JOIN organizations t ON tdm.team_org_id = t.org_id
       JOIN organizations d ON tdm.distributor_org_id = d.org_id
@@ -158,7 +158,7 @@ export function mountDistributors(router: Hono<Env>) {
     if (body.region_ids && Array.isArray(body.region_ids)) {
       for (const code of body.region_ids) {
         try {
-          await db.prepare('INSERT OR IGNORE INTO region_sigungu_map (org_id, sigungu_code, mapped_by) VALUES (?, ?, ?)').bind(newOrgId, String(code), user.user_id).run();
+          await db.prepare('INSERT OR IGNORE INTO region_sigungu_map (region_org_id, sigungu_code) VALUES (?, ?)').bind(newOrgId, String(code)).run();
         } catch { /* 중복 무시 */ }
       }
     }
@@ -352,7 +352,7 @@ export function mountDistributors(router: Hono<Env>) {
     const { team_org_id, distributor_org_id } = c.req.query();
 
     let query = `
-      SELECT tdm.mapping_id, tdm.team_org_id, tdm.distributor_org_id, tdm.created_at,
+      SELECT tdm.id, tdm.team_org_id, tdm.distributor_org_id, tdm.mapped_at,
              t.name as team_name, t.code as team_code,
              d.name as distributor_name, d.code as distributor_code
       FROM team_distributor_mappings tdm
@@ -420,11 +420,11 @@ export function mountDistributors(router: Hono<Env>) {
     const mappingId = Number(c.req.param('mapping_id'));
 
     const existing = await db.prepare(
-      'SELECT * FROM team_distributor_mappings WHERE mapping_id = ?'
+      'SELECT * FROM team_distributor_mappings WHERE id = ?'
     ).bind(mappingId).first();
     if (!existing) return c.json({ error: '매핑을 찾을 수 없습니다.' }, 404);
 
-    await db.prepare('DELETE FROM team_distributor_mappings WHERE mapping_id = ?').bind(mappingId).run();
+    await db.prepare('DELETE FROM team_distributor_mappings WHERE id = ?').bind(mappingId).run();
 
     await writeAuditLog(db, {
       entity_type: 'TEAM_DISTRIBUTOR_MAPPING', entity_id: mappingId, action: 'DELETE',

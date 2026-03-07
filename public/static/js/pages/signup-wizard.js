@@ -471,7 +471,7 @@ function renderStep3_Region() {
                   ${selected.has(r.region_id) ? 'checked' : ''}
                   onchange="signupToggleRegion(${r.region_id}, this.checked)"
                   class="rounded text-teal-600 focus:ring-teal-500">
-                <span class="truncate">${r.eupmyeondong || r.sigungu}</span>
+                <span class="truncate">${r.full_name || r.sigungu}</span>
               </label>
             `).join('')}
           </div>
@@ -561,7 +561,7 @@ async function signupSearchRegion() {
             <input type="checkbox" value="${r.region_id}" ${checked ? 'checked' : ''}
               onchange="signupToggleRegion(${r.region_id}, this.checked)"
               class="rounded text-amber-600 focus:ring-amber-500">
-            <span>${r.sido} ${r.sigungu} ${r.eupmyeondong}</span>
+            <span>${r.full_name || (r.sido + ' ' + r.sigungu)}</span>
             ${inDist ? '<span class="text-xs text-green-600 ml-auto">관할내</span>' : '<span class="text-xs text-amber-600 ml-auto">관할외</span>'}
           </label>`;
       }).join('')}

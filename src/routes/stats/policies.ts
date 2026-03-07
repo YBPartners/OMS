@@ -122,14 +122,14 @@ export function mountPolicies(router: Hono<Env>) {
       db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status IN ('RECEIVED','DISTRIBUTION_PENDING')").first(),
       db.prepare("SELECT COUNT(*) as cnt FROM sigungu WHERE is_active=1").first(),
       db.prepare("SELECT COUNT(DISTINCT sg.code) as cnt FROM sigungu sg JOIN region_sigungu_map rsm ON sg.code=rsm.sigungu_code WHERE sg.is_active=1").first(),
-      db.prepare("SELECT COUNT(*) as cnt FROM sigungu sg LEFT JOIN region_sigungu_map rsm ON sg.code=rsm.sigungu_code WHERE sg.is_active=1 AND rsm.org_id IS NULL").first(),
+      db.prepare("SELECT COUNT(*) as cnt FROM sigungu sg LEFT JOIN region_sigungu_map rsm ON sg.code=rsm.sigungu_code WHERE sg.is_active=1 AND rsm.region_org_id IS NULL").first(),
       db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status='DISTRIBUTED' AND updated_at > datetime('now','-7 days')").first(),
     ]);
 
     // 시도별 매핑 현황
     const sidoMapping = await db.prepare(`
       SELECT sg.sido, COUNT(*) as total,
-        SUM(CASE WHEN rsm.org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped
+        SUM(CASE WHEN rsm.region_org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped
       FROM sigungu sg
       LEFT JOIN region_sigungu_map rsm ON sg.code=rsm.sigungu_code
       WHERE sg.is_active=1
@@ -486,6 +486,101 @@ export function mountPolicies(router: Hono<Env>) {
     return c.json({ ok: true, message: '수수료 정책이 삭제되었습니다.' });
   });
 
+  // ━━━━━━━━━━ 서비스 가격 정책 (service_prices CRUD) ━━━━━━━━━━
+
+  // 가격 목록 조회 (카테고리 + 채널별)
+  router.get('/policies/pricing', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+
+    const [prices, categories, channels, options] = await Promise.all([
+      db.prepare(`
+        SELECT sp.*, sc.code as category_code, sc.name as category_name, sc.group_name,
+               ch.name as channel_name
+        FROM service_prices sp
+        JOIN service_categories sc ON sp.category_id = sc.category_id
+        JOIN order_channels ch ON sp.channel_id = ch.channel_id
+        WHERE sp.is_active = 1 AND sc.is_active = 1
+        ORDER BY sc.sort_order, ch.channel_id
+      `).all(),
+      db.prepare('SELECT * FROM service_categories WHERE is_active = 1 ORDER BY sort_order').all(),
+      db.prepare("SELECT * FROM order_channels WHERE is_active = 1 ORDER BY channel_id").all(),
+      db.prepare('SELECT * FROM service_options WHERE is_active = 1 ORDER BY option_id').all(),
+    ]);
+
+    return c.json({
+      prices: prices.results,
+      categories: categories.results,
+      channels: channels.results,
+      options: options.results,
+    });
+  });
+
+  // 가격 수정 (단가 업데이트)
+  router.put('/policies/pricing/:price_id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const user = c.get('user')!;
+    const priceId = Number(c.req.param('price_id'));
+    const body = await c.req.json();
+    const { sell_price, work_price } = body;
+
+    if (sell_price === undefined && work_price === undefined) {
+      return c.json({ error: '수정할 항목이 없습니다.' }, 400);
+    }
+
+    const existing = await db.prepare('SELECT * FROM service_prices WHERE price_id = ?').bind(priceId).first() as any;
+    if (!existing) return c.json({ error: '가격을 찾을 수 없습니다.' }, 404);
+
+    const sets: string[] = [];
+    const params: any[] = [];
+    if (sell_price !== undefined) { sets.push('sell_price = ?'); params.push(sell_price); }
+    if (work_price !== undefined) { sets.push('work_price = ?'); params.push(work_price); }
+    sets.push("updated_at = datetime('now')");
+    params.push(priceId);
+
+    await db.prepare(`UPDATE service_prices SET ${sets.join(', ')} WHERE price_id = ?`)
+      .bind(...params).run();
+
+    await writeAuditLog(db, {
+      entity_type: 'SERVICE_PRICE', entity_id: priceId, action: 'UPDATE',
+      actor_id: user.user_id,
+      detail_json: JSON.stringify({ before: { sell: existing.sell_price, work: existing.work_price }, after: { sell: sell_price ?? existing.sell_price, work: work_price ?? existing.work_price } }),
+    });
+
+    return c.json({ ok: true, price_id: priceId });
+  });
+
+  // 옵션 가격 수정
+  router.put('/policies/pricing/option/:option_id', async (c) => {
+    const authErr = requireAuth(c, ['SUPER_ADMIN', 'HQ_OPERATOR']);
+    if (authErr) return authErr;
+    const db = c.env.DB;
+    const user = c.get('user')!;
+    const optionId = Number(c.req.param('option_id'));
+    const body = await c.req.json();
+
+    const existing = await db.prepare('SELECT * FROM service_options WHERE option_id = ?').bind(optionId).first() as any;
+    if (!existing) return c.json({ error: '옵션을 찾을 수 없습니다.' }, 404);
+
+    const sets: string[] = [];
+    const params: any[] = [];
+    if (body.additional_sell_price !== undefined) { sets.push('additional_sell_price = ?'); params.push(body.additional_sell_price); }
+    if (body.additional_work_price !== undefined) { sets.push('additional_work_price = ?'); params.push(body.additional_work_price); }
+    if (body.name !== undefined) { sets.push('name = ?'); params.push(body.name); }
+    if (sets.length === 0) return c.json({ error: '수정할 항목이 없습니다.' }, 400);
+    sets.push("updated_at = datetime('now')");
+    params.push(optionId);
+
+    await db.prepare(`UPDATE service_options SET ${sets.join(', ')} WHERE option_id = ?`)
+      .bind(...params).run();
+
+    await writeAuditLog(db, { entity_type: 'SERVICE_OPTION', entity_id: optionId, action: 'UPDATE', actor_id: user.user_id, detail_json: JSON.stringify({ before: existing, after: body }) });
+    return c.json({ ok: true });
+  });
+
   // ━━━━━━━━━━ 정책 대시보드(요약) ━━━━━━━━━━
 
   router.get('/policies/summary', async (c) => {
@@ -559,10 +654,10 @@ export function mountPolicies(router: Hono<Env>) {
 
     let query = `
       SELECT sg.code, sg.sido, sg.sigungu, sg.full_name, sg.is_active,
-             rsm.org_id, o.name as org_name
+             rsm.region_org_id, o.name as org_name
       FROM sigungu sg
       LEFT JOIN region_sigungu_map rsm ON sg.code = rsm.sigungu_code
-      LEFT JOIN organizations o ON rsm.org_id = o.org_id
+      LEFT JOIN organizations o ON rsm.region_org_id = o.org_id
       WHERE sg.is_active = 1
     `;
     const params: any[] = [];
@@ -572,7 +667,7 @@ export function mountPolicies(router: Hono<Env>) {
       query += ' AND (sg.sido LIKE ? OR sg.sigungu LIKE ? OR sg.full_name LIKE ?)';
       params.push(`%${q}%`, `%${q}%`, `%${q}%`);
     }
-    if (unmapped_only === '1') { query += ' AND rsm.org_id IS NULL'; }
+    if (unmapped_only === '1') { query += ' AND rsm.region_org_id IS NULL'; }
     query += ' ORDER BY sg.sido, sg.sigungu LIMIT 200';
 
     const result = await db.prepare(query).bind(...params).all();
@@ -606,8 +701,8 @@ export function mountPolicies(router: Hono<Env>) {
 
         // 새 매핑 생성
         await db.prepare(
-          'INSERT INTO region_sigungu_map (org_id, sigungu_code, mapped_by) VALUES (?, ?, ?)'
-        ).bind(org_id, String(code), c.get('user')!.user_id).run();
+          'INSERT INTO region_sigungu_map (region_org_id, sigungu_code) VALUES (?, ?)'
+        ).bind(org_id, String(code)).run();
         mapped++;
       } catch (e: any) {
         errors.push(`Code ${code}: ${e.message}`);
@@ -629,8 +724,8 @@ export function mountPolicies(router: Hono<Env>) {
     const result = await db.prepare(`
       SELECT sg.sido,
         COUNT(*) as total,
-        SUM(CASE WHEN rsm.org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped,
-        COUNT(DISTINCT rsm.org_id) as org_count
+        SUM(CASE WHEN rsm.region_org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped,
+        COUNT(DISTINCT rsm.region_org_id) as org_count
       FROM sigungu sg
       LEFT JOIN region_sigungu_map rsm ON sg.code=rsm.sigungu_code
       WHERE sg.is_active=1
@@ -650,7 +745,7 @@ export function mountPolicies(router: Hono<Env>) {
 
     const result = await db.prepare(`
       SELECT sg.sigungu, sg.code,
-        SUM(CASE WHEN rsm.org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped
+        SUM(CASE WHEN rsm.region_org_id IS NOT NULL THEN 1 ELSE 0 END) as mapped
       FROM sigungu sg
       LEFT JOIN region_sigungu_map rsm ON sg.code=rsm.sigungu_code
       WHERE sg.is_active=1 AND sg.sido=?
@@ -672,16 +767,16 @@ export function mountPolicies(router: Hono<Env>) {
 
     let query = `
       SELECT sg.code, sg.sido, sg.sigungu, sg.full_name, sg.is_active,
-             rsm.org_id, o.name as org_name, o.org_type
+             rsm.region_org_id, o.name as org_name, o.org_type
       FROM sigungu sg
       LEFT JOIN region_sigungu_map rsm ON sg.code = rsm.sigungu_code
-      LEFT JOIN organizations o ON rsm.org_id = o.org_id
+      LEFT JOIN organizations o ON rsm.region_org_id = o.org_id
       WHERE sg.is_active = 1
     `;
     const params: any[] = [];
 
     if (user.org_type === 'REGION' && !user.roles.includes('SUPER_ADMIN')) {
-      query += ' AND (rsm.org_id = ? OR rsm.org_id IN (SELECT org_id FROM organizations WHERE parent_org_id = ?))';
+      query += ' AND (rsm.region_org_id = ? OR rsm.region_org_id IN (SELECT org_id FROM organizations WHERE parent_org_id = ?))';
       params.push(user.org_id, user.org_id);
     }
     query += ' ORDER BY sg.sido, sg.sigungu';
@@ -710,8 +805,8 @@ export function mountPolicies(router: Hono<Env>) {
 
     // 새 매핑 생성
     await db.prepare(
-      'INSERT INTO region_sigungu_map (org_id, sigungu_code, mapped_by) VALUES (?, ?, ?)'
-    ).bind(org_id, String(sigunguCode), c.get('user')!.user_id).run();
+      'INSERT INTO region_sigungu_map (region_org_id, sigungu_code) VALUES (?, ?)'
+    ).bind(org_id, String(sigunguCode)).run();
 
     await writeAuditLog(db, { entity_type: 'SIGUNGU_MAPPING', entity_id: 0, action: 'REGION.MAPPED', actor_id: c.get('user')!.user_id, detail_json: JSON.stringify({ sigungu_code: sigunguCode, org_id }) });
     return c.json({ ok: true, sigungu_code: sigunguCode, org_id });

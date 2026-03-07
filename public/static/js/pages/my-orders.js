@@ -285,51 +285,69 @@ function showReportModal(orderId) {
   // 첨부 파일 임시 저장소 초기화
   window._attachedFiles = {};
 
+  const photoCategories = OMS.PHOTO_CATEGORIES || [
+    { key: 'BEFORE', label: '작업 전', icon: 'fa-camera', required: true },
+    { key: 'AFTER', label: '작업 후', icon: 'fa-camera-retro', required: true },
+  ];
+  const checklistItems = OMS.REPORT_CHECKLIST || [];
+
   const content = `
-    <form id="report-form" class="space-y-4">
+    <form id="report-form" class="space-y-5">
+      <!-- 1. 사진 첨부 영역 -->
       <div>
-        <h4 class="font-semibold mb-2"><i class="fas fa-clipboard-list mr-1 text-cyan-500"></i>체크리스트 + 사진 첨부</h4>
-        <p class="text-xs text-gray-400 mb-3">각 항목의 사진을 촬영하거나 갤러리에서 선택하세요. 파일명은 자동 규칙화됩니다.</p>
-        <div class="space-y-3">
-          ${OMS.REPORT_CHECKLIST.map(item => `
+        <h4 class="font-semibold mb-2"><i class="fas fa-camera mr-1.5 text-blue-500"></i>사진 첨부</h4>
+        <p class="text-xs text-gray-400 mb-3">각 단계의 사진을 촬영하거나 갤러리에서 선택하세요.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          ${photoCategories.map(cat => `
             <div class="bg-gray-50 rounded-lg p-3 border border-gray-200">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" name="checklist" value="${item.key}" 
-                  class="w-4 h-4 rounded text-cyan-600" ${item.required ? '' : ''}>
-                <i class="fas ${item.icon || 'fa-check'} text-gray-500 text-sm w-5 text-center"></i>
-                <span class="text-sm font-medium">${item.label}</span>
-                ${item.required ? '<span class="text-red-400 text-[10px] ml-auto">필수</span>' : '<span class="text-gray-300 text-[10px] ml-auto">선택</span>'}
-              </label>
-              <!-- 사진 첨부 영역 -->
-              <div class="mt-2">
-                <div id="preview-${item.key}" class="mb-2"></div>
-                <div class="flex gap-2">
-                  <label class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-cyan-50 hover:border-cyan-300 transition text-xs">
-                    <i class="fas fa-camera text-cyan-600"></i>
-                    <span class="text-gray-600">촬영</span>
-                    <input type="file" accept="image/*" capture="environment" class="hidden"
-                      onchange="handleFileAttach(this, 'preview-${item.key}', '${item.key.toUpperCase()}')">
-                  </label>
-                  <label class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 transition text-xs">
-                    <i class="fas fa-images text-gray-500"></i>
-                    <span class="text-gray-600">갤러리</span>
-                    <input type="file" accept="image/*" class="hidden"
-                      onchange="handleFileAttach(this, 'preview-${item.key}', '${item.key.toUpperCase()}')">
-                  </label>
-                </div>
+              <div class="flex items-center gap-2 mb-2">
+                <i class="fas ${cat.icon || 'fa-image'} text-blue-500 text-sm w-5 text-center"></i>
+                <span class="text-sm font-medium">${cat.label}</span>
+                ${cat.required ? '<span class="text-red-400 text-[10px] ml-auto">필수</span>' : '<span class="text-gray-300 text-[10px] ml-auto">선택</span>'}
+              </div>
+              <div id="preview-${cat.key}" class="mb-2"></div>
+              <div class="flex gap-2">
+                <label class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-cyan-50 hover:border-cyan-300 transition text-xs">
+                  <i class="fas fa-camera text-cyan-600"></i><span class="text-gray-600">촬영</span>
+                  <input type="file" accept="image/*" capture="environment" class="hidden"
+                    onchange="handleFileAttach(this, 'preview-${cat.key}', '${cat.key}')">
+                </label>
+                <label class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 transition text-xs">
+                  <i class="fas fa-images text-gray-500"></i><span class="text-gray-600">갤러리</span>
+                  <input type="file" accept="image/*" class="hidden"
+                    onchange="handleFileAttach(this, 'preview-${cat.key}', '${cat.key}')">
+                </label>
               </div>
             </div>
           `).join('')}
         </div>
       </div>
+
+      <!-- 2. 체크리스트 -->
       <div>
-        <label class="block text-xs text-gray-500 mb-1">작업 메모</label>
+        <h4 class="font-semibold mb-2"><i class="fas fa-clipboard-list mr-1.5 text-emerald-500"></i>작업 체크리스트</h4>
+        <div class="space-y-2">
+          ${checklistItems.map(item => `
+            <label class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:bg-emerald-50 hover:border-emerald-200 transition">
+              <input type="checkbox" name="checklist" value="${item.key}" 
+                class="w-5 h-5 rounded text-emerald-600 shrink-0" ${item.required ? '' : ''}>
+              <i class="fas ${item.icon || 'fa-check'} text-gray-500 text-sm w-5 text-center shrink-0"></i>
+              <span class="text-sm font-medium flex-1">${item.label}</span>
+              ${item.required ? '<span class="text-red-400 text-[10px] shrink-0">필수</span>' : '<span class="text-gray-300 text-[10px] shrink-0">선택</span>'}
+            </label>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- 3. 작업 메모 -->
+      <div>
+        <label class="block text-xs text-gray-500 mb-1"><i class="fas fa-pen mr-1"></i>작업 메모</label>
         <textarea id="report-note" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="작업 내용을 기록하세요..."></textarea>
       </div>
     </form>`;
-  showModal(`보고서 제출 — 주문 #${orderId}`, content, `
+  showModal(`<i class="fas fa-file-pen mr-2 text-cyan-500"></i>보고서 제출 — 주문 #${orderId}`, content, `
     <button onclick="closeModal()" class="px-4 py-2 bg-gray-100 rounded-lg text-sm">취소</button>
-    <button onclick="submitReport(${orderId})" class="px-4 py-2 bg-cyan-600 text-white rounded-lg text-sm">제출</button>`, { large: true });
+    <button onclick="submitReport(${orderId})" class="px-5 py-2.5 bg-cyan-600 text-white rounded-lg text-sm font-medium hover:bg-cyan-700 transition"><i class="fas fa-paper-plane mr-1"></i>제출</button>`, { large: true });
 }
 
 // ─── 파일 첨부 핸들러 (카메라/갤러리 공용) ───
@@ -360,11 +378,8 @@ function handleFileAttach(input, previewElId, category) {
     const userInfo = (typeof currentUser !== 'undefined' ? currentUser : null) || {};
     const teamCode = userInfo.org_code || userInfo.login_id || 'TEAM';
     const categoryLabels = {
-      'EXTERIOR': '외부촬영', 'INTERIOR': '내부촬영',
-      'BEFORE_WASH': '세척전', 'AFTER_WASH': '세척후',
-      'RECEIPT': '영수증', 'CUSTOMER_CONFIRM': '고객확인',
-      'EXTERIOR_PHOTO': '외부촬영', 'INTERIOR_PHOTO': '내부촬영',
-      'ETC': '기타'
+      'BEFORE': '작업전', 'AFTER': '작업후',
+      'WASH': '세척', 'RECEIPT': '영수증', 'ETC': '기타'
     };
     const catLabel = categoryLabels[category] || category;
     const fileName = `${today}_${teamCode}_${catLabel}.${ext}`;

@@ -110,7 +110,7 @@ async function showSignupDetail(requestId) {
           ${renderDataTable({ columns: [
             { key: 'sido', label: '시/도' },
             { key: 'sigungu', label: '시/군/구' },
-            { key: 'eupmyeondong', label: '읍/면/동' },
+            { key: 'full_name', label: '전체명' },
             { key: 'is_within_distributor', label: '관할내', align: 'center', render: rg => rg.is_within_distributor ? '<i class="fas fa-check text-green-500"></i>' : '<i class="fas fa-exclamation-triangle text-amber-500"></i>' }
           ], rows: regions, compact: true, noBorder: true,
              rowClass: rg => rg.is_within_distributor ? '' : 'bg-amber-50' })}
@@ -131,7 +131,7 @@ async function showSignupDetail(requestId) {
             return `
               <div class="flex items-center justify-between p-2 border rounded text-xs ${ar.status === 'CONFLICT' ? 'border-orange-200 bg-orange-50' : ''}">
                 <div>
-                  <span class="font-medium">${ar.region_name || `${ar.sido} ${ar.sigungu} ${ar.eupmyeondong}`}</span>
+                  <span class="font-medium">${ar.region_name || `${ar.sido} ${ar.sigungu}`}</span>
                   ${ar.conflict_org_name ? `<span class="text-orange-600 ml-1">(충돌: ${ar.conflict_org_name})</span>` : ''}
                 </div>
                 <span class="status-badge ${arBadge}">${arLabel}</span>
@@ -244,7 +244,7 @@ async function renderHRRegionAddRequests(el) {
       columns: [
         { key: 'request_id', label: 'ID', render: r => `<span class="font-mono text-xs text-gray-500">${r.request_id}</span>` },
         { key: 'applicant_name', label: '신청자/팀', render: r => `<div class="text-xs">${escapeHtml(r.applicant_name || '-')}</div><div class="text-[10px] text-gray-400">${escapeHtml(r.team_name || '')}</div>` },
-        { key: 'region', label: '요청 구역', render: r => `<span class="text-xs">${escapeHtml(r.sido)} ${escapeHtml(r.sigungu)}<br><span class="text-gray-500">${escapeHtml(r.eupmyeondong)}</span></span>` },
+        { key: 'region', label: '요청 구역', render: r => `<span class="text-xs">${escapeHtml(r.sido)} ${escapeHtml(r.sigungu)}<br><span class="text-gray-500">${escapeHtml(r.full_name||'')}</span></span>` },
         { key: 'distributor_name', label: '총판', render: r => `<span class="text-xs">${escapeHtml(r.distributor_name)}</span>` },
         { key: 'conflict', label: '충돌', align: 'center', render: r => r.conflict_org_name ? `<span class="text-orange-600 text-xs" title="${escapeHtml(r.conflict_detail || '')}">${escapeHtml(r.conflict_org_name)}</span>` : '-' },
         { key: 'status', label: '상태', align: 'center', render: r => { const sBadge = r.status === 'APPROVED' ? 'bg-green-100 text-green-700' : r.status === 'REJECTED' ? 'bg-red-100 text-red-700' : r.status === 'CONFLICT' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'; const sLabel = r.status === 'APPROVED' ? '승인' : r.status === 'REJECTED' ? '반려' : r.status === 'CONFLICT' ? '충돌' : '대기'; return `<span class="status-badge ${sBadge}">${sLabel}</span>`; } },
@@ -340,7 +340,7 @@ async function showRegionAddDetail(requestId) {
       <div class="grid grid-cols-2 gap-3">
         <div><span class="text-gray-500">요청 ID:</span> <strong>#${r.request_id}</strong></div>
         <div><span class="text-gray-500">상태:</span> <span class="font-medium">${r.status}</span></div>
-        <div><span class="text-gray-500">구역:</span> ${r.sido} ${r.sigungu} ${r.eupmyeondong}</div>
+        <div><span class="text-gray-500">구역:</span> ${r.sido} ${r.sigungu}</div>
         <div><span class="text-gray-500">총판:</span> ${r.distributor_name}</div>
         <div><span class="text-gray-500">신청자:</span> ${r.applicant_name || '-'} / ${r.team_name || '-'}</div>
         ${r.reject_reason ? `<div class="col-span-2 p-2 bg-red-50 rounded border border-red-200 text-red-700">반려사유: ${r.reject_reason}</div>` : ''}

@@ -6,12 +6,13 @@
 async function renderPolicies(el) {
   try {
     showSkeletonLoading(el, 'table');
-    const [distRes, reportRes, commRes, terRes, metricsRes, summaryRes] = await Promise.all([
+    const [distRes, reportRes, commRes, terRes, metricsRes, pricingRes, summaryRes] = await Promise.all([
       api('GET', '/stats/policies/distribution'),
       api('GET', '/stats/policies/report'),
       api('GET', '/stats/policies/commission'),
       api('GET', '/stats/territories'),
       api('GET', '/stats/policies/metrics'),
+      api('GET', '/stats/policies/pricing'),
       api('GET', '/stats/policies/summary').catch(() => null),
     ]);
 
@@ -22,6 +23,7 @@ async function renderPolicies(el) {
     const commPolicies = commRes?.policies || [];
     const territories = terRes?.territories || [];
     const metricsPolicies = metricsRes?.policies || [];
+    const pricingData = { prices: pricingRes?.prices || [], categories: pricingRes?.categories || [], channels: pricingRes?.channels || [], options: pricingRes?.options || [] };
 
     // 전역 캐시
     window._cachedDistPolicies = distPolicies;
@@ -29,6 +31,7 @@ async function renderPolicies(el) {
     window._cachedCommPolicies = commPolicies;
     window._cachedTerritories = territories;
     window._cachedMetricsPolicies = metricsPolicies;
+    window._cachedPricingData = pricingData;
     window._cachedPolicySummary = summary;
     window._cachedAdminRegionMappings = terRes?.admin_region_mappings || [];
 
@@ -37,6 +40,7 @@ async function renderPolicies(el) {
       { id: 'distribution', icon: 'fa-share-nodes', label: '배분 정책', count: distPolicies.length },
       { id: 'report', icon: 'fa-file-lines', label: '보고서 정책', count: reportPolicies.length },
       { id: 'commission', icon: 'fa-percent', label: '수수료 정책', count: commPolicies.length },
+      { id: 'pricing', icon: 'fa-won-sign', label: '가격 정책', count: pricingData.prices.length },
       { id: 'territory', icon: 'fa-map-location-dot', label: '시군구 매핑', count: territories.length },
       { id: 'metrics', icon: 'fa-chart-bar', label: '지표 정책', count: metricsPolicies.length },
       { id: 'audit', icon: 'fa-clock-rotate-left', label: '변경 이력' },
@@ -50,7 +54,7 @@ async function renderPolicies(el) {
         </div>
 
         <!-- 요약 카드 -->
-        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
           ${_policySummaryCards(summary)}
         </div>
 
@@ -67,6 +71,7 @@ async function renderPolicies(el) {
           ${activeTab === 'distribution' ? renderDistPolicyTab(distPolicies) : ''}
           ${activeTab === 'report' ? renderReportPolicyTab(reportPolicies) : ''}
           ${activeTab === 'commission' ? renderCommPolicyTab(commPolicies) : ''}
+          ${activeTab === 'pricing' ? renderPricingTab(pricingData) : ''}
           ${activeTab === 'territory' ? renderTerritoryTab(territories) : ''}
           ${activeTab === 'metrics' ? renderMetricsPolicyTab(metricsPolicies) : ''}
           ${activeTab === 'audit' ? '<div id="audit-tab-loader"></div>' : ''}
@@ -85,16 +90,17 @@ async function renderPolicies(el) {
 // ─── 요약 카드 ───
 function _policySummaryCards(s) {
   const cards = [
-    { icon:'fa-share-nodes', color:'blue', label:'배분', val:`${s.distribution?.active||0}/${s.distribution?.total||0}`, sub:'활성/전체' },
-    { icon:'fa-file-lines', color:'emerald', label:'보고서', val:`${s.report?.active||0}/${s.report?.total||0}`, sub:'활성/전체' },
-    { icon:'fa-percent', color:'amber', label:'수수료', val:`${s.commission?.active||0}/${s.commission?.total||0}`, sub:'활성/전체' },
-    { icon:'fa-chart-bar', color:'purple', label:'지표', val:`${s.metrics?.active||0}/${s.metrics?.total||0}`, sub:'활성/전체' },
-    { icon:'fa-map-location-dot', color:'rose', label:'시군구', val:`${s.sigungu?.total||0}`, sub:`${s.sigungu?.sido_cnt||0}개 시도` },
-    { icon:'fa-earth-asia', color:'cyan', label:'매핑', val:`${s.region_mappings?.total||0}`, sub:'총판 매핑' },
-    { icon:'fa-boxes-stacked', color:'orange', label:'활성주문', val:`${s.active_orders||0}`, sub:'배분 대기' },
+    { icon:'fa-share-nodes', color:'blue', label:'배분', val:`${s.distribution?.active||0}/${s.distribution?.total||0}`, sub:'활성/전체', tab:'distribution' },
+    { icon:'fa-file-lines', color:'emerald', label:'보고서', val:`${s.report?.active||0}/${s.report?.total||0}`, sub:'활성/전체', tab:'report' },
+    { icon:'fa-percent', color:'amber', label:'수수료', val:`${s.commission?.active||0}/${s.commission?.total||0}`, sub:'활성/전체', tab:'commission' },
+    { icon:'fa-won-sign', color:'yellow', label:'가격정책', val:`${window._cachedPricingData?.prices?.length||0}건`, sub:'항목별 단가', tab:'pricing' },
+    { icon:'fa-chart-bar', color:'purple', label:'지표', val:`${s.metrics?.active||0}/${s.metrics?.total||0}`, sub:'활성/전체', tab:'metrics' },
+    { icon:'fa-map-location-dot', color:'rose', label:'시군구', val:`${s.sigungu?.total||0}`, sub:`${s.sigungu?.sido_cnt||0}개 시도`, tab:'territory' },
+    { icon:'fa-earth-asia', color:'cyan', label:'매핑', val:`${s.region_mappings?.total||0}`, sub:'총판 매핑', tab:'territory' },
+    { icon:'fa-boxes-stacked', color:'orange', label:'활성주문', val:`${s.active_orders||0}`, sub:'배분 대기', tab:'overview' },
   ];
   return cards.map(c => `
-    <div class="bg-white rounded-xl p-3 border border-gray-100 hover:shadow-md transition cursor-pointer" onclick="window._policyTab='${c.label==='배분'?'distribution':c.label==='보고서'?'report':c.label==='수수료'?'commission':c.label==='지표'?'metrics':c.label==='시군구 매핑'?'territory':'overview'}';renderContent()">
+    <div class="bg-white rounded-xl p-3 border border-gray-100 hover:shadow-md transition cursor-pointer" onclick="window._policyTab='${c.tab||'overview'}';renderContent()">
       <div class="flex items-center gap-2 mb-1"><div class="w-7 h-7 rounded-lg bg-${c.color}-100 flex items-center justify-center"><i class="fas ${c.icon} text-${c.color}-600 text-xs"></i></div><span class="text-[11px] text-gray-500">${c.label}</span></div>
       <div class="text-lg font-bold text-gray-800">${c.val}</div>
       <div class="text-[10px] text-gray-400">${c.sub}</div>

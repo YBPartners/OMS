@@ -96,9 +96,9 @@ regionAdd.get('/region-add-requests/:request_id', async (c) => {
 
   // 해당 시군구를 현재 매핑한 조직 정보
   const currentMapping = await db.prepare(`
-    SELECT rsm.org_id, o.name as org_name, o.org_type, o.code
+    SELECT rsm.region_org_id, o.name as org_name, o.org_type, o.code
     FROM region_sigungu_map rsm
-    JOIN organizations o ON rsm.org_id = o.org_id
+    JOIN organizations o ON rsm.region_org_id = o.org_id
     WHERE rsm.sigungu_code = CAST(? AS TEXT)
   `).bind(request.region_id).all();
 
@@ -129,7 +129,7 @@ regionAdd.post('/region-add-requests/:request_id/approve', async (c) => {
   if (request.status === 'CONFLICT' && request.conflict_org_id && removeConflict) {
     // 기존 매핑 해제
     await db.prepare(
-      'DELETE FROM region_sigungu_map WHERE org_id = ? AND sigungu_code = CAST(? AS TEXT)'
+      'DELETE FROM region_sigungu_map WHERE region_org_id = ? AND sigungu_code = CAST(? AS TEXT)'
     ).bind(request.conflict_org_id, request.region_id).run();
 
     await writeAuditLog(db, {
@@ -144,14 +144,14 @@ regionAdd.post('/region-add-requests/:request_id/approve', async (c) => {
 
   // 총판에 시군구 매핑 추가
   await db.prepare(
-    'INSERT OR IGNORE INTO region_sigungu_map (org_id, sigungu_code, mapped_by) VALUES (?, CAST(? AS TEXT), ?)'
-  ).bind(request.distributor_org_id, request.region_id, user.user_id).run();
+    'INSERT OR IGNORE INTO region_sigungu_map (region_org_id, sigungu_code) VALUES (?, CAST(? AS TEXT))'
+  ).bind(request.distributor_org_id, request.region_id).run();
 
-  // 팀이 있으면 팀에도 매핑
+  // 팀이 있으면 팀에도 매핑 (region_org_id 포함 필수)
   if (request.team_org_id) {
     await db.prepare(
-      'INSERT OR IGNORE INTO team_sigungu_map (user_id, sigungu_code, assigned_by) VALUES (?, CAST(? AS TEXT), ?)'
-    ).bind(request.team_org_id, request.region_id, user.user_id).run();
+      'INSERT OR IGNORE INTO team_sigungu_map (user_id, sigungu_code, region_org_id, assigned_by) VALUES (?, CAST(? AS TEXT), ?, ?)'
+    ).bind(request.team_org_id, request.region_id, request.distributor_org_id, user.user_id).run();
   }
 
   // 요청 상태 업데이트
@@ -273,19 +273,19 @@ regionAdd.post('/region-add-requests/bulk-approve', async (c) => {
       // 충돌 시 기존 매핑 해제
       if (request.status === 'CONFLICT' && request.conflict_org_id && remove_conflicts) {
         await db.prepare(
-          'DELETE FROM region_sigungu_map WHERE org_id = ? AND sigungu_code = CAST(? AS TEXT)'
+          'DELETE FROM region_sigungu_map WHERE region_org_id = ? AND sigungu_code = CAST(? AS TEXT)'
         ).bind(request.conflict_org_id, request.region_id).run();
       }
 
       // 매핑 추가
       await db.prepare(
-        'INSERT OR IGNORE INTO region_sigungu_map (org_id, sigungu_code, mapped_by) VALUES (?, CAST(? AS TEXT), ?)'
-      ).bind(request.distributor_org_id, request.region_id, user.user_id).run();
+        'INSERT OR IGNORE INTO region_sigungu_map (region_org_id, sigungu_code) VALUES (?, CAST(? AS TEXT))'
+      ).bind(request.distributor_org_id, request.region_id).run();
 
       if (request.team_org_id) {
         await db.prepare(
-          'INSERT OR IGNORE INTO team_sigungu_map (user_id, sigungu_code, assigned_by) VALUES (?, CAST(? AS TEXT), ?)'
-        ).bind(request.team_org_id, request.region_id, user.user_id).run();
+          'INSERT OR IGNORE INTO team_sigungu_map (user_id, sigungu_code, region_org_id, assigned_by) VALUES (?, CAST(? AS TEXT), ?, ?)'
+        ).bind(request.team_org_id, request.region_id, request.distributor_org_id, user.user_id).run();
       }
 
       await db.prepare(`
@@ -326,15 +326,15 @@ regionAdd.get('/region-add-requests/check-conflict', async (c) => {
   if (!sigunguCode) return c.json({ error: 'region_id 또는 sigungu_code를 입력하세요.' }, 400);
 
   let query = `
-    SELECT rsm.org_id, o.name as org_name, o.org_type, o.code as org_code
+    SELECT rsm.region_org_id, o.name as org_name, o.org_type, o.code as org_code
     FROM region_sigungu_map rsm
-    JOIN organizations o ON rsm.org_id = o.org_id
+    JOIN organizations o ON rsm.region_org_id = o.org_id
     WHERE rsm.sigungu_code = ?
   `;
   const params: any[] = [String(sigunguCode)];
 
   if (excludeOrgId) {
-    query += ' AND rsm.org_id != ?';
+    query += ' AND rsm.region_org_id != ?';
     params.push(excludeOrgId);
   }
 

@@ -92,7 +92,7 @@ function renderTerritoryTab(territories) {
           { key: 'code', label: 'ID', render: t => `<span class="font-mono text-xs text-gray-500">${t.code}</span>` },
           { key: 'sido', label: '시도', render: t => `<button onclick="window._terrFilterSido='${t.sido}';renderContent()" class="text-xs text-blue-600 hover:underline">${t.sido||'-'}</button>` },
           { key: 'sigungu', label: '시군구', render: t => `<span class="text-xs">${t.sigungu||'-'}</span>` },
-          { key: 'eupmyeondong', label: '읍면동', render: t => `<span class="text-xs">${t.eupmyeondong||'-'}</span>` },
+          { key: 'full_name', label: '시군구', render: t => `<span class="text-xs">${t.full_name||'-'}</span>` },
           { key: 'code', label: '시군구코드', render: t => `<span class="font-mono text-[10px] text-gray-400">${t.code||'-'}</span>` },
           { key: 'org_name', label: '매핑 조직', render: t => t.org_name ? `<span class="status-badge bg-green-100 text-green-700">${escapeHtml(t.org_name)}</span>` : `<span class="status-badge bg-red-100 text-red-700">미매핑</span>` },
           { key: '_actions', label: '관리', align: 'center', show: canEditPolicy, render: t => `
@@ -268,7 +268,7 @@ function _updateBulkPreview() {
   }
   window._bulkTargetIds = target.map(t => t.territory_id);
   el.innerHTML = target.length
-    ? `<div class="text-left"><div class="text-indigo-700 font-bold mb-1"><i class="fas fa-map-pin mr-1"></i>${target.length}개 시군구을 일괄 매핑합니다</div><div class="text-[10px] text-gray-400 max-h-20 overflow-y-auto">${target.slice(0, 20).map(t => `${t.sido} ${t.sigungu} ${t.eupmyeondong||''}`).join(', ')}${target.length > 20 ? ` 외 ${target.length - 20}건` : ''}</div></div>`
+    ? `<div class="text-left"><div class="text-indigo-700 font-bold mb-1"><i class="fas fa-map-pin mr-1"></i>${target.length}개 시군구을 일괄 매핑합니다</div><div class="text-[10px] text-gray-400 max-h-20 overflow-y-auto">${target.slice(0, 20).map(t => `${t.full_name||t.sido+' '+t.sigungu}`).join(', ')}${target.length > 20 ? ` 외 ${target.length - 20}건` : ''}</div></div>`
     : '<span class="text-gray-400">매핑할 미매핑 시군구이 없습니다.</span>';
 }
 

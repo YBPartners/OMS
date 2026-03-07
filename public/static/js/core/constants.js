@@ -107,12 +107,19 @@ OMS.REJECT_REASONS = [
 ];
 
 OMS.REPORT_CHECKLIST = [
-  { key: 'exterior_photo', label: '외부촬영', icon: 'fa-building', required: true },
-  { key: 'interior_photo', label: '내부촬영', icon: 'fa-door-open', required: true },
-  { key: 'before_wash', label: '세척전', icon: 'fa-water', required: true },
-  { key: 'after_wash', label: '세척후', icon: 'fa-sparkles', required: true },
-  { key: 'receipt', label: '영수증', icon: 'fa-receipt', required: false },
-  { key: 'customer_confirm', label: '고객확인', icon: 'fa-signature', required: false },
+  { key: 'work_complete', label: '작업완료확인', icon: 'fa-circle-check', required: true },
+  { key: 'customer_confirm', label: '고객서명확인', icon: 'fa-signature', required: true },
+  { key: 'site_cleanup', label: '현장정리확인', icon: 'fa-broom', required: true },
+  { key: 'ac_running', label: '에어컨 정상가동 확인', icon: 'fa-fan', required: true },
+];
+
+// 사진 카테고리 (보고서 제출 시 첨부할 사진)
+OMS.PHOTO_CATEGORIES = [
+  { key: 'BEFORE', label: '작업 전', icon: 'fa-camera', required: true },
+  { key: 'AFTER', label: '작업 후', icon: 'fa-camera-retro', required: true },
+  { key: 'WASH', label: '세척', icon: 'fa-droplet', required: false },
+  { key: 'RECEIPT', label: '영수증', icon: 'fa-receipt', required: false },
+  { key: 'ETC', label: '기타', icon: 'fa-images', required: false },
 ];
 
 OMS.ISSUE_TYPES = {
