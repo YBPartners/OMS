@@ -1,0 +1,416 @@
+/* ============================================================
+ * AIMOps Control Tower — Inquiry Widget
+ * Embeddable floating widget for connected systems
+ * ============================================================ */
+
+/* --- Reset & Scoping --- */
+.aimops-widget *,
+.aimops-widget *::before,
+.aimops-widget *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* --- Floating Trigger Button --- */
+.aimops-widget-trigger {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 99999;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4), 0 0 0 0 rgba(59, 130, 246, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: aimops-pulse 2s ease-in-out infinite;
+}
+
+.aimops-widget-trigger:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 28px rgba(59, 130, 246, 0.55);
+}
+
+.aimops-widget-trigger:active {
+  transform: scale(0.95);
+}
+
+.aimops-widget-trigger svg {
+  width: 24px;
+  height: 24px;
+  fill: white;
+  transition: transform 0.3s;
+}
+
+.aimops-widget-trigger.open svg {
+  transform: rotate(45deg);
+}
+
+@keyframes aimops-pulse {
+  0%, 100% { box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4), 0 0 0 0 rgba(59, 130, 246, 0.3); }
+  50% { box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4), 0 0 0 8px rgba(59, 130, 246, 0); }
+}
+
+/* --- Badge --- */
+.aimops-widget-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+}
+
+/* --- Panel --- */
+.aimops-widget-panel {
+  position: fixed;
+  bottom: 92px;
+  right: 24px;
+  z-index: 99998;
+  width: 380px;
+  max-height: 560px;
+  border-radius: 16px;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(12px) scale(0.95);
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.aimops-widget-panel.open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* --- Panel Header --- */
+.aimops-widget-header {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  padding: 16px 20px;
+  border-bottom: 1px solid #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.aimops-widget-header-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #3b82f6, #06b6d4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.aimops-widget-header-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: white;
+}
+
+.aimops-widget-header-text h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f1f5f9;
+  line-height: 1.2;
+}
+
+.aimops-widget-header-text p {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.aimops-widget-status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #4ade80;
+}
+
+.aimops-widget-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4ade80;
+  animation: aimops-status-blink 2s ease-in-out infinite;
+}
+
+@keyframes aimops-status-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* --- Panel Body --- */
+.aimops-widget-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  max-height: 400px;
+}
+
+.aimops-widget-body::-webkit-scrollbar {
+  width: 4px;
+}
+.aimops-widget-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.aimops-widget-body::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 2px;
+}
+
+/* --- Form Elements --- */
+.aimops-widget-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  margin-bottom: 6px;
+  margin-top: 14px;
+}
+
+.aimops-widget-label:first-child {
+  margin-top: 0;
+}
+
+.aimops-widget-select,
+.aimops-widget-input,
+.aimops-widget-textarea {
+  width: 100%;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #e2e8f0;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  -webkit-appearance: none;
+}
+
+.aimops-widget-select:focus,
+.aimops-widget-input:focus,
+.aimops-widget-textarea:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.aimops-widget-textarea {
+  resize: vertical;
+  min-height: 90px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.aimops-widget-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+
+/* --- Context Info Box --- */
+.aimops-widget-context {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 14px;
+}
+
+.aimops-widget-context-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.aimops-widget-context-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+}
+
+.aimops-widget-context-key {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.aimops-widget-context-val {
+  font-size: 11px;
+  color: #cbd5e1;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Submit Button --- */
+.aimops-widget-submit {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.aimops-widget-submit:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+}
+
+.aimops-widget-submit:active {
+  transform: translateY(0);
+}
+
+.aimops-widget-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+  box-shadow: none;
+}
+
+.aimops-widget-submit svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+/* --- Success State --- */
+.aimops-widget-success {
+  text-align: center;
+  padding: 32px 20px;
+}
+
+.aimops-widget-success-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #065f46;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+}
+
+.aimops-widget-success-icon svg {
+  width: 28px;
+  height: 28px;
+  stroke: #4ade80;
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.aimops-widget-success h4 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-bottom: 8px;
+}
+
+.aimops-widget-success p {
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.aimops-widget-success-id {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 6px 14px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #3b82f6;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+/* --- Footer --- */
+.aimops-widget-footer {
+  padding: 10px 20px;
+  border-top: 1px solid #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.aimops-widget-footer span {
+  font-size: 10px;
+  color: #475569;
+}
+
+.aimops-widget-footer a {
+  font-size: 10px;
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+/* --- Responsive --- */
+@media (max-width: 420px) {
+  .aimops-widget-panel {
+    right: 8px;
+    left: 8px;
+    width: auto;
+    bottom: 84px;
+  }
+  .aimops-widget-trigger {
+    bottom: 16px;
+    right: 16px;
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/* --- Loading Spinner --- */
+.aimops-widget-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: aimops-spin 0.6s linear infinite;
+}
+
+@keyframes aimops-spin {
+  to { transform: rotate(360deg); }
+}

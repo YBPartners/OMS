@@ -473,6 +473,14 @@ function getIndexHtml(): string {
   
   <!-- App bootstrap (must be last) -->
   <script src="/static/js/core/app.js?v=${V}"></script>
+  
+  <!-- AIMOps Control Tower Widget -->
+  <script src="/widget/aimops-widget.js?v=2.0"
+    data-system-id="sys-009"
+    data-system-name="Airflow OMS"
+    data-tower-url="https://app.kyntra.ai.kr"
+    data-position="bottom-right">
+  </script>
 </body>
 </html>`;
 }
