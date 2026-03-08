@@ -84,7 +84,7 @@ app.use('*', async (c, next) => {
       "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
       "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com",
       "img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com",
-      "connect-src 'self' https://cloudflareinsights.com https://static.cloudflareinsights.com",
+      "connect-src 'self' https://app.kyntra.ai.kr https://cloudflareinsights.com https://static.cloudflareinsights.com",
       "frame-src https://www.google.com https://t1.daumcdn.net https://postcode.map.daum.net",
       "object-src 'none'",
       "base-uri 'self'",

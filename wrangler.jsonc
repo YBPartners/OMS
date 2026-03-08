@@ -7,8 +7,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "dahada-production",
-      "database_id": "0b7aedd5-7510-44d3-8b81-d421b03fffa6"
+      "database_name": "airflow-production",
+      "database_id": "85d84162-0949-4c39-b267-02a05c289e07"
     }
   ],
   "kv_namespaces": [
@@ -20,7 +20,7 @@
   "r2_buckets": [
     {
       "binding": "PHOTO_BUCKET",
-      "bucket_name": "dahada-oms-photos"
+      "bucket_name": "airflow-oms-photos"
     }
   ]
 }
